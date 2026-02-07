@@ -5,6 +5,7 @@ import { resolveWorkspaceTemplateDir } from "../../agents/workspace-templates.js
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { handleReset } from "../../commands/onboard-helpers.js";
 import { createConfigIO, writeConfigFile } from "../../config/config.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveUserPath, shortenHomePath } from "../../utils.js";
 
@@ -12,6 +13,7 @@ const DEV_IDENTITY_NAME = "C3-PO";
 const DEV_IDENTITY_THEME = "protocol droid";
 const DEV_IDENTITY_EMOJI = "🤖";
 const DEV_AGENT_WORKSPACE_SUFFIX = "dev";
+const DEV_GATEWAY_TOKEN = "openclaw-dev-token";
 
 async function loadDevTemplate(name: string, fallback: string): Promise<string> {
   try {
@@ -87,8 +89,29 @@ async function ensureDevWorkspace(dir: string) {
   await writeFileIfMissing(path.join(resolvedDir, "USER.md"), user);
 }
 
+async function writeDevConfig(config: OpenClawConfig) {
+  try {
+    await writeConfigFile(config);
+  } catch (error) {
+    const message = String(error);
+    if (!message.includes("plugins.slots.memory: plugin not found: memory-core")) {
+      throw error;
+    }
+    // Some local installs don't have memory-core available; keep dev bootstrap resilient.
+    await writeConfigFile({
+      ...config,
+      plugins: {
+        slots: {
+          memory: "none",
+        },
+      },
+    });
+  }
+}
+
 export async function ensureDevGatewayConfig(opts: { reset?: boolean }) {
   const workspace = resolveDevWorkspaceDir();
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || DEV_GATEWAY_TOKEN;
   if (opts.reset) {
     await handleReset("full", workspace, defaultRuntime);
   }
@@ -96,14 +119,14 @@ export async function ensureDevGatewayConfig(opts: { reset?: boolean }) {
   const io = createConfigIO();
   const configPath = io.configPath;
   const configExists = fs.existsSync(configPath);
-  if (!opts.reset && configExists) {
-    return;
-  }
-
-  await writeConfigFile({
+  const baseConfig = {
     gateway: {
       mode: "local",
       bind: "loopback",
+      auth: {
+        mode: "token",
+        token: gatewayToken,
+      },
     },
     agents: {
       defaults: {
@@ -123,7 +146,31 @@ export async function ensureDevGatewayConfig(opts: { reset?: boolean }) {
         },
       ],
     },
-  });
+  };
+
+  if (!opts.reset && configExists) {
+    const snapshot = await io.readConfigFileSnapshot();
+    if (snapshot.valid) {
+      const existingToken = snapshot.config.gateway?.auth?.token?.trim();
+      if (existingToken) {
+        return;
+      }
+      await writeDevConfig({
+        ...snapshot.config,
+        gateway: {
+          ...snapshot.config.gateway,
+          auth: {
+            ...snapshot.config.gateway?.auth,
+            mode: "token",
+            token: gatewayToken,
+          },
+        },
+      });
+      return;
+    }
+  }
+
+  await writeDevConfig(baseConfig);
   await ensureDevWorkspace(workspace);
   defaultRuntime.log(`Dev config ready: ${shortenHomePath(configPath)}`);
   defaultRuntime.log(`Dev workspace ready: ${shortenHomePath(resolveUserPath(workspace))}`);

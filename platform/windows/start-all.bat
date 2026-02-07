@@ -22,7 +22,7 @@ echo Starting Gateway and Dashboard...
 echo.
 
 REM Start Gateway (new window)
-start "OpenClaw Gateway" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\" && set HTTPS_PROXY=%HTTPS_PROXY% && set HTTP_PROXY=%HTTP_PROXY% && echo Starting Gateway... && pnpm run gateway"
+start "OpenClaw Gateway" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\" && set HTTPS_PROXY=%HTTPS_PROXY% && set HTTP_PROXY=%HTTP_PROXY% && echo Starting Gateway... && pnpm run gateway:dev"
 
 REM Wait 3 seconds for Gateway to start
 timeout /t 3 /nobreak >nul

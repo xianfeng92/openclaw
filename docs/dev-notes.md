@@ -145,6 +145,14 @@ VITE v7.3.1 ready in 365 ms
 - 开发链路（gateway + ui）：`corepack pnpm dev`
 - 首次引导：`corepack pnpm openclaw onboard --install-daemon`
 
+### 一键启动 gateway + ui（Windows / corepack-only）
+
+- 命令：`pwsh -File .\scripts\dev-up.ps1`
+- 默认行为：
+  - 若 `19001` 未占用，会后台启动 `corepack pnpm dev`（gateway）
+  - 前台启动 `corepack pnpm --dir ui dev --host 127.0.0.1 --port 5173`
+  - 若 `5173` 被占用，会自动尝试 `5174/5175/...`
+
 ## 10) 最终连通验证（2026-02-07）
 
 ### 10.1 Gateway 启动状态

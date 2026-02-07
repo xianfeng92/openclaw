@@ -64,3 +64,17 @@
   - 确认 event stream（`runId/seq/stream`）可见
   - 确认 tool streaming（`start/update/result` + `toolCallId`）可见
 - 对 Windows 下受系统权限影响的 symlink 测试，先做条件跳过，后续在稳定阶段回补兼容性修复。
+
+## 6) Step 1（第一刀剪枝）执行记录
+
+- 采用“禁用优先”策略，先改入口注册，再决定是否物理删目录。
+- 已禁用项（桌面 MVP 默认开启）：
+  - Gateway 启动阶段禁用 channel sidecars（聊天渠道不启动）
+  - Gateway 启动阶段禁用 plugin services（第三方扩展服务不启动）
+  - Gateway 插件加载强制 `plugins.enabled=false`（扩展生态入口关闭）
+- 现状说明：
+  - `apps/` 下仅有 `macos` 与 `shared`，无 `apps/mobile` 目录
+  - 仓库 `extensions/` 当前为空
+- 本步验证命令：
+  - `corepack pnpm exec tsdown`
+  - `corepack pnpm build`

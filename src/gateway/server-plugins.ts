@@ -1,5 +1,6 @@
 import type { loadConfig } from "../config/config.js";
 import type { GatewayRequestHandler } from "./server-methods/types.js";
+import { DESKTOP_MVP_SLIM_MODE } from "../desktop-mvp.js";
 import { loadOpenClawPlugins } from "../plugins/loader.js";
 
 export function loadGatewayPlugins(params: {
@@ -14,8 +15,18 @@ export function loadGatewayPlugins(params: {
   coreGatewayHandlers: Record<string, GatewayRequestHandler>;
   baseMethods: string[];
 }) {
+  const pluginConfig = DESKTOP_MVP_SLIM_MODE
+    ? {
+        ...params.cfg.plugins,
+        enabled: false,
+      }
+    : params.cfg.plugins;
+  const cfgForPlugins = DESKTOP_MVP_SLIM_MODE ? { ...params.cfg, plugins: pluginConfig } : params.cfg;
+  if (DESKTOP_MVP_SLIM_MODE) {
+    params.log.info("desktop MVP slim mode: plugin ecosystem disabled");
+  }
   const pluginRegistry = loadOpenClawPlugins({
-    config: params.cfg,
+    config: cfgForPlugins,
     workspaceDir: params.workspaceDir,
     logger: {
       info: (msg) => params.log.info(msg),

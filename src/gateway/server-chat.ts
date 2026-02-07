@@ -228,7 +228,8 @@ export function createAgentEventHandler({
   toolEventRecipients,
 }: AgentEventHandlerOptions) {
   const debugLog = (msg: string) => {
-    process.stderr.write(`[DEBUG] ${msg}\n`);
+    // Disabled: Comment out to enable debug logging
+    // process.stderr.write(`[DEBUG] ${msg}\n`);
   };
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
     debugLog(`emitChatDelta: runId=${clientRunId}, seq=${seq}, text="${text.slice(0, 50)}..."`);

@@ -107,6 +107,32 @@ const logRunner = (message) => {
   process.stderr.write(`[openclaw] ${message}\n`);
 };
 
+const which = (cmd) => {
+  try {
+    const key = process.platform === "win32" ? "Path" : "PATH";
+    const paths = (env[key] ?? env.PATH ?? "").split(path.delimiter).filter(Boolean);
+    const extensions =
+      process.platform === "win32"
+        ? (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean)
+        : [""];
+    for (const entry of paths) {
+      for (const ext of extensions) {
+        const candidate = path.join(entry, process.platform === "win32" ? `${cmd}${ext}` : cmd);
+        try {
+          if (fs.existsSync(candidate)) {
+            return candidate;
+          }
+        } catch {
+          // ignore invalid path entries
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
 const canRun = (command, commandArgs) => {
   const result = spawnSync(command, commandArgs, {
     cwd,
@@ -121,12 +147,14 @@ const canRun = (command, commandArgs) => {
 };
 
 const resolvePackageRunner = () => {
-  if (canRun("pnpm", ["--version"])) {
-    return { cmd: "pnpm", args: [] };
+  const pnpm = which("pnpm");
+  if (pnpm && canRun(pnpm, ["--version"])) {
+    return { cmd: pnpm, args: [] };
   }
-  if (canRun("corepack", ["pnpm", "--version"])) {
+  const corepack = which("corepack");
+  if (corepack && canRun(corepack, ["pnpm", "--version"])) {
     logRunner("pnpm command not found, falling back to corepack pnpm.");
-    return { cmd: "corepack", args: ["pnpm"] };
+    return { cmd: corepack, args: ["pnpm"] };
   }
   return null;
 };

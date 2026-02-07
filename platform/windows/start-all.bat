@@ -29,11 +29,12 @@ echo.
 REM Start Gateway (new window)
 start "OpenClaw Gateway" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\..\..\" && set HTTPS_PROXY=%HTTPS_PROXY% && set HTTP_PROXY=%HTTP_PROXY% && set OPENCLAW_SKIP_CHANNELS=1 && set CLAWDBOT_SKIP_CHANNELS=1 && echo Starting Gateway... && node scripts/run-node.mjs --dev gateway"
 
-REM Wait 3 seconds for Gateway to start
-timeout /t 3 /nobreak >nul
+REM Wait 5 seconds for Gateway to fully start
+echo Waiting for Gateway to initialize...
+timeout /t 5 /nobreak >nul
 
 REM Start Dashboard (new window)
-start "OpenClaw Dashboard" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\..\..\" && echo Starting Dashboard... && pnpm openclaw dashboard"
+start "OpenClaw Dashboard" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\..\..\" && set OPENCLAW_GATEWAY_PORT=19001 && echo Starting Dashboard... && pnpm openclaw dashboard"
 
 echo.
 echo ========================================

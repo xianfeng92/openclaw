@@ -7,7 +7,7 @@ setlocal enabledelayedexpansion
 REM Set UTF-8 code page for proper character display
 chcp 65001 >nul
 
-cd /d "%~dp0.."
+cd /d "%~dp0\..\..\\"
 
 echo ========================================
 echo   OpenClaw Environment Setup

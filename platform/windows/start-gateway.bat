@@ -19,7 +19,8 @@ REM OpenClaw environment variables
 set OPENCLAW_SKIP_CHANNELS=1
 set CLAWDBOT_SKIP_CHANNELS=1
 
-cd /d "%~dp0.."
+REM Change to project root directory (platform/windows -> project root)
+cd /d "%~dp0\..\..\"
 
 echo ========================================
 echo   Starting OpenClaw Gateway

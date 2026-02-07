@@ -12,6 +12,10 @@ set HTTPS_PROXY=http://127.0.0.1:7890
 set HTTP_PROXY=http://127.0.0.1:7890
 REM ===============================
 
+REM OpenClaw environment variables
+set OPENCLAW_SKIP_CHANNELS=1
+set CLAWDBOT_SKIP_CHANNELS=1
+
 cd /d "%~dp0.."
 
 echo ========================================
@@ -22,7 +26,7 @@ echo Starting Gateway and Dashboard...
 echo.
 
 REM Start Gateway (new window)
-start "OpenClaw Gateway" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\" && set HTTPS_PROXY=%HTTPS_PROXY% && set HTTP_PROXY=%HTTP_PROXY% && echo Starting Gateway... && pnpm run gateway:dev"
+start "OpenClaw Gateway" cmd /k "chcp 65001 >nul && cd /d \"%~dp0\" && set HTTPS_PROXY=%HTTPS_PROXY% && set HTTP_PROXY=%HTTP_PROXY% && set OPENCLAW_SKIP_CHANNELS=1 && set CLAWDBOT_SKIP_CHANNELS=1 && echo Starting Gateway... && node scripts/run-node.mjs --dev gateway"
 
 REM Wait 3 seconds for Gateway to start
 timeout /t 3 /nobreak >nul

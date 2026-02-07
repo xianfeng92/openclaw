@@ -15,6 +15,10 @@ set HTTPS_PROXY=http://127.0.0.1:7890
 set HTTP_PROXY=http://127.0.0.1:7890
 REM ===============================
 
+REM OpenClaw environment variables
+set OPENCLAW_SKIP_CHANNELS=1
+set CLAWDBOT_SKIP_CHANNELS=1
+
 cd /d "%~dp0.."
 
 echo ========================================
@@ -35,6 +39,6 @@ echo Press Ctrl+C to stop Gateway
 echo ========================================
 echo.
 
-pnpm run gateway:dev
+node scripts/run-node.mjs --dev gateway
 
 endlocal

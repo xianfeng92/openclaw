@@ -93,6 +93,10 @@ export function applySettingsFromUrl(host: SettingsHost) {
   let shouldCleanUrl = false;
 
   if (tokenRaw != null) {
+    const token = tokenRaw.trim();
+    if (token && token !== host.settings.token) {
+      applySettings(host, { ...host.settings, token });
+    }
     params.delete("token");
     shouldCleanUrl = true;
   }

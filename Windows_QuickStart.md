@@ -12,16 +12,61 @@
 
 ---
 
-## 五分钟快速开始
+## 推荐启动路径（最短闭环）
 
-### 1️⃣ 安装依赖
+> 这是验证 OpenClaw 正常工作的最快方式，按顺序执行即可。
+
+### 终端 A：启动 Gateway
+
+```powershell
+cd C:\Users\xforg\Desktop\openclaw
+pnpm run gateway
+```
+
+**✅ 确认启动成功**：看到类似以下日志
+```
+[gateway] listening on ws://127.0.0.1:19001
+```
+
+**⚠️ 端口说明**：端口可能因模式（slim/dev）不同而变化，**以日志中 `listening on ws://...` 为准**。
+
+---
+
+### 终端 B：启动 Dashboard
+
+```powershell
+cd C:\Users\xforg\Desktop\openclaw
+pnpm openclaw dashboard
+```
+
+**✅ 确认启动成功**：浏览器自动打开 `http://localhost:3000`
+
+---
+
+### 连接 Gateway
+
+在 Dashboard 中：
+1. 找到 Gateway 连接配置
+2. **Gateway URL**: 填写日志中的地址，例如 `ws://127.0.0.1:19001`（**以启动日志为准**）
+3. **Gateway Token**: 填写你的 token（首次配置见下方）
+4. 点击 **Connect**
+
+**✅ 确认连接成功**：Dashboard 显示 "Connected" 状态
+
+---
+
+### 首次配置（只需一次）
+
+如果还没有配置过，执行以下步骤：
+
+#### 1. 安装依赖
 
 ```powershell
 cd C:\Users\xforg\Desktop\openclaw
 pnpm install
 ```
 
-### 2️⃣ 生成 Gateway Token
+#### 2. 配置 Gateway
 
 ```powershell
 pnpm openclaw config set gateway.auth.mode token
@@ -30,11 +75,9 @@ pnpm openclaw doctor --generate-gateway-token
 pnpm openclaw config get gateway.auth.token
 ```
 
-**复制输出的 token**，后面会用。
+**复制输出的 token**，连接 Dashboard 时需要。
 
-### 3️⃣ 配置模型 API Key
-
-**选一个你有的：**
+#### 3. 配置模型 API Key
 
 ```powershell
 # OpenAI
@@ -47,36 +90,23 @@ pnpm openclaw models auth paste-token --provider google
 pnpm openclaw models auth paste-token --provider anthropic
 ```
 
-### 4️⃣ 启动服务
-
-**方式 A：双击启动脚本**（最简单）
-
-```
-双击 start-gateway.bat
-```
-
-**方式 B：命令行启动**
+#### 4. 编译项目
 
 ```powershell
-pnpm run gateway
+pnpm run build
 ```
 
-### 5️⃣ 打开 Dashboard
+---
 
-**新开一个终端：**
+## 测试验证
 
-```powershell
-pnpm openclaw dashboard
-```
+发送一条**必须触发工具**的测试消息，例如：
 
-### 6️⃣ 连接 Gateway
+> "当前目录下有什么文件？"
 
-在浏览器中：
-1. 打开 `http://localhost:3000`（Dashboard 会自动打开）
-2. 找到 Gateway 连接配置：
-   - **Gateway URL**: `ws://127.0.0.1:18789`
-   - **Gateway Token**: 粘贴第 2 步获取的 token
-3. 点击 **Connect**
+**✅ 成功标志**：
+- Agent 读取了目录
+- Dashboard 显示文件列表
 
 ---
 
@@ -88,13 +118,12 @@ pnpm openclaw dashboard
 | `disconnected (1008)` | Token 不对，重新生成 |
 | `No API key found` | 配置 API Key |
 | 端口被占用 | `taskkill /F /IM node.exe` |
-| PowerShell 乱码 | 已自动处理，无需操作 |
+| 端口不是 18789/19001 | **以启动日志为准**，使用日志中的地址 |
+| 连接后没反应 | 检查模型 API Key 是否有效 |
 
 ---
 
-## 详细配置
-
-### 网络代理配置
+## 网络代理配置
 
 **如果你在国内，或者使用 VPN**，需要配置代理：
 
@@ -108,26 +137,22 @@ $env:HTTPS_PROXY="http://127.0.0.1:7890"
 pnpm run gateway
 ```
 
-**或编辑** `start-gateway.bat`，修改端口号后双击运行。
+**或使用启动脚本**：编辑 `start-gateway.bat` 修改端口号后双击运行。
 
-### 禁用流式输出
+---
 
-如果你希望消息一次性显示，不跳动：
+## 其他启动方式
 
-编辑 `.openclaw/openclaw.json`：
+### 使用启动脚本（带代理）
 
-```json
-{
-  "agents": {
-    "defaults": {
-      "models": {
-        "google/gemini-3-flash-preview": {
-          "streaming": false
-        }
-      }
-    }
-  }
-}
+```batch
+start-gateway.bat
+```
+
+### 开发模式
+
+```powershell
+pnpm dev
 ```
 
 ---
@@ -139,8 +164,6 @@ pnpm run gateway
 pnpm openclaw logs --limit 50 --plain
 
 # 停止 gateway
-pnpm run gateway stop
-# 或
 taskkill /F /IM node.exe
 
 # 重新编译（修改代码后）
@@ -152,23 +175,8 @@ pnpm openclaw models status --plain
 
 ---
 
-## 完整初始化脚本（一次性执行）
-
-```powershell
-cd C:\Users\xforg\Desktop\openclaw
-pnpm install
-pnpm openclaw config set plugins.slots.memory none
-pnpm openclaw config set gateway.auth.mode token
-pnpm openclaw config set gateway.mode local
-pnpm openclaw doctor --generate-gateway-token
-pnpm openclaw config get gateway.auth.token
-pnpm run build
-```
-
----
-
 ## 需要帮助？
 
 - **查看日志**：`pnpm openclaw logs --limit 100`
 - **检查状态**：`pnpm openclaw doctor`
-- **重置配置**：删除 `C:\Users\xforg\.openclaw` 目录后重新配置
+- **详细文档**：[Windows_SetUp.md](Windows_SetUp.md)

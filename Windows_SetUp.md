@@ -262,10 +262,14 @@ pnpm openclaw dashboard
 ### 5.5 连接 Dashboard
 
 1. 在 Dashboard 中找到 Gateway 配置区域
-2. 填写：
-   - **Gateway URL**: `ws://127.0.0.1:18789`
-   - **Gateway Token**: 第 3.4 节获取的 token
-3. 点击 **Connect**
+2. **Gateway URL**: **以启动日志为准**，例如：
+   - 日志显示 `listening on ws://127.0.0.1:19001` → 填 `ws://127.0.0.1:19001`
+   - 日志显示 `listening on ws://127.0.0.1:18789` → 填 `ws://127.0.0.1:18789`
+   - **端口可能因模式（slim/dev）不同而变化，务必以启动日志为准**
+3. **Gateway Token**: 粘贴第 3.4 节获取的 token
+4. 点击 **Connect**
+
+**✅ 确认连接成功**：Dashboard 显示 "Connected" 状态
 
 ---
 

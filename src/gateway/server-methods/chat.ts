@@ -548,7 +548,10 @@ export const chatHandlers: GatewayRequestHandlers = {
           // Broadcast final reply if we have content from dispatcher
           // This handles both directive-only commands (agentRunStarted=false) and
           // agent runs that didn't emit assistant events but have dispatcher replies
-          if (combinedReply) {
+          if (combinedReply && !agentRunStarted) {
+            // Only broadcast via dispatcher when agent didn't emit any events
+            // (agentRunStarted=false means no assistant events were emitted)
+            // If agentRunStarted=true, the message was already sent via emitChatDelta/emitChatFinal
             context.logGateway.info(
               `[webchat] broadcasting reply: "${combinedReply.slice(0, 100)}..." (agentRunStarted=${agentRunStarted})`,
             );
@@ -585,11 +588,11 @@ export const chatHandlers: GatewayRequestHandlers = {
               sessionKey: p.sessionKey,
               message,
             });
-          } else if (!agentRunStarted) {
+          } else if (!agentRunStarted && !combinedReply) {
             context.logGateway.warn(`[webchat] directive-only command produced no reply`);
           }
-          // If agentRunStarted=true and combinedReply is empty, the response
-          // should have come through emitChatDelta/emitChatFinal (agent events)
+          // If agentRunStarted=true, the response should have come through emitChatDelta/emitChatFinal (agent events)
+          // If agentRunStarted=false and combinedReply is empty, that's an error (directive-only command with no output)
           context.dedupe.set(`chat:${clientRunId}`, {
             ts: Date.now(),
             ok: true,

@@ -16,6 +16,7 @@ export type ChatState = {
   chatRunId: string | null;
   chatStream: string | null;
   chatStreamStartedAt: number | null;
+  chatWaitingForResponse: boolean;
   lastError: string | null;
 };
 
@@ -124,6 +125,7 @@ export async function sendChatMessage(
   state.chatRunId = runId;
   state.chatStream = "";
   state.chatStreamStartedAt = now;
+  state.chatWaitingForResponse = true;
 
   // Convert attachments to API format
   const apiAttachments = hasAttachments
@@ -160,6 +162,7 @@ export async function sendChatMessage(
     state.chatRunId = null;
     state.chatStream = null;
     state.chatStreamStartedAt = null;
+    state.chatWaitingForResponse = false;
     state.lastError = error;
     state.chatMessages = [
       ...state.chatMessages,
@@ -211,25 +214,24 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   }
 
   if (payload.state === "delta") {
-    const next = extractText(payload.message);
-    if (typeof next === "string") {
-      const current = state.chatStream ?? "";
-      if (!current || next.length >= current.length) {
-        state.chatStream = next;
-      }
-    }
+    // Don't update chatStream - we'll load the final message from history
+    // Just set waiting state to show we're receiving a response
+    state.chatWaitingForResponse = true;
   } else if (payload.state === "final") {
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
+    state.chatWaitingForResponse = false;
   } else if (payload.state === "aborted") {
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
+    state.chatWaitingForResponse = false;
   } else if (payload.state === "error") {
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
+    state.chatWaitingForResponse = false;
     state.lastError = payload.errorMessage ?? "chat error";
   }
   return payload.state;

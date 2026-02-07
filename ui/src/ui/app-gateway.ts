@@ -52,6 +52,7 @@ type GatewayHost = {
   sessionKey: string;
   chatRunId: string | null;
   chatStreamStartedAt: number | null;
+  chatWaitingForResponse: boolean;
   refreshSessionsAfterChat: Set<string>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;

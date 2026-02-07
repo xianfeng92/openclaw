@@ -24,6 +24,7 @@ import { listChannelAgentTools } from "./channel-tools.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
+import { createFsReadTool } from "./tools/fs-read-tool.js";
 import {
   filterToolsByPolicy,
   isToolAllowedByPolicies,
@@ -57,6 +58,8 @@ function isOpenAIProvider(provider?: string) {
   const normalized = provider?.trim().toLowerCase();
   return normalized === "openai" || normalized === "openai-codex";
 }
+
+const DESKTOP_MVP_MINIMAL_TOOLSET = true;
 
 function isApplyPatchAllowedForModel(params: {
   modelProvider?: string;
@@ -275,11 +278,29 @@ export function createOpenClawCodingTools(options?: {
   const execTool = createExecTool({
     ...execDefaults,
     host: options?.exec?.host ?? execConfig.host,
-    security: options?.exec?.security ?? execConfig.security,
-    ask: options?.exec?.ask ?? execConfig.ask,
+    security:
+      options?.exec?.security ??
+      (DESKTOP_MVP_MINIMAL_TOOLSET ? "allowlist" : execConfig.security),
+    ask: options?.exec?.ask ?? (DESKTOP_MVP_MINIMAL_TOOLSET ? "on-miss" : execConfig.ask),
     node: options?.exec?.node ?? execConfig.node,
     pathPrepend: options?.exec?.pathPrepend ?? execConfig.pathPrepend,
-    safeBins: options?.exec?.safeBins ?? execConfig.safeBins,
+    safeBins:
+      options?.exec?.safeBins ??
+      (DESKTOP_MVP_MINIMAL_TOOLSET
+        ? [
+            "ls",
+            "pwd",
+            "echo",
+            "cat",
+            "find",
+            "tree",
+            "rg",
+            "dir",
+            "Get-ChildItem",
+            "Write-Output",
+            "node",
+          ]
+        : execConfig.safeBins),
     agentId,
     cwd: options?.workspaceDir,
     allowBackground,
@@ -287,7 +308,7 @@ export function createOpenClawCodingTools(options?: {
     sessionKey: options?.sessionKey,
     messageProvider: options?.messageProvider,
     backgroundMs: options?.exec?.backgroundMs ?? execConfig.backgroundMs,
-    timeoutSec: options?.exec?.timeoutSec ?? execConfig.timeoutSec,
+    timeoutSec: options?.exec?.timeoutSec ?? (DESKTOP_MVP_MINIMAL_TOOLSET ? 60 : execConfig.timeoutSec),
     approvalRunningNoticeMs:
       options?.exec?.approvalRunningNoticeMs ?? execConfig.approvalRunningNoticeMs,
     notifyOnExit: options?.exec?.notifyOnExit ?? execConfig.notifyOnExit,
@@ -445,6 +466,32 @@ export function createOpenClawCodingTools(options?: {
   const withAbort = options?.abortSignal
     ? withHooks.map((tool) => wrapToolWithAbortSignal(tool, options.abortSignal))
     : withHooks;
+
+  if (DESKTOP_MVP_MINIMAL_TOOLSET) {
+    const workspaceRoot = options?.workspaceDir ?? process.cwd();
+    const fsReadTool = createFsReadTool(workspaceRoot);
+    const execCore = withAbort.find((tool) => normalizeToolName(tool.name) === "exec");
+    const bashExecTool =
+      execCore &&
+      ({
+        ...execCore,
+        name: "bash.exec",
+        label: "bash.exec",
+        execute: async (toolCallId, params, signal, onUpdate) =>
+          await execCore.execute(
+            toolCallId,
+            {
+              timeout: 60,
+              security: "allowlist",
+              ask: "on-miss",
+              ...(params && typeof params === "object" ? (params as Record<string, unknown>) : {}),
+            },
+            signal,
+            onUpdate,
+          ),
+      } as AnyAgentTool);
+    return bashExecTool ? [fsReadTool, bashExecTool] : [fsReadTool];
+  }
 
   // NOTE: Keep canonical (lowercase) tool names here.
   // pi-ai's Anthropic OAuth transport remaps tool names to Claude Code-style names

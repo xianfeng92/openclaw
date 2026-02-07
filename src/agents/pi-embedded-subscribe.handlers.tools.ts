@@ -15,7 +15,7 @@ import { normalizeToolName } from "./tool-policy.js";
 
 function extendExecMeta(toolName: string, args: unknown, meta?: string): string | undefined {
   const normalized = toolName.trim().toLowerCase();
-  if (normalized !== "exec" && normalized !== "bash") {
+  if (normalized !== "exec" && normalized !== "bash" && normalized !== "bash.exec") {
     return meta;
   }
   if (!args || typeof args !== "object") {
@@ -51,7 +51,7 @@ export async function handleToolExecutionStart(
   const toolCallId = String(evt.toolCallId);
   const args = evt.args;
 
-  if (toolName === "read") {
+  if (toolName === "read" || toolName === "fs.read") {
     const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const filePath = typeof record.path === "string" ? record.path.trim() : "";
     if (!filePath) {

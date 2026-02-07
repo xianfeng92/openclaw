@@ -45,7 +45,19 @@ function which(cmd) {
 function resolveRunner() {
   const pnpm = which("pnpm");
   if (pnpm) {
-    return { cmd: pnpm, kind: "pnpm" };
+    return { cmd: pnpm, args: [], kind: "pnpm" };
+  }
+  const corepack = which("corepack");
+  if (corepack) {
+    const probe = spawnSync(corepack, ["pnpm", "--version"], {
+      cwd: uiDir,
+      stdio: "ignore",
+      env: process.env,
+      shell: false,
+    });
+    if (!probe.error && (probe.status ?? 1) === 0) {
+      return { cmd: corepack, args: ["pnpm"], kind: "corepack-pnpm" };
+    }
   }
   return null;
 }
@@ -104,7 +116,7 @@ if (!action) {
 
 const runner = resolveRunner();
 if (!runner) {
-  process.stderr.write("Missing UI runner: install pnpm, then retry.\n");
+  process.stderr.write("Missing UI runner: install pnpm or use corepack pnpm.\n");
   process.exit(1);
 }
 
@@ -125,13 +137,13 @@ if (action !== "install" && !script) {
 }
 
 if (action === "install") {
-  run(runner.cmd, ["install", ...rest]);
+  run(runner.cmd, [...runner.args, "install", ...rest]);
 } else {
   if (!depsInstalled(action === "test" ? "test" : "build")) {
     const installEnv =
       action === "build" ? { ...process.env, NODE_ENV: "production" } : process.env;
     const installArgs = action === "build" ? ["install", "--prod"] : ["install"];
-    runSync(runner.cmd, installArgs, installEnv);
+    runSync(runner.cmd, [...runner.args, ...installArgs], installEnv);
   }
-  run(runner.cmd, ["run", script, ...rest]);
+  run(runner.cmd, [...runner.args, "run", script, ...rest]);
 }

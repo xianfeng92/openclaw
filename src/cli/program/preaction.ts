@@ -21,8 +21,8 @@ function setProcessTitleForCommand(actionCommand: Command) {
   process.title = `${cliName}-${name}`;
 }
 
-// Commands that need channel plugins loaded
-const PLUGIN_REQUIRED_COMMANDS = new Set(["message", "channels", "directory"]);
+// Desktop MVP slim mode: keep core CLI without channel plugin bootstrap.
+const PLUGIN_REQUIRED_COMMANDS = new Set<string>();
 
 export function registerPreActionHooks(program: Command, programVersion: string) {
   program.hook("preAction", async (_thisCommand, actionCommand) => {

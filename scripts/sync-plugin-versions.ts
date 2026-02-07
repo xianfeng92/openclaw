@@ -15,6 +15,10 @@ if (!targetVersion) {
 }
 
 const extensionsDir = resolve("extensions");
+if (!existsSync(extensionsDir)) {
+  console.log("No extensions directory found. Skipping plugin version sync.");
+  process.exit(0);
+}
 const dirs = readdirSync(extensionsDir, { withFileTypes: true }).filter((entry) =>
   entry.isDirectory(),
 );

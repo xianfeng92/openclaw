@@ -12,6 +12,14 @@ type SubCliEntry = {
   register: SubCliRegistrar;
 };
 
+const DISABLED_DESKTOP_MVP_SUBCLIS = new Set([
+  "channels",
+  "plugins",
+  "pairing",
+  "directory",
+  "skills",
+]);
+
 const shouldRegisterPrimaryOnly = (argv: string[]) => {
   if (isTruthyEnvValue(process.env.OPENCLAW_DISABLE_LAZY_SUBCOMMANDS)) {
     return false;
@@ -242,7 +250,7 @@ const entries: SubCliEntry[] = [
 ];
 
 export function getSubCliEntries(): SubCliEntry[] {
-  return entries;
+  return entries.filter((entry) => !DISABLED_DESKTOP_MVP_SUBCLIS.has(entry.name));
 }
 
 function removeCommand(program: Command, command: Command) {
@@ -254,6 +262,9 @@ function removeCommand(program: Command, command: Command) {
 }
 
 export async function registerSubCliByName(program: Command, name: string): Promise<boolean> {
+  if (DISABLED_DESKTOP_MVP_SUBCLIS.has(name)) {
+    return false;
+  }
   const entry = entries.find((candidate) => candidate.name === name);
   if (!entry) {
     return false;
@@ -290,21 +301,22 @@ function registerLazyCommand(program: Command, entry: SubCliEntry) {
 }
 
 export function registerSubCliCommands(program: Command, argv: string[] = process.argv) {
+  const activeEntries = getSubCliEntries();
   if (shouldEagerRegisterSubcommands(argv)) {
-    for (const entry of entries) {
+    for (const entry of activeEntries) {
       void entry.register(program);
     }
     return;
   }
   const primary = getPrimaryCommand(argv);
   if (primary && shouldRegisterPrimaryOnly(argv)) {
-    const entry = entries.find((candidate) => candidate.name === primary);
+    const entry = activeEntries.find((candidate) => candidate.name === primary);
     if (entry) {
       registerLazyCommand(program, entry);
       return;
     }
   }
-  for (const candidate of entries) {
+  for (const candidate of activeEntries) {
     registerLazyCommand(program, candidate);
   }
 }

@@ -62,10 +62,7 @@ export async function runCli(argv: string[] = process.argv) {
 
   const shouldSkipPluginRegistration = !primary && hasHelpOrVersion(parseArgv);
   if (!shouldSkipPluginRegistration) {
-    // Register plugin CLI commands before parsing
-    const { registerPluginCliCommands } = await import("../plugins/cli.js");
-    const { loadConfig } = await import("../config/config.js");
-    registerPluginCliCommands(program, loadConfig());
+    // Desktop MVP slim mode: do not register plugin marketplace CLI commands.
   }
 
   await program.parseAsync(parseArgv);

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --import tsx
 
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 type PackFile = { path: string };
@@ -41,6 +41,9 @@ function checkPluginVersions() {
   }
 
   const extensionsDir = resolve("extensions");
+  if (!existsSync(extensionsDir)) {
+    return;
+  }
   const entries = readdirSync(extensionsDir, { withFileTypes: true }).filter((entry) =>
     entry.isDirectory(),
   );

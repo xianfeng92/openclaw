@@ -32,5 +32,10 @@ export function isReasoningTagProvider(provider: string | undefined | null): boo
     return true;
   }
 
+  // Handle Venice (uses OpenAI-compatible API with thinking tags for reasoning models)
+  if (normalized.includes("venice")) {
+    return true;
+  }
+
   return false;
 }

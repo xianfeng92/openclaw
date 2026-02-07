@@ -14,8 +14,9 @@
 |---------|---------|---------|
 | `disconnected (1008): unauthorized` | Gateway token 缺失/不匹配 | 第 3 节 |
 | `No API key found for provider` | 模型认证未配置 | 第 4 节 |
-| `Request timed out.` | 网络无法访问 API | 第 10 节 |
-| 端口被占用 | 旧进程未停止 | 第 11 节 |
+| `Request timed out` / `fetch failed` | 网络无法访问 API | 第 6 节（使用代理） |
+| 端口被占用 | 旧进程未停止 | 第 8 节 |
+| `buffer has text: false` | 代理未配置或端口错误 | 检查代理设置 |
 
 ---
 
@@ -117,11 +118,36 @@ pnpm openclaw models status --plain
 
 ## 5. 启动服务
 
-### 5.1 终端 A：启动 Gateway
+### 5.1 方式一：使用启动脚本（推荐）
+
+如果需要使用代理（VPN），直接双击运行：
+
+```batch
+start-gateway.bat
+```
+
+或在命令行：
+
+```cmd
+start-gateway.bat
+```
+
+### 5.2 方式二：直接启动 Gateway
+
+**不需要代理时：**
 
 ```powershell
 cd C:\Users\xforg\Desktop\openclaw
-pnpm openclaw gateway run --bind loopback --port 18789 --force
+pnpm run gateway
+```
+
+**需要代理时（PowerShell）：**
+
+```powershell
+cd C:\Users\xforg\Desktop\openclaw
+$env:HTTP_PROXY="http://127.0.0.1:7890"
+$env:HTTPS_PROXY="http://127.0.0.1:7890"
+pnpm run gateway
 ```
 
 保持此终端运行。
@@ -137,15 +163,68 @@ pnpm openclaw dashboard
 
 ## 6. 网络代理配置（如需要）
 
-如果无法直接访问 OpenAI/Anthropic API，需要配置代理：
+### 6.1 问题说明
 
+Node.js 不会自动使用系统代理或 VPN。如果你的网络需要通过代理访问 API（如 Google、OpenAI 等），必须手动配置代理环境变量。
+
+**常见症状**：
+- `Request timed out`
+- `fetch failed sending request`
+- 可以访问 `api.venice.ai` 但无法访问 `generativelanguage.googleapis.com`
+
+### 6.2 使用启动脚本（推荐）
+
+项目提供了带代理配置的启动脚本：
+
+```batch
+# 直接双击运行，或命令行执行：
+start-gateway.bat
+```
+
+脚本默认代理端口为 `7890`（Clash 等常见代理软件的默认端口）。如果你的代理使用不同端口，编辑 `start-gateway.bat` 修改端口号。
+
+### 6.3 手动配置代理
+
+如果不想使用启动脚本，可以手动设置环境变量：
+
+**PowerShell：**
 ```powershell
-# 设置代理（替换为你的代理地址）
 $env:HTTP_PROXY="http://127.0.0.1:7890"
 $env:HTTPS_PROXY="http://127.0.0.1:7890"
+pnpm run gateway
+```
 
-# 然后启动网关
-pnpm openclaw gateway run --bind loopback --port 18789 --force
+**CMD：**
+```cmd
+set HTTP_PROXY=http://127.0.0.1:7890
+set HTTPS_PROXY=http://127.0.0.1:7890
+npm run gateway
+```
+
+### 6.4 验证代理配置
+
+```powershell
+# 测试 Google API 连接（通过代理）
+curl --proxy "http://127.0.0.1:7890" -s "https://generativelanguage.googleapis.com/v1beta/models"
+
+# 测试 OpenAI API 连接（通过代理）
+curl --proxy "http://127.0.0.1:7890" -s "https://api.openai.com/v1/models"
+```
+
+### 6.5 常见代理端口
+
+| 软件 | 默认端口 |
+|-----|---------|
+| Clash | 7890 |
+| Clash (另一个) | 10808, 10809 |
+| V2RayN | 10809 |
+| 其他 | 查看 VPN 软件设置 |
+
+### 6.6 检查本地代理端口
+
+```powershell
+# 查看监听中的端口
+netstat -an | findstr "LISTEN" | findstr "7890 10808 10809"
 ```
 
 ---
@@ -242,7 +321,11 @@ pnpm openclaw config get gateway.auth.token
 # ========== 配置模型认证（选一个） ==========
 # OpenAI
 pnpm openclaw models auth paste-token --provider openai
-pnpm openclaw models set openai/gpt-4o-mini
+pnpm openclaw models set openai/gpt-5-mini
+
+# Google Gemini
+pnpm openclaw models auth paste-token --provider google
+pnpm openclaw models set google/gemini-3-flash-preview
 
 # Anthropic
 pnpm openclaw models auth paste-token --provider anthropic
@@ -251,13 +334,23 @@ pnpm openclaw models set anthropic/claude-opus-4-6
 # ========== 验证配置 ==========
 pnpm openclaw models status --plain
 
-# ========== 配置代理（如需要） ==========
+# ========== 编译 ==========
+pnpm run build
+```
+
+启动 Gateway（三选一）：
+
+```powershell
+# 方式一：使用启动脚本（推荐，自动配置代理）
+start-gateway.bat
+
+# 方式二：直接启动（无需代理时）
+pnpm run gateway
+
+# 方式三：手动配置代理后启动
 $env:HTTP_PROXY="http://127.0.0.1:7890"
 $env:HTTPS_PROXY="http://127.0.0.1:7890"
-
-# ========== 编译并启动 ==========
-pnpm run build
-pnpm openclaw gateway run --bind loopback --port 18789 --force
+pnpm run gateway
 ```
 
 另开终端启动 Dashboard：

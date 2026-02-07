@@ -16,6 +16,7 @@ export type ChatHost = {
   chatAttachments: ChatAttachment[];
   chatQueue: ChatQueueItem[];
   chatRunId: string | null;
+  chatStreamStartedAt: number | null;
   chatSending: boolean;
   sessionKey: string;
   basePath: string;
@@ -25,9 +26,53 @@ export type ChatHost = {
 };
 
 export const CHAT_SESSIONS_ACTIVE_MINUTES = 120;
+export const CHAT_RUN_STALL_TIMEOUT_MS = 45_000;
+
+const runStallTimeoutByHost = new WeakMap<ChatHost, ReturnType<typeof setTimeout>>();
 
 export function isChatBusy(host: ChatHost) {
   return host.chatSending || Boolean(host.chatRunId);
+}
+
+function clearRunStallTimeout(host: ChatHost) {
+  const timer = runStallTimeoutByHost.get(host);
+  if (timer) {
+    clearTimeout(timer);
+    runStallTimeoutByHost.delete(host);
+  }
+}
+
+export function clearStalledRunIfNeeded(
+  host: ChatHost,
+  expectedRunId: string,
+  now: number = Date.now(),
+) {
+  if (!host.connected || host.chatSending || host.chatRunId !== expectedRunId) {
+    return false;
+  }
+  const startedAt = host.chatStreamStartedAt ?? 0;
+  if (startedAt <= 0) {
+    return false;
+  }
+  if (now - startedAt < CHAT_RUN_STALL_TIMEOUT_MS) {
+    return false;
+  }
+  host.chatRunId = null;
+  (host as unknown as { chatStream: string | null }).chatStream = null;
+  host.chatStreamStartedAt = null;
+  return true;
+}
+
+function scheduleRunStallTimeout(host: ChatHost, runId: string) {
+  clearRunStallTimeout(host);
+  const timer = setTimeout(() => {
+    runStallTimeoutByHost.delete(host);
+    const recovered = clearStalledRunIfNeeded(host, runId);
+    if (recovered) {
+      void flushChatQueue(host);
+    }
+  }, CHAT_RUN_STALL_TIMEOUT_MS + 250);
+  runStallTimeoutByHost.set(host, timer);
 }
 
 export function isChatStopCommand(text: string) {
@@ -106,6 +151,11 @@ async function sendChatMessageNow(
   resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
   const runId = await sendChatMessage(host as unknown as OpenClawApp, message, opts?.attachments);
   const ok = Boolean(runId);
+  if (ok && runId) {
+    scheduleRunStallTimeout(host, runId);
+  } else {
+    clearRunStallTimeout(host);
+  }
   if (!ok && opts?.previousDraft != null) {
     host.chatMessage = opts.previousDraft;
   }

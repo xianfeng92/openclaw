@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { handleChatEvent, type ChatEventPayload, type ChatState } from "./chat.ts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  CHAT_SEND_ACK_TIMEOUT_MS,
+  handleChatEvent,
+  sendChatMessage,
+  type ChatEventPayload,
+  type ChatState,
+} from "./chat.ts";
 
 function createState(overrides: Partial<ChatState> = {}): ChatState {
   return {
@@ -91,5 +97,30 @@ describe("handleChatEvent", () => {
     expect(state.chatRunId).toBe(null);
     expect(state.chatStream).toBe(null);
     expect(state.chatStreamStartedAt).toBe(null);
+  });
+});
+
+describe("sendChatMessage", () => {
+  it("times out when chat.send ACK never returns and clears run state", async () => {
+    vi.useFakeTimers();
+    try {
+      const state = createState({
+        client: {
+          request: vi.fn(() => new Promise(() => undefined)),
+        } as unknown as ChatState["client"],
+      });
+
+      const pending = sendChatMessage(state, "hello");
+      await vi.advanceTimersByTimeAsync(CHAT_SEND_ACK_TIMEOUT_MS + 1);
+      const runId = await pending;
+
+      expect(runId).toBeNull();
+      expect(state.chatRunId).toBeNull();
+      expect(state.chatStream).toBeNull();
+      expect(state.chatStreamStartedAt).toBeNull();
+      expect(state.lastError).toContain("chat.send timed out");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

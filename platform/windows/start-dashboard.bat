@@ -14,6 +14,6 @@ echo   Starting OpenClaw Dashboard
 echo ========================================
 echo.
 
-npm run openclaw dashboard
+pnpm openclaw dashboard
 
 endlocal

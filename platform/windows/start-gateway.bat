@@ -35,6 +35,6 @@ echo Press Ctrl+C to stop Gateway
 echo ========================================
 echo.
 
-npm run gateway
+pnpm run gateway
 
 endlocal

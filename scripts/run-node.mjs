@@ -139,6 +139,7 @@ const canRun = (command, commandArgs) => {
     env,
     stdio: "ignore",
     windowsHide: true,
+    shell: process.platform === "win32",
   });
   if (result.error) {
     return false;
@@ -199,6 +200,7 @@ if (!shouldBuild()) {
     cwd,
     env,
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 
   build.on("exit", (code, signal) => {

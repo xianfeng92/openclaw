@@ -15,7 +15,7 @@
 
 - `node -v` => `v22.21.0`
 - `corepack pnpm -v` => `10.23.0`
-- 直接调用 `pnpm` 不可用（PATH 中无 `pnpm` 可执行文件），需要使用 `corepack pnpm ...`
+- 已补充用户级 `pnpm` shim，`pnpm -v` 可直接使用
 
 ## 3) Baseline 验证记录
 
@@ -54,3 +54,13 @@
 - 仓库可在本机完成依赖安装，并可通过 `tsdown` 完成核心 TypeScript 构建。
 - 当前默认 `pnpm build` / `pnpm test` 在该 Windows 环境存在命令分发问题（脚本内裸 `pnpm` / `pnpm.cmd`），属于环境与脚本兼容问题，非 MVP 核心能力本身不可构建。
 - 下一步（Step 1）将进行“第一刀剪枝”：移除非 MVP 模块并同步修复引用，目标是保证瘦身后构建可通过。
+
+## 5) MVP 阶段验收策略（当前执行）
+
+- 优先“可用验收”而非全量单测全绿：`pnpm check` + `pnpm build` + 关键 smoke。
+- 关键 smoke（桌面 MVP）：
+  - 启动网关/UI（开发模式）
+  - 发送 1 条任务消息
+  - 确认 event stream（`runId/seq/stream`）可见
+  - 确认 tool streaming（`start/update/result` + `toolCallId`）可见
+- 对 Windows 下受系统权限影响的 symlink 测试，先做条件跳过，后续在稳定阶段回补兼容性修复。

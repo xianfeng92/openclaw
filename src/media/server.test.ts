@@ -32,6 +32,7 @@ const waitForFileRemoval = async (file: string, timeoutMs = 200) => {
 };
 
 describe("media server", () => {
+  const supportsSymlinkTest = process.platform !== "win32";
   beforeAll(async () => {
     await fs.rm(MEDIA_DIR, { recursive: true, force: true });
     await fs.mkdir(MEDIA_DIR, { recursive: true });
@@ -76,7 +77,7 @@ describe("media server", () => {
     await new Promise((r) => server.close(r));
   });
 
-  it("blocks symlink escaping outside media dir", async () => {
+  it.skipIf(!supportsSymlinkTest)("blocks symlink escaping outside media dir", async () => {
     const target = path.join(process.cwd(), "package.json"); // outside MEDIA_DIR
     const link = path.join(MEDIA_DIR, "link-out");
     await fs.symlink(target, link);

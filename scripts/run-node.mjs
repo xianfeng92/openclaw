@@ -161,7 +161,9 @@ const resolvePackageRunner = () => {
 };
 
 const runNode = () => {
-  const nodeProcess = spawn(process.execPath, ["openclaw.mjs", ...args], {
+  const nodeArgs =
+    args.length === 0 && env.npm_lifecycle_event === "dev" ? ["--dev", "gateway"] : args;
+  const nodeProcess = spawn(process.execPath, ["openclaw.mjs", ...nodeArgs], {
     cwd,
     env,
     stdio: "inherit",

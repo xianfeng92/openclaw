@@ -21,19 +21,19 @@ afterEach(async () => {
 });
 
 describe("desktop MVP minimal toolset", () => {
-  it("exposes only fs.read and bash.exec", () => {
+  it("exposes only fs_read and bash_exec", () => {
     const tools = createOpenClawCodingTools();
-    expect(tools.map((tool) => tool.name)).toEqual(["fs.read", "bash.exec"]);
+    expect(tools.map((tool) => tool.name)).toEqual(["fs_read", "bash_exec"]);
   });
 
-  it("fs.read lists directory trees and emits updates", async () => {
+  it("fs_read lists directory trees and emits updates", async () => {
     const dir = await createTempDir();
     await fs.mkdir(path.join(dir, "docs"));
     await fs.writeFile(path.join(dir, "README.md"), "# Demo\n", "utf8");
     await fs.writeFile(path.join(dir, "docs", "report.md"), "ok\n", "utf8");
 
     const tools = createOpenClawCodingTools({ workspaceDir: dir });
-    const tool = tools.find((entry) => entry.name === "fs.read");
+    const tool = tools.find((entry) => entry.name === "fs_read");
     expect(tool).toBeTruthy();
 
     const updates: unknown[] = [];

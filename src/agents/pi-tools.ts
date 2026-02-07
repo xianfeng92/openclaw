@@ -475,8 +475,8 @@ export function createOpenClawCodingTools(options?: {
       execCore &&
       ({
         ...execCore,
-        name: "bash.exec",
-        label: "bash.exec",
+        name: "bash_exec",
+        label: "bash_exec",
         execute: async (toolCallId, params, signal, onUpdate) =>
           await execCore.execute(
             toolCallId,

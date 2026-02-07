@@ -86,8 +86,8 @@ async function renderTree(params: {
 
 export function createFsReadTool(workspaceRoot: string): AnyAgentTool {
   return {
-    name: "fs.read",
-    label: "fs.read",
+    name: "fs_read",
+    label: "fs_read",
     description: "Read a file or list a directory tree inside the workspace.",
     parameters: fsReadSchema,
     execute: async (_toolCallId, args, _signal, onUpdate) => {

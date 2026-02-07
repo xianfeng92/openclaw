@@ -181,4 +181,32 @@ describe("exec approvals", () => {
     await approvalSeen;
     expect(calls).toContain("exec.approval.request");
   });
+
+  it("does not execute high-risk command when approval is not granted", async () => {
+    const { callGatewayTool } = await import("./tools/gateway.js");
+    const calls: string[] = [];
+    vi.mocked(callGatewayTool).mockImplementation(async (method) => {
+      calls.push(method);
+      if (method === "exec.approval.request") {
+        return {};
+      }
+      return { ok: true };
+    });
+
+    const { createExecTool } = await import("./bash-tools.exec.js");
+    const tool = createExecTool({
+      ask: "on-miss",
+      security: "allowlist",
+      approvalRunningNoticeMs: 0,
+      elevated: { enabled: true, allowed: true, defaultLevel: "ask" },
+    });
+
+    const result = await tool.execute("call5", { command: "rm -rf ./tmp", elevated: true });
+    expect(result.details.status).toBe("approval-pending");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(calls).toContain("exec.approval.request");
+    expect(calls).not.toContain("node.invoke");
+  });
 });

@@ -23,6 +23,12 @@ export type SessionOrigin = {
 };
 
 export type SessionEntry = {
+  /** Stable session key mirror persisted inside the entry payload. */
+  sessionKey?: string;
+  /** Human-friendly title for UI/session list display. */
+  title?: string;
+  /** Last active timestamp (ms) for queue/session recency sorting. */
+  lastActive?: number;
   /**
    * Last delivered heartbeat payload (used to suppress duplicate heartbeat notifications).
    * Stored on the main session entry.

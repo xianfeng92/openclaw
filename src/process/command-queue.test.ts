@@ -16,10 +16,17 @@ vi.mock("../logging/diagnostic.js", () => ({
   diagnosticLogger: diagnosticMocks.diag,
 }));
 
-import { enqueueCommand, getQueueSize } from "./command-queue.js";
+import {
+  enqueueCommand,
+  enqueueCommandInLane,
+  getQueueSize,
+  setCommandLaneConcurrency,
+} from "./command-queue.js";
+import { CommandLane } from "./lanes.js";
 
 describe("command queue", () => {
   beforeEach(() => {
+    setCommandLaneConcurrency(CommandLane.Main, 1);
     diagnosticMocks.logLaneEnqueue.mockClear();
     diagnosticMocks.logLaneDequeue.mockClear();
     diagnosticMocks.diag.debug.mockClear();
@@ -84,5 +91,44 @@ describe("command queue", () => {
     expect(waited).not.toBeNull();
     expect(waited as number).toBeGreaterThanOrEqual(5);
     expect(queuedAhead).toBe(0);
+  });
+
+  it("keeps the second main-lane run queued when maxConcurrent=1", async () => {
+    setCommandLaneConcurrency(CommandLane.Main, 1);
+    const events: string[] = [];
+
+    const first = enqueueCommandInLane(CommandLane.Main, async () => {
+      events.push("first:start");
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      events.push("first:end");
+      return "first";
+    });
+    const second = enqueueCommandInLane(CommandLane.Main, async () => {
+      events.push("second:start");
+      return "second";
+    });
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toBe("first");
+    expect(secondResult).toBe("second");
+    expect(events).toEqual(["first:start", "first:end", "second:start"]);
+  });
+
+  it("allows main lane concurrency to be configured to 2", async () => {
+    setCommandLaneConcurrency(CommandLane.Main, 2);
+    let active = 0;
+    let maxActive = 0;
+
+    const task = () =>
+      enqueueCommandInLane(CommandLane.Main, async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        active -= 1;
+      });
+
+    await Promise.all([task(), task(), task()]);
+    expect(maxActive).toBe(2);
   });
 });

@@ -53,7 +53,27 @@ function invalidateSessionStoreCache(storePath: string): void {
   SESSION_STORE_CACHE.delete(storePath);
 }
 
-function normalizeSessionEntryDelivery(entry: SessionEntry): SessionEntry {
+function resolveSessionTitle(entry: SessionEntry, sessionKey: string): string {
+  const explicitTitle = entry.title?.trim();
+  if (explicitTitle) {
+    return explicitTitle;
+  }
+  const displayName = entry.displayName?.trim();
+  if (displayName) {
+    return displayName;
+  }
+  const label = entry.label?.trim();
+  if (label) {
+    return label;
+  }
+  const subject = entry.subject?.trim();
+  if (subject) {
+    return subject;
+  }
+  return sessionKey;
+}
+
+function normalizeSessionEntryDelivery(entry: SessionEntry, sessionKey: string): SessionEntry {
   const normalized = normalizeSessionDeliveryFields({
     channel: entry.channel,
     lastChannel: entry.lastChannel,
@@ -73,11 +93,21 @@ function normalizeSessionEntryDelivery(entry: SessionEntry): SessionEntry {
     entry.lastTo === normalized.lastTo &&
     entry.lastAccountId === normalized.lastAccountId &&
     entry.lastThreadId === normalized.lastThreadId;
-  if (sameDelivery && sameLast) {
+  const nextSessionKey = entry.sessionKey?.trim() || sessionKey;
+  const nextTitle = resolveSessionTitle(entry, sessionKey);
+  const nextLastActive = Math.max(entry.lastActive ?? 0, entry.updatedAt ?? 0);
+  const sameMvpMeta =
+    entry.sessionKey === nextSessionKey &&
+    entry.title === nextTitle &&
+    entry.lastActive === nextLastActive;
+  if (sameDelivery && sameLast && sameMvpMeta) {
     return entry;
   }
   return {
     ...entry,
+    sessionKey: nextSessionKey,
+    title: nextTitle,
+    lastActive: nextLastActive,
     deliveryContext: nextDelivery,
     lastChannel: normalized.lastChannel,
     lastTo: normalized.lastTo,
@@ -91,7 +121,7 @@ function normalizeSessionStore(store: Record<string, SessionEntry>): void {
     if (!entry) {
       continue;
     }
-    const normalized = normalizeSessionEntryDelivery(entry);
+    const normalized = normalizeSessionEntryDelivery(entry, key);
     if (normalized !== entry) {
       store[key] = normalized;
     }

@@ -15,8 +15,10 @@
 | `disconnected (1008): unauthorized` | Gateway token 缺失/不匹配 | 第 3 节 |
 | `No API key found for provider` | 模型认证未配置 | 第 4 节 |
 | `Request timed out` / `fetch failed` | 网络无法访问 API | 第 6 节（使用代理） |
-| 端口被占用 | 旧进程未停止 | 第 8 节 |
 | `buffer has text: false` | 代理未配置或端口错误 | 检查代理设置 |
+| PowerShell 错误信息乱码 | UTF-16 编码问题 | 第 7.4 节 |
+| 消息重复显示 | final 事件重复发送 | 第 7.5 节 |
+| 流式输出跳动 | 未配置 `streaming: false` | 第 7.6 节 |
 
 ---
 
@@ -259,6 +261,53 @@ localStorage.removeItem("openclaw.control.settings.v1")
 ```
 
 然后刷新页面重新连接。
+
+### 7.4 PowerShell 中文乱码问题
+
+**症状**：执行命令时，PowerShell 错误信息显示为乱码，例如：
+```
+jq : ޷ݔʶ"jq"Ϊ cmdlet...
+```
+
+**原因**：PowerShell 默认使用 UTF-16 LE 编码输出，而 Node.js 读取子进程输出时使用默认编码，导致乱码。
+
+**解决方案**：OpenClaw 已在代码中自动处理 Windows PowerShell 的 UTF-16 LE 编码（`src/agents/bash-tools.exec.ts`）。如果仍有乱码，可以手动设置 PowerShell 输出编码：
+
+```powershell
+# 方法1：在 PowerShell 配置文件中设置（推荐）
+# 编辑 $PROFILE 文件，添加：
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+# 方法2：临时设置（当前会话有效）
+$env:PYTHONIOENCODING = "utf-8"
+chcp 65001
+```
+
+### 7.5 消息重复显示问题
+
+**症状**：Agent 回复在聊天界面中显示两次。
+
+**原因**：当 agent 产生内容时，`emitChatFinal` 和 `broadcastChatFinal` 都会发送 final 事件，导致前端收到重复消息。
+
+**解决方案**：已修复（`src/gateway/server-methods/chat.ts`），当 `agentRunStarted=true` 时跳过 `broadcastChatFinal`。
+
+### 7.6 流式输出控制
+
+**症状**：希望消息一次性显示，而不是逐字流式输出。
+
+**解决方案**：在模型配置中设置 `streaming: false`：
+
+```json
+{
+  "google/gemini-3-flash-preview": {
+    "alias": "gemini-flash",
+    "streaming": false
+  }
+}
+```
+
+或在 `.openclaw/openclaw.json` 中配置。前端也会在收到 final 事件后一次性加载完整消息。
 
 ---
 

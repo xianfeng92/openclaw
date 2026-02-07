@@ -667,17 +667,53 @@ async function runExecProcess(opts: {
     });
   };
 
-  const handleStdout = (data: string) => {
-    const str = sanitizeBinaryOutput(data.toString());
-    for (const chunk of chunkString(str)) {
+  const handleStdout = (data: Buffer | string) => {
+    // Handle encoding correctly for Windows PowerShell output
+    // PowerShell outputs UTF-16 LE on Windows, but Node.js may read it as binary
+    let str: string;
+    if (Buffer.isBuffer(data)) {
+      // Try to detect UTF-16 LE encoding (common for PowerShell output)
+      // Check if buffer starts with UTF-16 LE BOM or contains null bytes in even positions
+      const isUtf16Le = data.length >= 2 && data[1] === 0 && data[3] === 0;
+      if (isUtf16Le && process.platform === "win32") {
+        // Remove BOM if present and decode as UTF-16 LE
+        let start = 0;
+        if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) {
+          start = 2; // UTF-16 LE BOM
+        }
+        str = data.toString("utf16le", start).replace(/\0$/, "");
+      } else {
+        str = data.toString("utf8");
+      }
+    } else {
+      str = String(data);
+    }
+    const cleaned = sanitizeBinaryOutput(str);
+    for (const chunk of chunkString(cleaned)) {
       appendOutput(session, "stdout", chunk);
       emitUpdate();
     }
   };
 
-  const handleStderr = (data: string) => {
-    const str = sanitizeBinaryOutput(data.toString());
-    for (const chunk of chunkString(str)) {
+  const handleStderr = (data: Buffer | string) => {
+    // Handle encoding correctly for Windows PowerShell error output
+    let str: string;
+    if (Buffer.isBuffer(data)) {
+      const isUtf16Le = data.length >= 2 && data[1] === 0 && data[3] === 0;
+      if (isUtf16Le && process.platform === "win32") {
+        let start = 0;
+        if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) {
+          start = 2;
+        }
+        str = data.toString("utf16le", start).replace(/\0$/, "");
+      } else {
+        str = data.toString("utf8");
+      }
+    } else {
+      str = String(data);
+    }
+    const cleaned = sanitizeBinaryOutput(str);
+    for (const chunk of chunkString(cleaned)) {
       appendOutput(session, "stderr", chunk);
       emitUpdate();
     }
@@ -685,8 +721,22 @@ async function runExecProcess(opts: {
 
   if (pty) {
     const cursorResponse = buildCursorPositionResponse();
-    pty.onData((data) => {
-      const raw = data.toString();
+    pty.onData((data: string | Buffer) => {
+      // PTY output may also have encoding issues on Windows
+      let raw: string;
+      if (typeof data === "string") {
+        raw = data;
+      } else if (Buffer.isBuffer(data)) {
+        // Try UTF-16 LE decoding for Windows PTY output
+        const isUtf16Le = data.length >= 2 && data[1] === 0 && data[3] === 0;
+        if (isUtf16Le && process.platform === "win32") {
+          raw = data.toString("utf16le").replace(/\0$/, "");
+        } else {
+          raw = data.toString("utf8");
+        }
+      } else {
+        raw = String(data);
+      }
       const { cleaned, requests } = stripDsrRequests(raw);
       if (requests > 0) {
         for (let i = 0; i < requests; i += 1) {

@@ -27,6 +27,26 @@ export type ChatEventPayload = {
   errorMessage?: string;
 };
 
+export const CHAT_SEND_ACK_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
     return;
@@ -123,13 +143,17 @@ export async function sendChatMessage(
     : undefined;
 
   try {
-    await state.client.request("chat.send", {
-      sessionKey: state.sessionKey,
-      message: msg,
-      deliver: false,
-      idempotencyKey: runId,
-      attachments: apiAttachments,
-    });
+    await withTimeout(
+      state.client.request("chat.send", {
+        sessionKey: state.sessionKey,
+        message: msg,
+        deliver: false,
+        idempotencyKey: runId,
+        attachments: apiAttachments,
+      }),
+      CHAT_SEND_ACK_TIMEOUT_MS,
+      "chat.send",
+    );
     return runId;
   } catch (err) {
     const error = String(err);
@@ -169,6 +193,7 @@ export async function abortChatRun(state: ChatState): Promise<boolean> {
 }
 
 export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
+  console.log("[DEBUG] handleChatEvent:", payload);
   if (!payload) {
     return null;
   }

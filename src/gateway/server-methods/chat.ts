@@ -488,13 +488,19 @@ export const chatHandlers: GatewayRequestHandlers = {
           context.logGateway.warn(`webchat dispatch failed: ${formatForLog(err)}`);
         },
         deliver: async (payload, info) => {
+          context.logGateway.info(
+            `[webchat] deliver callback: kind=${info.kind}, text="${payload.text?.slice(0, 100) ?? ""}..."`,
+          );
           if (info.kind !== "final") {
+            context.logGateway.info(`[webchat] skipping non-final kind: ${info.kind}`);
             return;
           }
           const text = payload.text?.trim() ?? "";
           if (!text) {
+            context.logGateway.warn(`[webchat] skipping empty final reply part`);
             return;
           }
+          context.logGateway.info(`[webchat] collecting final reply part: "${text.slice(0, 100)}..."`);
           finalReplyParts.push(text);
         },
       });
@@ -519,45 +525,59 @@ export const chatHandlers: GatewayRequestHandlers = {
             if (connId && wantsToolEvents) {
               context.registerToolEventRecipient(runId, connId);
             }
+            // Register the chat run so emitChatFinal can find the sessionKey and clientRunId
+            context.addChatRun(runId, {
+              sessionKey: p.sessionKey,
+              clientRunId,
+            });
           },
           onModelSelected,
         },
       })
         .then(() => {
-          if (!agentRunStarted) {
-            const combinedReply = finalReplyParts
-              .map((part) => part.trim())
-              .filter(Boolean)
-              .join("\n\n")
-              .trim();
+          context.logGateway.info(
+            `[webchat] dispatch settled: agentRunStarted=${agentRunStarted}, finalReplyParts count=${finalReplyParts.length}`,
+          );
+          // Combine final reply parts from the dispatcher (for cases where agent didn't emit assistant events)
+          const combinedReply = finalReplyParts
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join("\n\n")
+            .trim();
+
+          // Broadcast final reply if we have content from dispatcher
+          // This handles both directive-only commands (agentRunStarted=false) and
+          // agent runs that didn't emit assistant events but have dispatcher replies
+          if (combinedReply) {
+            context.logGateway.info(
+              `[webchat] broadcasting reply: "${combinedReply.slice(0, 100)}..." (agentRunStarted=${agentRunStarted})`,
+            );
             let message: Record<string, unknown> | undefined;
-            if (combinedReply) {
-              const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
-                p.sessionKey,
+            const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
+              p.sessionKey,
+            );
+            const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
+            const appended = appendAssistantTranscriptMessage({
+              message: combinedReply,
+              sessionId,
+              storePath: latestStorePath,
+              sessionFile: latestEntry?.sessionFile,
+              createIfMissing: true,
+            });
+            if (appended.ok) {
+              message = appended.message;
+            } else {
+              context.logGateway.warn(
+                `webchat transcript append failed: ${appended.error ?? "unknown error"}`,
               );
-              const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
-              const appended = appendAssistantTranscriptMessage({
-                message: combinedReply,
-                sessionId,
-                storePath: latestStorePath,
-                sessionFile: latestEntry?.sessionFile,
-                createIfMissing: true,
-              });
-              if (appended.ok) {
-                message = appended.message;
-              } else {
-                context.logGateway.warn(
-                  `webchat transcript append failed: ${appended.error ?? "unknown error"}`,
-                );
-                const now = Date.now();
-                message = {
-                  role: "assistant",
-                  content: [{ type: "text", text: combinedReply }],
-                  timestamp: now,
-                  stopReason: "injected",
-                  usage: { input: 0, output: 0, totalTokens: 0 },
-                };
-              }
+              const now = Date.now();
+              message = {
+                role: "assistant",
+                content: [{ type: "text", text: combinedReply }],
+                timestamp: now,
+                stopReason: "injected",
+                usage: { input: 0, output: 0, totalTokens: 0 },
+              };
             }
             broadcastChatFinal({
               context,
@@ -565,7 +585,11 @@ export const chatHandlers: GatewayRequestHandlers = {
               sessionKey: p.sessionKey,
               message,
             });
+          } else if (!agentRunStarted) {
+            context.logGateway.warn(`[webchat] directive-only command produced no reply`);
           }
+          // If agentRunStarted=true and combinedReply is empty, the response
+          // should have come through emitChatDelta/emitChatFinal (agent events)
           context.dedupe.set(`chat:${clientRunId}`, {
             ts: Date.now(),
             ok: true,

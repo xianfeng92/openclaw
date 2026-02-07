@@ -227,7 +227,11 @@ export function createAgentEventHandler({
   clearAgentRunContext,
   toolEventRecipients,
 }: AgentEventHandlerOptions) {
+  const debugLog = (msg: string) => {
+    process.stderr.write(`[DEBUG] ${msg}\n`);
+  };
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
+    debugLog(`emitChatDelta: runId=${clientRunId}, seq=${seq}, text="${text.slice(0, 50)}..."`);
     chatRunState.buffers.set(clientRunId, text);
     const now = Date.now();
     const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
@@ -261,6 +265,9 @@ export function createAgentEventHandler({
     error?: unknown,
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
+    debugLog(
+      `emitChatFinal: runId=${clientRunId}, jobState=${jobState}, bufferText="${text.slice(0, 100)}...", buffer has text: ${!!text}`,
+    );
     chatRunState.buffers.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);
     if (jobState === "done") {

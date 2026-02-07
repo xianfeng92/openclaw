@@ -144,3 +144,32 @@ VITE v7.3.1 ready in 365 ms
 - 安装依赖：`corepack pnpm install`
 - 开发链路（gateway + ui）：`corepack pnpm dev`
 - 首次引导：`corepack pnpm openclaw onboard --install-daemon`
+
+## 10) 最终连通验证（2026-02-07）
+
+### 10.1 Gateway 启动状态
+
+- 命令：`corepack pnpm dev`
+- 结果：成功进入 dev gateway 运行态（`ws://127.0.0.1:19001`）
+- 关键日志：
+  - `[gateway] listening on ws://127.0.0.1:19001`
+  - `[canvas] host mounted at http://127.0.0.1:19001/__openclaw__/canvas/`
+  - `[browser/service] Browser control service ready`
+
+### 10.2 UI 连接状态
+
+- UI 启动：`corepack pnpm --dir ui dev --host 127.0.0.1 --port 5174`（5173 被占用时使用 5174）
+- 已连通参数：
+  - `gatewayUrl=ws://127.0.0.1:19001`
+  - `token=openclaw-dev-token`
+- 页面状态：
+  - `Health OK`
+  - `Snapshot: Connected`
+
+### 10.3 1006 根因与修复
+
+- 1006 根因（日志）：`authReason=token_missing`（UI 握手未带 token）
+- 修复：
+  1. `ui/src/ui/app-settings.ts`：支持 `?token=` 注入并写入本地 settings
+  2. `ui/src/ui/storage.ts`：本地 Vite 端口默认指向 `ws://127.0.0.1:19001`，并自愈“误连 UI 自身端口”的旧值
+- 回归验证：`corepack pnpm --dir ui exec vitest run src/ui/app-settings.url.test.ts` ✅

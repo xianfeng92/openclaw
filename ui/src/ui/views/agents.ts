@@ -753,8 +753,6 @@ function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => 
     { id: "overview", label: "Overview" },
     { id: "files", label: "Files" },
     { id: "tools", label: "Tools" },
-    { id: "skills", label: "Skills" },
-    { id: "channels", label: "Channels" },
     { id: "cron", label: "Cron Jobs" },
   ];
   return html`

@@ -273,6 +273,7 @@ export const SECTION_META: Record<string, { label: string; description: string }
   talk: { label: "Talk", description: "Voice and speech settings" },
   plugins: { label: "Plugins", description: "Plugin management and extensions" },
 };
+const HIDDEN_CONFIG_SECTIONS = new Set(["channels", "skills", "plugins"]);
 
 function getSectionIcon(key: string) {
   return sectionIcons[key as keyof typeof sectionIcons] ?? sectionIcons.default;
@@ -381,6 +382,9 @@ export function renderConfigForm(props: ConfigFormProps) {
   });
 
   const filteredEntries = entries.filter(([key, node]) => {
+    if (HIDDEN_CONFIG_SECTIONS.has(key)) {
+      return false;
+    }
     if (activeSection && key !== activeSection) {
       return false;
     }

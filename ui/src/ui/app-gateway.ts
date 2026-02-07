@@ -170,8 +170,12 @@ export function handleGatewayEvent(host: GatewayHost, evt: GatewayEventFrame) {
 }
 
 function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
+  const payloadRecord =
+    evt.payload && typeof evt.payload === "object" ? (evt.payload as Record<string, unknown>) : null;
+  const runId = typeof payloadRecord?.runId === "string" ? payloadRecord.runId : undefined;
+  const stream = typeof payloadRecord?.stream === "string" ? payloadRecord.stream : undefined;
   host.eventLogBuffer = [
-    { ts: Date.now(), event: evt.event, payload: evt.payload },
+    { ts: Date.now(), seq: evt.seq ?? null, event: evt.event, runId, stream, payload: evt.payload },
     ...host.eventLogBuffer,
   ].slice(0, 250);
   if (host.tab === "debug") {

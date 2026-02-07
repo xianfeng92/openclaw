@@ -268,15 +268,14 @@ const SECTIONS: Array<{ key: string; label: string }> = [
   { key: "update", label: "Updates" },
   { key: "agents", label: "Agents" },
   { key: "auth", label: "Authentication" },
-  { key: "channels", label: "Channels" },
   { key: "messages", label: "Messages" },
   { key: "commands", label: "Commands" },
   { key: "hooks", label: "Hooks" },
-  { key: "skills", label: "Skills" },
   { key: "tools", label: "Tools" },
   { key: "gateway", label: "Gateway" },
   { key: "wizard", label: "Setup Wizard" },
 ];
+const HIDDEN_CONFIG_SECTIONS = new Set(["channels", "skills", "plugins"]);
 
 type SubsectionEntry = {
   key: string;
@@ -390,12 +389,14 @@ export function renderConfig(props: ConfigProps) {
 
   // Get available sections from schema
   const schemaProps = analysis.schema?.properties ?? {};
-  const availableSections = SECTIONS.filter((s) => s.key in schemaProps);
+  const availableSections = SECTIONS.filter(
+    (s) => s.key in schemaProps && !HIDDEN_CONFIG_SECTIONS.has(s.key),
+  );
 
   // Add any sections in schema but not in our list
   const knownKeys = new Set(SECTIONS.map((s) => s.key));
   const extraSections = Object.keys(schemaProps)
-    .filter((k) => !knownKeys.has(k))
+    .filter((k) => !knownKeys.has(k) && !HIDDEN_CONFIG_SECTIONS.has(k))
     .map((k) => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1) }));
 
   const allSections = [...availableSections, ...extraSections];

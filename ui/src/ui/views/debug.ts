@@ -133,7 +133,10 @@ export function renderDebug(props: DebugProps) {
                   <div class="list-item">
                     <div class="list-main">
                       <div class="list-title">${evt.event}</div>
-                      <div class="list-sub">${new Date(evt.ts).toLocaleTimeString()}</div>
+                      <div class="list-sub">
+                        ${new Date(evt.ts).toLocaleTimeString()} · seq=${evt.seq ?? "-"} · run=${evt.runId ??
+                        "-"} · stream=${evt.stream ?? "-"}
+                      </div>
                     </div>
                     <div class="list-meta">
                       <pre class="code-block">${formatEventPayload(evt.payload)}</pre>

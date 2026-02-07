@@ -4,9 +4,9 @@ export const TAB_GROUPS = [
   { label: "Chat", tabs: ["chat"] },
   {
     label: "Control",
-    tabs: ["overview", "channels", "instances", "sessions", "usage", "cron"],
+    tabs: ["overview", "instances", "sessions", "usage", "cron"],
   },
-  { label: "Agent", tabs: ["agents", "skills", "nodes"] },
+  { label: "Agent", tabs: ["agents", "nodes"] },
   { label: "Settings", tabs: ["config", "debug", "logs"] },
 ] as const;
 
@@ -42,6 +42,7 @@ const TAB_PATHS: Record<Tab, string> = {
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
+const HIDDEN_TABS = new Set<Tab>(["channels", "skills"]);
 
 export function normalizeBasePath(basePath: string): string {
   if (!basePath) {
@@ -97,7 +98,11 @@ export function tabFromPath(pathname: string, basePath = ""): Tab | null {
   if (normalized === "/") {
     return "chat";
   }
-  return PATH_TO_TAB.get(normalized) ?? null;
+  const tab = PATH_TO_TAB.get(normalized) ?? null;
+  if (!tab) {
+    return null;
+  }
+  return HIDDEN_TABS.has(tab) ? null : tab;
 }
 
 export function inferBasePathFromPathname(pathname: string): string {

@@ -7,8 +7,10 @@
 ## 前置要求
 
 - **Node.js** 18+
-- **pnpm**（或使用 npm）
+- **包管理器**：pnpm（推荐）或 npm
 - **PowerShell** 或 **CMD**
+
+> **如果 `pnpm` 命令不可用**，见下方 [故障排除](#pnpm-命令未找到)
 
 ---
 
@@ -114,12 +116,44 @@ pnpm run build
 
 | 问题 | 解决方案 |
 |------|----------|
-| 发消息没反应 | 检查 [网络代理](#网络代理配置) |
+| 发消息没反应 | 检查 [网络代理配置](#网络代理配置) |
 | `disconnected (1008)` | Token 不对，重新生成 |
 | `No API key found` | 配置 API Key |
 | 端口被占用 | `taskkill /F /IM node.exe` |
 | 端口不是 18789/19001 | **以启动日志为准**，使用日志中的地址 |
 | 连接后没反应 | 检查模型 API Key 是否有效 |
+| `pnpm` 命令不可用 | 使用 `corepack pnpm` 或 `npm` 替代 |
+
+---
+
+## pnpm 命令未找到
+
+**症状**：
+```
+'pnpm' 不是内部或外部命令
+corepack enable: EPERM: operation not permitted
+```
+
+**解决方案**（三选一）：
+
+**方案 A**：管理员运行 corepack enable
+```powershell
+# 右键 PowerShell → "以管理员身份运行"
+corepack enable
+```
+
+**方案 B**：使用 corepack pnpm 前缀
+```powershell
+corepack pnpm install
+corepack pnpm run gateway
+```
+
+**方案 C**：使用 npm 替代
+```powershell
+npm install
+npm run build
+npm run gateway
+```
 
 ---
 

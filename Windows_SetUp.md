@@ -376,7 +376,53 @@ chcp 65001
 
 **状态**：已修复（`src/gateway/server-methods/chat.ts`）
 
-### 7.6 查看日志
+### 7.6 pnpm 命令未找到问题
+
+**症状**：
+```
+'pnpm' 不是内部或外部命令
+corepack enable: EPERM: operation not permitted
+```
+
+**原因**：Node.js 的 corepack 尝试启用 pnpm，但因为权限问题（尤其是安装在 Program Files 时）失败。
+
+---
+
+### 方案 A：管理员权限运行 corepack enable
+
+```powershell
+# 以管理员身份运行 PowerShell
+corepack enable
+```
+
+---
+
+### 方案 B：使用 corepack pnpm 前缀
+
+```powershell
+# 所有 pnpm 命令改为 corepack pnpm
+corepack pnpm install
+corepack pnpm run build
+corepack pnpm run gateway
+```
+
+---
+
+### 方案 C：使用 npm 替代（临时方案）
+
+如果上述方案都不可行，可以使用 npm：
+
+```powershell
+npm install
+npm run build
+npm run gateway
+```
+
+**注意**：npm 可能比 pnpm 慢，但功能完全兼容。
+
+---
+
+### 7.7 查看日志
 
 ```powershell
 # 实时日志

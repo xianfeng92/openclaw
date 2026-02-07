@@ -1,430 +1,497 @@
-# OpenClaw Windows 设置指南
+# OpenClaw Windows 完整指南
 
-在 Windows PowerShell 本地运行 OpenClaw Dashboard -> Gateway -> Agent -> Model 的完整链路。
+> 在 Windows PowerShell 本地运行 OpenClaw 的完整配置与故障排除文档
 
-仓库路径：`C:\Users\xforg\Desktop\openclaw`
-
----
-
-## 快速诊断
-
-如果 Dashboard 里"发消息不执行"，最常见问题是：
-
-| 问题症状 | 可能原因 | 解决方案 |
-|---------|---------|---------|
-| `disconnected (1008): unauthorized` | Gateway token 缺失/不匹配 | 第 3 节 |
-| `No API key found for provider` | 模型认证未配置 | 第 4 节 |
-| `Request timed out` / `fetch failed` | 网络无法访问 API | 第 6 节（使用代理） |
-| `buffer has text: false` | 代理未配置或端口错误 | 检查代理设置 |
-| PowerShell 错误信息乱码 | UTF-16 编码问题 | 第 7.4 节 |
-| 消息重复显示 | final 事件重复发送 | 第 7.5 节 |
-| 流式输出跳动 | 未配置 `streaming: false` | 第 7.6 节 |
+**快速上手？** → 查看 [Windows_QuickStart.md](Windows_QuickStart.md)
 
 ---
 
-## 1. 准备环境
+## 目录
+
+1. [系统要求](#1-系统要求)
+2. [安装步骤](#2-安装步骤)
+3. [配置 Gateway](#3-配置-gateway)
+4. [配置模型](#4-配置模型)
+5. [启动服务](#5-启动服务)
+6. [网络代理配置](#6-网络代理配置)
+7. [故障排除](#7-故障排除)
+8. [进阶配置](#8-进阶配置)
+
+---
+
+## 1. 系统要求
+
+### 1.1 必需软件
+
+| 软件 | 版本要求 | 用途 |
+|------|----------|------|
+| Node.js | 18+ | 运行时环境 |
+| pnpm | 8+ | 包管理器（可用 npm 替代） |
+| PowerShell | 5.1+ | 命令行工具 |
+
+### 1.2 可选软件
+
+| 软件 | 用途 |
+|------|------|
+| Git | 版本控制 |
+| VPN/代理软件 | 访问 Google/OpenAI API |
+
+### 1.3 验证环境
 
 ```powershell
-cd C:\Users\xforg\Desktop\openclaw
+# 检查 Node.js 版本
+node --version  # 应 >= 18
+
+# 检查 pnpm 版本
+pnpm --version
+
+# 检查 PowerShell 版本
+$PSVersionTable.PSVersion
+```
+
+---
+
+## 2. 安装步骤
+
+### 2.1 克隆项目
+
+```powershell
+cd C:\Users\xforg\Desktop
+git clone https://github.com/openclaw/openclaw.git
+cd openclaw
+```
+
+### 2.2 安装依赖
+
+```powershell
 pnpm install
 ```
 
----
+### 2.3 首次配置修复
 
-## 2. 修复已知配置问题（只需一次）
-
-如果执行 `openclaw config set ...` 报错：
-```
-Config validation failed: plugins.slots.memory: plugin not found: memory-core
-```
-
-先执行：
+如果后续配置报错 `memory-core plugin not found`，执行：
 
 ```powershell
 pnpm openclaw config set plugins.slots.memory none
 ```
 
----
-
-## 3. 配置 Gateway 鉴权
-
-### 3.1 生成 Token
+### 2.4 编译项目
 
 ```powershell
-cd C:\Users\xforg\Desktop\openclaw
+pnpm run build
+```
 
-# 启用 token 鉴权模式
+---
+
+## 3. 配置 Gateway
+
+### 3.1 Gateway 工作原理
+
+```
+Dashboard (浏览器) → Gateway (本地服务) → Agent → Model API
+```
+
+Gateway 是本地服务，负责：
+- 接收来自 Dashboard 的消息
+- 管理 Agent 运行
+- 调用 Model API
+- 返回响应给 Dashboard
+
+### 3.2 设置鉴权模式
+
+```powershell
+# 启用 token 鉴权
 pnpm openclaw config set gateway.auth.mode token
 
 # 设置本地模式
 pnpm openclaw config set gateway.mode local
+```
 
-# 生成 gateway token
+### 3.3 生成 Token
+
+```powershell
 pnpm openclaw doctor --generate-gateway-token
+```
 
-# 查看 token（复制保存）
+### 3.4 查看 Token
+
+```powershell
 pnpm openclaw config get gateway.auth.token
 ```
 
-### 3.2 连接 Dashboard
+**复制输出的 token**，连接 Dashboard 时需要。
 
-1. 打开 Dashboard 的 `Overview` 页面
-2. `Gateway URL`: 填 `ws://127.0.0.1:18789`
-3. `Gateway Token`: 粘贴上一步获取的 token
-4. 点击 `Connect`
+### 3.5 Token 存储
 
-### 3.3 验证连接
-
-```powershell
-pnpm openclaw logs --limit 50 --plain
-```
-
-- 若日志出现 `authProvided:"none"` / `token_missing` → token 未正确传递，清理浏览器缓存重试
-- 若无错误提示 → 连接成功
+Token 存储在：
+- 全局：`C:\Users\xforg\.openclaw\openclaw.json`
+- Agent 级：`C:\Users\xforg\.openclaw\agents\main\agent\openclaw.json`
 
 ---
 
-## 4. 配置模型认证
+## 4. 配置模型
 
-### 4.1 方式一：交互式添加（推荐）
+### 4.1 支持的模型提供商
+
+| Provider | 模型示例 | 说明 |
+|----------|----------|------|
+| OpenAI | `gpt-4o`, `gpt-5-mini` | 需要 OpenAI API Key |
+| Anthropic | `claude-opus-4-6`, `claude-sonnet-4-6` | 需要 Anthropic API Key |
+| Google | `gemini-2-flash`, `gemini-3-flash-preview` | 需要代理访问 |
+| Venice | 多种模型 | 通过 Venice API 访问 |
+
+### 4.2 添加 API Key
+
+**方式一：交互式添加**
 
 ```powershell
 pnpm openclaw models auth add
 ```
 
-按提示选择 provider（如 `anthropic`、`openai`），粘贴 API key。
-
-### 4.2 方式二：直接粘贴 Token
+**方式二：直接粘贴**
 
 ```powershell
 # OpenAI
 pnpm openclaw models auth paste-token --provider openai
-pnpm openclaw models set openai/gpt-4o-mini
 
-# Anthropic Claude
+# Anthropic
 pnpm openclaw models auth paste-token --provider anthropic
+
+# Google
+pnpm openclaw models auth paste-token --provider google
+
+# Venice
+pnpm openclaw models auth paste-token --provider venice
+```
+
+### 4.3 设置默认模型
+
+```powershell
+# OpenAI
+pnpm openclaw models set openai/gpt-5-mini
+
+# Google Gemini
+pnpm openclaw models set google/gemini-3-flash-preview
+
+# Anthropic
 pnpm openclaw models set anthropic/claude-opus-4-6
 ```
 
-### 4.3 验证认证状态
+### 4.4 验证配置
 
 ```powershell
 pnpm openclaw models status --plain
 ```
 
-确认：
-- `defaultModel` 显示你设置的模型
-- 没有显示 `missing` 或 `expired` 的 provider
+确认输出：
+- `defaultModel: <你设置的模型>`
+- 没有 `missing` 或 `expired` 状态
+
+### 4.5 API Key 存储位置
+
+- Windows: `C:\Users\xforg\.openclaw\agents\main\agent\auth-profiles.json`
+- 文件会被加密存储，不会上传到 Git
 
 ---
 
 ## 5. 启动服务
 
-### 5.1 方式一：使用启动脚本（推荐）
+### 5.1 启动方式对比
 
-如果需要使用代理（VPN），直接双击运行：
+| 方式 | 优点 | 缺点 | 推荐场景 |
+|------|------|------|----------|
+| **start-gateway.bat** | 自动配置代理，双击即用 | 需手动修改端口 | 日常开发 |
+| **pnpm run gateway** | 简单直接 | 需手动设置代理 | 无需代理时 |
+| **手动配置代理后启动** | 灵活控制 | 每次需设置变量 | 调试时 |
+
+### 5.2 使用启动脚本（推荐）
 
 ```batch
+# 双击运行，或：
 start-gateway.bat
 ```
 
-或在命令行：
+**启动脚本内容**：`start-gateway.bat`
 
-```cmd
-start-gateway.bat
+```batch
+@echo off
+REM OpenClaw Gateway Startup Script with Proxy
+
+setlocal
+set HTTPS_PROXY=http://127.0.0.1:7890
+set HTTP_PROXY=http://127.0.0.1:7890
+
+cd /d "%~dp0"
+echo Starting OpenClaw Gateway with proxy...
+echo HTTPS_PROXY=%HTTPS_PROXY%
+echo HTTP_PROXY=%HTTP_PROXY%
+
+npm run gateway
+
+endlocal
 ```
 
-### 5.2 方式二：直接启动 Gateway
+### 5.3 直接启动
 
-**不需要代理时：**
+**无需代理时：**
 
 ```powershell
 cd C:\Users\xforg\Desktop\openclaw
 pnpm run gateway
 ```
 
-**需要代理时（PowerShell）：**
+**需要代理时：**
 
 ```powershell
-cd C:\Users\xforg\Desktop\openclaw
 $env:HTTP_PROXY="http://127.0.0.1:7890"
 $env:HTTPS_PROXY="http://127.0.0.1:7890"
 pnpm run gateway
 ```
 
-保持此终端运行。
+### 5.4 启动 Dashboard
 
-### 5.2 终端 B：启动 Dashboard
+**新开一个终端：**
 
 ```powershell
 cd C:\Users\xforg\Desktop\openclaw
 pnpm openclaw dashboard
 ```
 
+浏览器会自动打开 Dashboard 界面。
+
+### 5.5 连接 Dashboard
+
+1. 在 Dashboard 中找到 Gateway 配置区域
+2. 填写：
+   - **Gateway URL**: `ws://127.0.0.1:18789`
+   - **Gateway Token**: 第 3.4 节获取的 token
+3. 点击 **Connect**
+
 ---
 
-## 6. 网络代理配置（如需要）
+## 6. 网络代理配置
 
-### 6.1 问题说明
+### 6.1 为什么需要代理？
 
-Node.js 不会自动使用系统代理或 VPN。如果你的网络需要通过代理访问 API（如 Google、OpenAI 等），必须手动配置代理环境变量。
+Node.js 不会自动使用系统代理。如果你的网络：
+- 需要翻墙访问 Google/OpenAI
+- 使用公司网络有限制
 
-**常见症状**：
-- `Request timed out`
-- `fetch failed sending request`
-- 可以访问 `api.venice.ai` 但无法访问 `generativelanguage.googleapis.com`
+则需要手动配置代理。
 
-### 6.2 使用启动脚本（推荐）
-
-项目提供了带代理配置的启动脚本：
-
-```batch
-# 直接双击运行，或命令行执行：
-start-gateway.bat
-```
-
-脚本默认代理端口为 `7890`（Clash 等常见代理软件的默认端口）。如果你的代理使用不同端口，编辑 `start-gateway.bat` 修改端口号。
-
-### 6.3 手动配置代理
-
-如果不想使用启动脚本，可以手动设置环境变量：
-
-**PowerShell：**
-```powershell
-$env:HTTP_PROXY="http://127.0.0.1:7890"
-$env:HTTPS_PROXY="http://127.0.0.1:7890"
-pnpm run gateway
-```
-
-**CMD：**
-```cmd
-set HTTP_PROXY=http://127.0.0.1:7890
-set HTTPS_PROXY=http://127.0.0.1:7890
-npm run gateway
-```
-
-### 6.4 验证代理配置
-
-```powershell
-# 测试 Google API 连接（通过代理）
-curl --proxy "http://127.0.0.1:7890" -s "https://generativelanguage.googleapis.com/v1beta/models"
-
-# 测试 OpenAI API 连接（通过代理）
-curl --proxy "http://127.0.0.1:7890" -s "https://api.openai.com/v1/models"
-```
-
-### 6.5 常见代理端口
+### 6.2 常见代理软件端口
 
 | 软件 | 默认端口 |
-|-----|---------|
+|------|----------|
 | Clash | 7890 |
-| Clash (另一个) | 10808, 10809 |
 | V2RayN | 10809 |
-| 其他 | 查看 VPN 软件设置 |
+| Clash Verge | 7890 或 7891 |
 
-### 6.6 检查本地代理端口
+### 6.3 检查代理端口
 
 ```powershell
-# 查看监听中的端口
 netstat -an | findstr "LISTEN" | findstr "7890 10808 10809"
 ```
 
+### 6.4 测试代理连接
+
+```powershell
+# 测试通过代理访问 Google API
+curl --proxy "http://127.0.0.1:7890" -s "https://generativelanguage.googleapis.com/v1beta/models"
+
+# 测试通过代理访问 OpenAI API
+curl --proxy "http://127.0.0.1:7890" -s "https://api.openai.com/v1/models"
+```
+
+### 6.5 设置系统环境变量（永久）
+
+如果希望每次启动自动配置代理：
+
+**方法一：设置用户环境变量**
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("HTTP_PROXY", "http://127.0.0.1:7890", "User")
+[System.Environment]::SetEnvironmentVariable("HTTPS_PROXY", "http://127.0.0.1:7890", "User")
+```
+
+**方法二：通过系统设置**
+
+1. 右键「此电脑」→「属性」
+2. 「高级系统设置」→「环境变量」
+3. 添加用户变量：
+   - `HTTP_PROXY` = `http://127.0.0.1:7890`
+   - `HTTPS_PROXY` = `http://127.0.0.1:7890`
+
 ---
 
-## 7. 常见问题排查
+## 7. 故障排除
 
-### 7.1 网络连通性测试
+### 7.1 连接问题
 
-```powershell
-# 测试 OpenAI API 连接
-Test-NetConnection api.openai.com -Port 443
+| 症状 | 原因 | 解决方案 |
+|------|------|----------|
+| `disconnected (1008): unauthorized` | Token 不匹配 | 重新生成 token |
+| `authProvided:"none"` | Token 未传递 | 清浏览器缓存，重连 |
+| `Connection refused` | Gateway 未启动 | 启动 gateway |
+| `Port 18789 in use` | 旧进程未停止 | `taskkill /F /IM node.exe` |
 
-# 测试 Anthropic API 连接
-Test-NetConnection api.anthropic.com -Port 443
-```
+### 7.2 API 问题
 
-- `TcpTestSucceeded: True` → 网络正常
-- `TcpTestSucceeded: False` → 需要配置代理或 VPN
+| 症状 | 原因 | 解决方案 |
+|------|------|----------|
+| `No API key found for provider` | 未配置 API Key | 执行 `pnpm openclaw models auth add` |
+| `Request timed out` | 无法访问 API | 配置代理 |
+| `fetch failed` | 网络错误 | 检查代理设置 |
+| `buffer has text: false` | Agent 无输出 | 检查模型配置 |
 
-### 7.2 查看详细日志
+### 7.3 编译问题
 
-```powershell
-pnpm openclaw logs --limit 200 --plain
-```
+| 症状 | 原因 | 解决方案 |
+|------|------|----------|
+| `Cannot find module` | 未安装依赖 | `pnpm install` |
+| `TS compilation failed` | 代码错误 | 检查修改 |
+| `port already in use` | 旧进程占用 | `taskkill /F /IM node.exe` |
 
-### 7.3 清除浏览器缓存
+### 7.4 PowerShell 编码问题
 
-如果连接问题持续，在浏览器 DevTools Console 执行：
+**症状**：错误信息显示乱码
 
-```javascript
-localStorage.removeItem("openclaw.control.settings.v1")
-```
+**原因**：PowerShell 使用 UTF-16 LE 编码
 
-然后刷新页面重新连接。
-
-### 7.4 PowerShell 中文乱码问题
-
-**症状**：执行命令时，PowerShell 错误信息显示为乱码，例如：
-```
-jq : ޷ݔʶ"jq"Ϊ cmdlet...
-```
-
-**原因**：PowerShell 默认使用 UTF-16 LE 编码输出，而 Node.js 读取子进程输出时使用默认编码，导致乱码。
-
-**解决方案**：OpenClaw 已在代码中自动处理 Windows PowerShell 的 UTF-16 LE 编码（`src/agents/bash-tools.exec.ts`）。如果仍有乱码，可以手动设置 PowerShell 输出编码：
+**解决方案**：代码已自动处理。如仍有问题：
 
 ```powershell
-# 方法1：在 PowerShell 配置文件中设置（推荐）
-# 编辑 $PROFILE 文件，添加：
+# 设置 PowerShell 输出编码
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
-# 方法2：临时设置（当前会话有效）
-$env:PYTHONIOENCODING = "utf-8"
 chcp 65001
 ```
 
-### 7.5 消息重复显示问题
+### 7.5 消息重复显示
 
-**症状**：Agent 回复在聊天界面中显示两次。
+**症状**：同一消息显示两次
 
-**原因**：当 agent 产生内容时，`emitChatFinal` 和 `broadcastChatFinal` 都会发送 final 事件，导致前端收到重复消息。
+**状态**：已修复（`src/gateway/server-methods/chat.ts`）
 
-**解决方案**：已修复（`src/gateway/server-methods/chat.ts`），当 `agentRunStarted=true` 时跳过 `broadcastChatFinal`。
+### 7.6 查看日志
 
-### 7.6 流式输出控制
+```powershell
+# 实时日志
+pnpm openclaw logs --follow
 
-**症状**：希望消息一次性显示，而不是逐字流式输出。
+# 最近 100 条
+pnpm openclaw logs --limit 100 --plain
 
-**解决方案**：在模型配置中设置 `streaming: false`：
+# 按级别过滤
+pnpm openclaw logs --level error
+```
+
+---
+
+## 8. 进阶配置
+
+### 8.1 配置流式输出
+
+编辑 `.openclaw/openclaw.json`：
 
 ```json
 {
-  "google/gemini-3-flash-preview": {
-    "alias": "gemini-flash",
-    "streaming": false
+  "agents": {
+    "defaults": {
+      "models": {
+        "google/gemini-3-flash-preview": {
+          "alias": "gemini-flash",
+          "streaming": false
+        }
+      }
+    }
   }
 }
 ```
 
-或在 `.openclaw/openclaw.json` 中配置。前端也会在收到 final 事件后一次性加载完整消息。
-
----
-
-## 8. 重启网关服务
-
-### 8.1 停止运行的网关
+### 8.2 配置工作目录
 
 ```powershell
-# 方法1：使用 pnpm
-pnpm run gateway stop
-
-# 方法2：强制结束进程（替换 PID 为实际进程ID）
-taskkill /PID 3968 /F
+pnpm openclaw config set agents.defaults.workspace "C:\\Users\\xforg\\workspace"
 ```
 
-### 8.2 重新编译并启动
-
-修改代码后需要重新编译：
+### 8.3 配置思考级别
 
 ```powershell
-cd C:\Users\xforg\Desktop\openclaw
-
-# 停止旧服务
-pnpm run gateway stop
-
-# 重新编译
-pnpm run build
-
-# 重新启动
-pnpm openclaw gateway run --bind loopback --port 18789 --force
+pnpm openclaw config set agents.defaults.reasoningLevel "medium"
 ```
 
-### 8.3 常见端口占用错误
-
-```
-Gateway failed to start: gateway already running (pid 3968)
-Port 18789 is already in use.
-```
-
-**解决方法**：
-1. 执行 `taskkill /PID 3968 /F`（替换 3968 为实际 PID）
-2. 重新启动网关
-
----
-
-## 9. 完整命令清单（复制即用）
+### 8.4 配置详细程度
 
 ```powershell
-# ========== 初始化配置 ==========
-cd C:\Users\xforg\Desktop\openclaw
-pnpm install
-pnpm openclaw config set plugins.slots.memory none
+pnpm openclaw config set agents.defaults.verboseDefault "info"
+```
+
+### 8.5 重置配置
+
+```powershell
+# 删除配置目录
+Remove-Item -Recurse -Force C:\Users\xforg\.openclaw
+
+# 重新配置
 pnpm openclaw config set gateway.auth.mode token
-pnpm openclaw config set gateway.mode local
-
-# ========== 生成 Gateway Token ==========
 pnpm openclaw doctor --generate-gateway-token
-pnpm openclaw config get gateway.auth.token
-
-# ========== 配置模型认证（选一个） ==========
-# OpenAI
-pnpm openclaw models auth paste-token --provider openai
-pnpm openclaw models set openai/gpt-5-mini
-
-# Google Gemini
-pnpm openclaw models auth paste-token --provider google
-pnpm openclaw models set google/gemini-3-flash-preview
-
-# Anthropic
-pnpm openclaw models auth paste-token --provider anthropic
-pnpm openclaw models set anthropic/claude-opus-4-6
-
-# ========== 验证配置 ==========
-pnpm openclaw models status --plain
-
-# ========== 编译 ==========
-pnpm run build
-```
-
-启动 Gateway（三选一）：
-
-```powershell
-# 方式一：使用启动脚本（推荐，自动配置代理）
-start-gateway.bat
-
-# 方式二：直接启动（无需代理时）
-pnpm run gateway
-
-# 方式三：手动配置代理后启动
-$env:HTTP_PROXY="http://127.0.0.1:7890"
-$env:HTTPS_PROXY="http://127.0.0.1:7890"
-pnpm run gateway
-```
-
-另开终端启动 Dashboard：
-
-```powershell
-cd C:\Users\xforg\Desktop\openclaw
-pnpm openclaw dashboard
 ```
 
 ---
 
-## 10. 源码参考
+## 附录
 
-### 模型认证相关源码
-
-- `src/cli/models-cli.ts` - CLI 入口
-- `src/commands/models/auth.ts` - 认证命令
-- `src/commands/models/auth-order.ts` - 认证流程
-
-### 常用命令
+### A. 常用命令速查
 
 ```powershell
-pnpm openclaw models auth add              # 交互式添加认证
-pnpm openclaw models auth paste-token      # 粘贴 token
+# 配置相关
+pnpm openclaw config set <key> <value>    # 设置配置
+pnpm openclaw config get <key>             # 查看配置
+pnpm openclaw config list                   # 列出所有配置
+
+# 模型相关
+pnpm openclaw models list-providers         # 列出 providers
+pnpm openclaw models list                   # 列出所有模型
 pnpm openclaw models status --plain        # 查看认证状态
 pnpm openclaw models set <model>           # 设置默认模型
-pnpm openclaw models list-providers        # 列出所有 provider
+
+# 运行相关
+pnpm run build                             # 编译
+pnpm run gateway                           # 启动 gateway
+pnpm run gateway stop                      # 停止 gateway
+pnpm openclaw dashboard                    # 启动 dashboard
+
+# 日志相关
+pnpm openclaw logs --limit 100 --plain    # 查看日志
+pnpm openclaw logs --follow                # 实时日志
+pnpm openclaw doctor                        # 诊断工具
 ```
+
+### B. 目录结构
+
+```
+C:\Users\xforg\Desktop\openclaw\
+├── src/                    # 源代码
+├── dist/                   # 编译输出
+├── ui/                     # 前端代码
+├── .openclaw/              # 配置目录
+│   ├── openclaw.json       # 全局配置
+│   └── agents/             # Agent 配置
+│       └── main/agent/
+│           ├── openclaw.json
+│           └── auth-profiles.json
+├── start-gateway.bat      # 启动脚本
+└── Windows_QuickStart.md  # 快速上手指南
+```
+
+### C. 相关文档
+
+- [Windows_QuickStart.md](Windows_QuickStart.md) - 快速上手
+- [README.md](../README.md) - 项目 README
+- [docs/](../docs/) - 详细文档
+
+### D. 获取帮助
+
+- GitHub Issues: https://github.com/openclaw/openclaw/issues
+- 查看日志：`pnpm openclaw logs --limit 200`
+- 诊断工具：`pnpm openclaw doctor`

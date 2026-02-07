@@ -14,12 +14,58 @@
 
 ---
 
-## 推荐启动路径（最短闭环）
+## 最快速启动方式（一键脚本）
 
-> 这是验证 OpenClaw 正常工作的最快方式，按顺序执行即可。
+> 首次使用推荐使用一键配置脚本
+
+### 第一步：一键环境配置
+
+双击运行：
+```
+setup-all.bat
+```
+
+或使用 PowerShell：
+```powershell
+.\setup-env.ps1
+```
+
+### 第二步：添加模型 API Key
+
+```powershell
+# 选择一个 provider 添加 API Key
+pnpm openclaw models auth paste-token --provider openai
+# 或
+pnpm openclaw models auth paste-token --provider google
+# 或
+pnpm openclaw models auth paste-token --provider anthropic
+```
+
+### 第三步：一键启动
+
+双击运行：
+```
+start-all.bat
+```
+
+### 第四步：连接 Dashboard
+
+1. 查看 Gateway 窗口，复制 `listening on ws://...` 地址
+2. 在 Dashboard 中填入 Gateway URL 和 Token
+3. 点击 Connect
+
+---
+
+## 分步启动（详细）
 
 ### 终端 A：启动 Gateway
 
+**方式一：双击运行**
+```
+start-gateway.bat
+```
+
+**方式二：命令行**
 ```powershell
 cd C:\Users\xforg\Desktop\openclaw
 pnpm run gateway
@@ -36,6 +82,12 @@ pnpm run gateway
 
 ### 终端 B：启动 Dashboard
 
+**方式一：双击运行**
+```
+start-dashboard.bat
+```
+
+**方式二：命令行**
 ```powershell
 cd C:\Users\xforg\Desktop\openclaw
 pnpm openclaw dashboard
@@ -50,53 +102,10 @@ pnpm openclaw dashboard
 在 Dashboard 中：
 1. 找到 Gateway 连接配置
 2. **Gateway URL**: 填写日志中的地址，例如 `ws://127.0.0.1:19001`（**以启动日志为准**）
-3. **Gateway Token**: 填写你的 token（首次配置见下方）
+3. **Gateway Token**: 填写你的 token（运行 setup-all.bat 时会显示）
 4. 点击 **Connect**
 
 **✅ 确认连接成功**：Dashboard 显示 "Connected" 状态
-
----
-
-### 首次配置（只需一次）
-
-如果还没有配置过，执行以下步骤：
-
-#### 1. 安装依赖
-
-```powershell
-cd C:\Users\xforg\Desktop\openclaw
-pnpm install
-```
-
-#### 2. 配置 Gateway
-
-```powershell
-pnpm openclaw config set gateway.auth.mode token
-pnpm openclaw config set gateway.mode local
-pnpm openclaw doctor --generate-gateway-token
-pnpm openclaw config get gateway.auth.token
-```
-
-**复制输出的 token**，连接 Dashboard 时需要。
-
-#### 3. 配置模型 API Key
-
-```powershell
-# OpenAI
-pnpm openclaw models auth paste-token --provider openai
-
-# Google Gemini
-pnpm openclaw models auth paste-token --provider google
-
-# Anthropic Claude
-pnpm openclaw models auth paste-token --provider anthropic
-```
-
-#### 4. 编译项目
-
-```powershell
-pnpm run build
-```
 
 ---
 
@@ -180,13 +189,24 @@ pnpm run gateway
 ### 使用启动脚本（带代理）
 
 ```batch
-start-gateway.bat
+start-gateway.bat      # 单独启动 Gateway
+start-dashboard.bat    # 单独启动 Dashboard
+start-all.bat          # 同时启动两者
 ```
 
 ### 开发模式
 
 ```powershell
 pnpm dev
+```
+
+### 自定义代理端口
+
+编辑 `start-gateway.bat` 或 `start-all.bat`：
+```batch
+REM 修改为你的代理端口
+set HTTPS_PROXY=http://127.0.0.1:7890
+set HTTP_PROXY=http://127.0.0.1:7890
 ```
 
 ---

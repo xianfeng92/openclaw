@@ -61,24 +61,49 @@ git clone https://github.com/openclaw/openclaw.git
 cd openclaw
 ```
 
-### 2.2 安装依赖
+### 2.2 一键环境配置
+
+**首次安装推荐使用一键配置脚本：**
+
+**方式一：双击运行批处理脚本**
+```
+setup-all.bat
+```
+
+**方式二：PowerShell 脚本**
+```powershell
+.\setup-env.ps1
+```
+
+脚本会自动完成：
+- 检查 Node.js 版本
+- 检测包管理器（pnpm 或 npm）
+- 安装依赖
+- 编译项目
+- 配置 Gateway
+- 生成 Token
+
+### 2.3 手动安装（可选）
+
+如果脚本运行失败，可手动执行以下步骤：
 
 ```powershell
+# 安装依赖
 pnpm install
-```
 
-### 2.3 首次配置修复
-
-如果后续配置报错 `memory-core plugin not found`，执行：
-
-```powershell
+# 首次配置修复（如果报错 memory-core plugin not found）
 pnpm openclaw config set plugins.slots.memory none
-```
 
-### 2.4 编译项目
-
-```powershell
+# 编译项目
 pnpm run build
+
+# 配置 Gateway
+pnpm openclaw config set gateway.auth.mode token
+pnpm openclaw config set gateway.mode local
+
+# 生成 Token
+pnpm openclaw doctor --generate-gateway-token
+pnpm openclaw config get gateway.auth.token
 ```
 
 ---
@@ -196,68 +221,48 @@ pnpm openclaw models status --plain
 
 ## 5. 启动服务
 
-### 5.1 启动方式对比
+### 5.1 快速启动（推荐）
 
-| 方式 | 优点 | 缺点 | 推荐场景 |
-|------|------|------|----------|
-| **start-gateway.bat** | 自动配置代理，双击即用 | 需手动修改端口 | 日常开发 |
-| **pnpm run gateway** | 简单直接 | 需手动设置代理 | 无需代理时 |
-| **手动配置代理后启动** | 灵活控制 | 每次需设置变量 | 调试时 |
+**一键启动 Gateway + Dashboard：**
 
-### 5.2 使用启动脚本（推荐）
+双击运行：
+```
+start-all.bat
+```
 
-```batch
-# 双击运行，或：
+这会在两个新窗口中分别启动 Gateway 和 Dashboard。
+
+### 5.2 分别启动
+
+**启动 Gateway：**
+```
 start-gateway.bat
 ```
 
-**启动脚本内容**：`start-gateway.bat`
+**启动 Dashboard：**
+```
+start-dashboard.bat
+```
+
+### 5.3 启动方式对比
+
+| 方式 | 优点 | 缺点 | 推荐场景 |
+|------|------|------|----------|
+| **start-all.bat** | 一键启动全部 | 两个窗口 | 日常使用 |
+| **start-gateway.bat** | 自动配置代理，双击即用 | 需手动修改端口 | 单独启动 Gateway |
+| **start-dashboard.bat** | 独立启动 Dashboard | - | 单独启动 Dashboard |
+| **pnpm run gateway** | 简单直接 | 需手动设置代理 | 无需代理时 |
+
+### 5.4 自定义代理端口
+
+编辑 `start-gateway.bat` 或 `start-all.bat`，修改代理端口：
 
 ```batch
-@echo off
-REM OpenClaw Gateway Startup Script with Proxy
-
-setlocal
+REM Clash 默认: 7890
+REM V2RayN 默认: 10809
 set HTTPS_PROXY=http://127.0.0.1:7890
 set HTTP_PROXY=http://127.0.0.1:7890
-
-cd /d "%~dp0"
-echo Starting OpenClaw Gateway with proxy...
-echo HTTPS_PROXY=%HTTPS_PROXY%
-echo HTTP_PROXY=%HTTP_PROXY%
-
-npm run gateway
-
-endlocal
 ```
-
-### 5.3 直接启动
-
-**无需代理时：**
-
-```powershell
-cd C:\Users\xforg\Desktop\openclaw
-pnpm run gateway
-```
-
-**需要代理时：**
-
-```powershell
-$env:HTTP_PROXY="http://127.0.0.1:7890"
-$env:HTTPS_PROXY="http://127.0.0.1:7890"
-pnpm run gateway
-```
-
-### 5.4 启动 Dashboard
-
-**新开一个终端：**
-
-```powershell
-cd C:\Users\xforg\Desktop\openclaw
-pnpm openclaw dashboard
-```
-
-浏览器会自动打开 Dashboard 界面。
 
 ### 5.5 连接 Dashboard
 
@@ -530,17 +535,32 @@ C:\Users\xforg\Desktop\openclaw\
 │       └── main/agent/
 │           ├── openclaw.json
 │           └── auth-profiles.json
-├── start-gateway.bat      # 启动脚本
-└── Windows_QuickStart.md  # 快速上手指南
+├── setup-all.bat           # 一键环境配置（批处理）
+├── setup-env.ps1           # 一键环境配置（PowerShell）
+├── start-all.bat           # 一键启动（Gateway + Dashboard）
+├── start-gateway.bat       # 启动 Gateway
+├── start-dashboard.bat     # 启动 Dashboard
+├── Windows_QuickStart.md   # 快速上手指南
+└── Windows_SetUp.md        # 完整指南
 ```
 
-### C. 相关文档
+### C. 脚本说明
+
+| 脚本 | 功能 | 使用场景 |
+|------|------|----------|
+| `setup-all.bat` | 一键配置环境 | 首次安装 |
+| `setup-env.ps1` | 一键配置环境 | 首次安装（PowerShell） |
+| `start-all.bat` | 一键启动 Gateway + Dashboard | 日常使用 |
+| `start-gateway.bat` | 启动 Gateway | 单独启动 Gateway |
+| `start-dashboard.bat` | 启动 Dashboard | 单独启动 Dashboard |
+
+### D. 相关文档
 
 - [Windows_QuickStart.md](Windows_QuickStart.md) - 快速上手
 - [README.md](../README.md) - 项目 README
 - [docs/](../docs/) - 详细文档
 
-### D. 获取帮助
+### E. 获取帮助
 
 - GitHub Issues: https://github.com/openclaw/openclaw/issues
 - 查看日志：`pnpm openclaw logs --limit 200`

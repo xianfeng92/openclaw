@@ -6,6 +6,7 @@ import { WebSocket } from "ws";
 import { emitAgentEvent, registerAgentRunContext } from "../infra/agent-events.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import {
+  agentCommand,
   connectOk,
   getReplyFromConfig,
   installGatewayTestHooks,
@@ -52,7 +53,11 @@ describe("gateway server chat", () => {
     let webchatWs: WebSocket | undefined;
 
     try {
-      webchatWs = new WebSocket(`ws://127.0.0.1:${port}`);
+      webchatWs = new WebSocket(`ws://127.0.0.1:${port}`, {
+        headers: {
+          origin: `http://127.0.0.1:${port}`,
+        },
+      });
       await new Promise<void>((resolve) => webchatWs?.once("open", resolve));
       await connectOk(webchatWs, {
         client: {
@@ -354,7 +359,11 @@ describe("gateway server chat", () => {
       },
     });
 
-    const webchatWs = new WebSocket(`ws://127.0.0.1:${port}`);
+    const webchatWs = new WebSocket(`ws://127.0.0.1:${port}`, {
+      headers: {
+        origin: `http://127.0.0.1:${port}`,
+      },
+    });
     await new Promise<void>((resolve) => webchatWs.once("open", resolve));
     await connectOk(webchatWs, {
       client: {

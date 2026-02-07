@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -107,6 +107,30 @@ const logRunner = (message) => {
   process.stderr.write(`[openclaw] ${message}\n`);
 };
 
+const canRun = (command, commandArgs) => {
+  const result = spawnSync(command, commandArgs, {
+    cwd,
+    env,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  if (result.error) {
+    return false;
+  }
+  return (result.status ?? 1) === 0;
+};
+
+const resolvePackageRunner = () => {
+  if (canRun("pnpm", ["--version"])) {
+    return { cmd: "pnpm", args: [] };
+  }
+  if (canRun("corepack", ["pnpm", "--version"])) {
+    logRunner("pnpm command not found, falling back to corepack pnpm.");
+    return { cmd: "corepack", args: ["pnpm"] };
+  }
+  return null;
+};
+
 const runNode = () => {
   const nodeProcess = spawn(process.execPath, ["openclaw.mjs", ...args], {
     cwd,
@@ -136,9 +160,13 @@ if (!shouldBuild()) {
   runNode();
 } else {
   logRunner("Building TypeScript (dist is stale).");
-  const buildCmd = process.platform === "win32" ? "cmd.exe" : "pnpm";
-  const buildArgs =
-    process.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...compilerArgs] : compilerArgs;
+  const runner = resolvePackageRunner();
+  if (!runner) {
+    process.stderr.write("Missing package runner: install pnpm or corepack.\n");
+    process.exit(1);
+  }
+  const buildCmd = runner.cmd;
+  const buildArgs = [...runner.args, ...compilerArgs];
   const build = spawn(buildCmd, buildArgs, {
     cwd,
     env,

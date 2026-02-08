@@ -268,11 +268,14 @@ OpenClaw 提供 Windows 桌面应用（基于 Electron），包含系统托盘�
 ### 桌面应用开发
 
 ```bash
-# 进入桌面应用目录
-cd C:\Users\xforg\Desktop\openclaw\apps\windows
-
-# 安装依赖
+# 在仓库根目录安装依赖（推荐）
 pnpm install
+
+# 构建 Control UI 静态资源（首次必需；产物在 dist/control-ui）
+pnpm ui:build
+
+# 进入桌面应用目录
+cd apps/windows
 
 # 开发模式
 pnpm dev
@@ -280,6 +283,18 @@ pnpm dev
 # 生产构建
 pnpm build:prod
 ```
+
+### 常见问题：打开页面显示 Not Found
+
+桌面应用的“聊天窗口”本质上是打开/嵌入 Gateway 提供的 Control UI（默认 `http://127.0.0.1:19001/`）。
+
+如果你已经启动 Gateway，但浏览器或桌面应用窗口显示 `Not Found`，通常是因为尚未构建 Control UI 静态资源：
+
+```bash
+pnpm ui:build
+```
+
+补充：如果你配置了 `gateway.controlUi.basePath`（例如 `/openclaw`），那么对应的页面路径也会变为 `http://127.0.0.1:19001/openclaw/`。
 
 ### 桌面应用功能
 

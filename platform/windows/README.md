@@ -265,6 +265,25 @@ pnpm openclaw config set plugins.slots.memory memory-core
 pnpm openclaw gateway restart --dev
 ```
 
+### CLI Model 工具（无 API Key 使用 Claude/GPT）
+
+如果你有 `claude` 或 `gpt` 命令行工具但没有 API Key，可以使用 `cli_model` 工具：
+
+**前提条件**：
+- PowerShell 7 已安装并在 PATH 中
+- `claude` 或 `gpt` 命令可用
+
+**使用方式**：
+在聊天中直接要求 Agent 使用特定模型：
+```
+请用 claude 帮我分析这段代码...
+请用 gpt 翻译这段文字...
+```
+
+Agent 会自动调用 `cli_model` 工具来执行你的请求。
+
+详细说明：[CLI Model 工具文档](../../../docs/cli-model-tool.md)
+
 ---
 
 ## 相关文档
@@ -272,3 +291,4 @@ pnpm openclaw gateway restart --dev
 - [项目主文档](../../../README.md)
 - [中文文档](../../../docs/zh-CN)
 - [OpenClaw 综合报告](../../../docs/zh-CN/OpenClaw综合报告.md)
+- [CLI Model 工具文档](../../../docs/cli-model-tool.md)

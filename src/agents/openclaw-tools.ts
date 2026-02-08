@@ -6,6 +6,7 @@ import { resolveSessionAgentId } from "./agent-scope.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
+import { createCliModelTool } from "./tools/cli-model-tool.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
@@ -107,6 +108,10 @@ export function createOpenClawTools(options?: {
       config: options?.config,
     }),
     createGatewayTool({
+      agentSessionKey: options?.agentSessionKey,
+      config: options?.config,
+    }),
+    createCliModelTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),

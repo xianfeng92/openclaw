@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { GatewayRequestHandlers } from "./types.js";
-import { listAgentIds, resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
 import {
   DEFAULT_AGENTS_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
@@ -116,7 +116,9 @@ async function listAgentFiles(workspaceDir: string) {
 
 function resolveAgentIdOrError(agentIdRaw: string, cfg: ReturnType<typeof loadConfig>) {
   const agentId = normalizeAgentId(agentIdRaw);
-  const allowed = new Set(listAgentIds(cfg));
+  // Keep agent id validation consistent with what the Control UI shows in `agents.list`.
+  // Otherwise the UI can list "derived" agents (ex: discovered from disk) that can't load files.
+  const allowed = new Set(listAgentsForGateway(cfg).agents.map((agent) => normalizeAgentId(agent.id)));
   if (!allowed.has(agentId)) {
     return null;
   }

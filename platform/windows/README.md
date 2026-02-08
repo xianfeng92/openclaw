@@ -246,6 +246,92 @@ pnpm openclaw agents identity myagent
 
 或者直接编辑本地文件，刷新后生效。
 
+### 在 Chat 中切换 Agent
+
+**重要概念**：在 Dashboard 的 Chat 页面里，不是"选 Agent 聊天"，而是"选 SessionKey 聊天"。
+
+#### SessionKey 格式
+
+```
+SessionKey 格式: agent:<agentId>:<sessionType>
+                agent:main:main   ← main agent
+                agent:dev:main    ← dev agent (C3-PO)
+```
+
+#### 切换方法
+
+在 Chat 页面**右上角**有一个 **Session 下拉框**：
+
+| Session Key | 对应的 Agent |
+|-------------|-------------|
+| `agent:main:main` | main（通用助手） |
+| `agent:dev:main` | dev (C3-PO，调试专用） |
+
+选择不同的 SessionKey 就等于与不同的 Agent 聊天。
+
+#### 如果下拉框里没有想要的 Agent
+
+新 Agent 需要先"激活"（创建至少一个 session）才会出现在列表里。
+
+**解决方法**：在 CLI 里触发一次创建 session：
+
+```bash
+# 用 dev agent 发一条消息，创建 session
+pnpm openclaw --dev --agent dev --message "hi"
+
+# 用 main agent 发一条消息，创建 session
+pnpm openclaw --dev --agent main --message "hi"
+```
+
+然后刷新 Dashboard，Session 下拉框里就会出现对应的 `agent:dev:main` 或 `agent:main:main`。
+
+#### 通过 URL 直接访问
+
+也可以直接在浏览器地址栏指定 Agent：
+
+| Agent | URL |
+|-------|-----|
+| main | `http://127.0.0.1:19001/chat?session=agent:main:main` |
+| dev (C3-PO) | `http://127.0.0.1:19001/chat?session=agent:dev:main` |
+
+### 设置默认 Agent
+
+默认 Agent 由配置文件中的 `default: true` 决定：
+
+**主配置** (`~/.openclaw-dev/openclaw.json`)：
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "default": true    ← 设置为默认
+      },
+      {
+        "id": "dev",
+        "default": false
+      }
+    ]
+  }
+}
+```
+
+修改后需要重启 Gateway 并刷新 Dashboard。
+
+### Agent 个性差异
+
+| Agent | 个性特点 | 适用场景 |
+|-------|----------|----------|
+| **main** | 通用助手，简洁专业 | 日常任务、通用问答 |
+| **dev (C3-PO)** | 焦虑、戏剧化、专注于调试 | 代码调试、错误分析 |
+
+**C3-PO 回复示例**：
+```
+"Oh my! The database connection has failed!
+The odds of successfully navigating this error are approximately
+3,720 to 1! But let us examine the logs like ancient manuscripts..."
+```
+
 ## 配置说明
 
 ### 代理设置
@@ -344,12 +430,26 @@ pnpm openclaw models auth paste-token --provider google
 
 ### 4. Error: unknown agent id
 
-**原因**：Agent workspace 缺少核心文件
+**原因**：
+- Dashboard 的 Agents 列表里包含了 `session.mainKey`（通常是 `main`）
+- 但你的配置里没有把 `main` 作为一个已配置的 agent（`agents.list[]` 为空或不包含 `main`）
+
+这会导致 UI 里能选到 `main`，但在 **Files** 页面加载 core files 时后端校验失败，从而返回 `unknown agent id`。
 
 **解决**：
-1. 确认 `workspace` 目录存在
-2. 确认包含 `AGENTS.md`, `SOUL.md` 等文件
-3. 在 Dashboard 中点击 **Reload Config**
+1. 升级到包含该修复的 OpenClaw 版本，然后重启 Gateway，再刷新 Dashboard
+2. 临时 workaround（二选一）：
+   - 在配置里显式添加 `agents.list`，并包含 `main`（然后在 Dashboard 中点击 **Reload Config**）
+   - 或者把 Dashboard 切换到一个已在 `agents.list[]` 中配置的 agent id
+
+示例（`openclaw.json`，如果已有 `agents.list` 就把 `main` 追加进去）：
+```json
+{
+  "agents": {
+    "list": [{ "id": "main" }]
+  }
+}
+```
 
 ### 5. Files 页面显示 "No configured models"
 

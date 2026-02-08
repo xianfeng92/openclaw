@@ -112,6 +112,140 @@ pnpm openclaw config set gateway.auth.mode none --dev
 
 然后重启 Gateway。
 
+## Agent 系统说明
+
+### 什么是 Agent？
+
+Agent 是 OpenClaw 的核心概念，每个 Agent 都是一个独立的 AI 助手，拥有：
+- **独立的配置**（模型、技能、身份）
+- **独立的工作空间**（记忆文件、工具配置）
+- **独立的会话记录**
+
+### Agent 目录结构
+
+```
+~/.openclaw-dev/                    # Dev 模式状态目录
+├── openclaw.json                   # 主配置文件
+├── agents/                         # Agent 状态目录
+│   ├── main/                       # main agent
+│   │   ├── agent/                  # Agent 数据
+│   │   │   ├── openclaw.json       # Agent 模型配置
+│   │   │   ├── auth-profiles.json  # API Key 凭证
+│   │   │   └── models.json         # 模型目录
+│   │   └── sessions/               # 会话记录
+│   └── dev/                        # dev agent
+│       └── ...
+└── workspace-dev/                  # 默认工作空间
+    ├── AGENTS.md                   # Agent 工作指南
+    ├── SOUL.md                     # Agent 身份/灵魂
+    ├── TOOLS.md                    # 工具笔记
+    ├── IDENTITY.md                 # 身份信息
+    ├── USER.md                     # 用户信息
+    └── HEARTBEAT.md                # 心跳任务
+```
+
+### Workspace 文件说明
+
+| 文件 | 作用 |
+|------|------|
+| `AGENTS.md` | Agent 工作指南，定义如何处理任务、群聊行为等 |
+| `SOUL.md` | Agent 的"灵魂"，定义个性、边界、价值观 |
+| `TOOLS.md` | 用户维护的工具笔记（SSH、摄像头、TTS 等） |
+| `IDENTITY.md` | Agent 名称、表情符号、人设 |
+| `USER.md` | 用户档案（时区、偏好等） |
+| `HEARTBEAT.md` | 定期后台任务（邮件、日历检查等） |
+| `MEMORY.md` | 长期记忆（仅主会话加载） |
+
+### Agent 配置文件
+
+**主配置** (`~/.openclaw-dev/openclaw.json`)：
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "google/gemini-3-flash-preview"
+      }
+    },
+    "list": [
+      {
+        "id": "dev",
+        "default": true,
+        "workspace": "C:\\Users\\xforg\\.openclaw\\workspace-dev",
+        "identity": {
+          "name": "C3-PO",
+          "emoji": "🤖"
+        }
+      }
+    ]
+  }
+}
+```
+
+**Agent 配置** (`~/.openclaw-dev/agents/main/agent/openclaw.json`)：
+```json
+{
+  "model": {
+    "primary": "google/gemini-3-flash-preview"
+  }
+}
+```
+
+**API 凭证** (`~/.openclaw-dev/agents/main/agent/auth-profiles.json`)：
+```json
+{
+  "version": 1,
+  "profiles": {
+    "google:manual": {
+      "type": "token",
+      "provider": "google",
+      "token": "你的API_Key"
+    }
+  }
+}
+```
+
+### 创建新 Agent
+
+```bash
+# 创建新 Agent（交互式）
+pnpm openclaw agents add myagent
+
+# 创建新 Agent（指定参数）
+pnpm openclaw agents add myagent --workspace "./my-workspace" --model "google/gemini-3-flash-preview"
+
+# 列出所有 Agent
+pnpm openclaw agents list
+
+# 删除 Agent
+pnpm openclaw agents delete myagent
+
+# 更新 Agent 身份
+pnpm openclaw agents identity myagent
+```
+
+### Dev 模式 vs 正式模式
+
+| 特性 | Dev 模式 (`--dev`) | 正式模式 |
+|------|-------------------|----------|
+| 配置目录 | `~/.openclaw-dev/` | `~/.openclaw/` |
+| 工作空间 | `workspace-dev/` | `workspace/` |
+| Gateway 端口 | 19001 | 18789 |
+| 默认 Token | `openclaw-dev-token` | 自动生成 |
+| 用途 | 开发测试 | 生产使用 |
+
+两个模式**完全隔离**，互不影响。
+
+### 管理 Agent Workspace
+
+在 Dashboard 中：
+1. 进入 **Agents** 页面
+2. 选择一个 Agent
+3. 点击 **Files** 标签
+4. 可以直接编辑 `AGENTS.md`, `SOUL.md` 等文件
+
+或者直接编辑本地文件，刷新后生效。
+
 ## 配置说明
 
 ### 代理设置
@@ -163,6 +297,21 @@ pnpm openclaw models set <model>
 
 支持的 provider: `openai`, `anthropic`, `google`, `venice`
 
+### 为 Dev 模式添加 API Key
+
+由于 Dev 模式使用独立配置，需要单独添加：
+
+1. **方式一**：在 Dev 模式下运行命令
+   ```bash
+   pnpm openclaw --dev models auth paste-token --provider google
+   ```
+
+2. **方式二**：直接编辑文件
+   ```bash
+   # 编辑 Dev 模式的 auth 配置
+   notepad %USERPROFILE%\.openclaw-dev\agents\main\agent\auth-profiles.json
+   ```
+
 ## 常见问题
 
 ### 1. Dashboard 连接失败 (ERR_CONNECTION_REFUSED)
@@ -191,6 +340,28 @@ pnpm openclaw models set <model>
 pnpm openclaw models auth paste-token --provider google
 
 # 检查代理设置
+```
+
+### 4. Error: unknown agent id
+
+**原因**：Agent workspace 缺少核心文件
+
+**解决**：
+1. 确认 `workspace` 目录存在
+2. 确认包含 `AGENTS.md`, `SOUL.md` 等文件
+3. 在 Dashboard 中点击 **Reload Config**
+
+### 5. Files 页面显示 "No configured models"
+
+**原因**：Agent 配置中缺少模型设置
+
+**解决**：在 Agent 配置中添加：
+```json
+{
+  "model": {
+    "primary": "google/gemini-3-flash-preview"
+  }
+}
 ```
 
 ## 相关文档

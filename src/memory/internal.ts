@@ -75,6 +75,27 @@ async function walkDir(dir: string, files: string[]) {
   }
 }
 
+function walkDirSync(dir: string, files: string[]) {
+  const entries = fsSync.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+    if (entry.isDirectory()) {
+      walkDirSync(full, files);
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    if (!entry.name.endsWith(".md")) {
+      continue;
+    }
+    files.push(full);
+  }
+}
+
 export async function listMemoryFiles(
   workspaceDir: string,
   extraPaths?: string[],
@@ -127,12 +148,82 @@ export async function listMemoryFiles(
   if (result.length <= 1) {
     return result;
   }
+  const normalizeDedupeKey = (value: string) =>
+    process.platform === "win32" ? value.toLowerCase() : value;
   const seen = new Set<string>();
   const deduped: string[] = [];
   for (const entry of result) {
     let key = entry;
     try {
-      key = await fs.realpath(entry);
+      key = normalizeDedupeKey(await fs.realpath(entry));
+    } catch {}
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(entry);
+  }
+  return deduped;
+}
+
+export function listMemoryFilesSync(workspaceDir: string, extraPaths?: string[]): string[] {
+  const result: string[] = [];
+  const memoryFile = path.join(workspaceDir, "MEMORY.md");
+  const altMemoryFile = path.join(workspaceDir, "memory.md");
+  const memoryDir = path.join(workspaceDir, "memory");
+
+  const addMarkdownFile = (absPath: string) => {
+    try {
+      const stat = fsSync.lstatSync(absPath);
+      if (stat.isSymbolicLink() || !stat.isFile()) {
+        return;
+      }
+      if (!absPath.endsWith(".md")) {
+        return;
+      }
+      result.push(absPath);
+    } catch {}
+  };
+
+  addMarkdownFile(memoryFile);
+  addMarkdownFile(altMemoryFile);
+  try {
+    const dirStat = fsSync.lstatSync(memoryDir);
+    if (!dirStat.isSymbolicLink() && dirStat.isDirectory()) {
+      walkDirSync(memoryDir, result);
+    }
+  } catch {}
+
+  const normalizedExtraPaths = normalizeExtraMemoryPaths(workspaceDir, extraPaths);
+  if (normalizedExtraPaths.length > 0) {
+    for (const inputPath of normalizedExtraPaths) {
+      try {
+        const stat = fsSync.lstatSync(inputPath);
+        if (stat.isSymbolicLink()) {
+          continue;
+        }
+        if (stat.isDirectory()) {
+          walkDirSync(inputPath, result);
+          continue;
+        }
+        if (stat.isFile() && inputPath.endsWith(".md")) {
+          result.push(inputPath);
+        }
+      } catch {}
+    }
+  }
+
+  if (result.length <= 1) {
+    return result;
+  }
+  const normalizeDedupeKey = (value: string) =>
+    process.platform === "win32" ? value.toLowerCase() : value;
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const entry of result) {
+    let key = entry;
+    try {
+      key = normalizeDedupeKey(fsSync.realpathSync(entry));
     } catch {}
     if (seen.has(key)) {
       continue;
@@ -153,6 +244,19 @@ export async function buildFileEntry(
 ): Promise<MemoryFileEntry> {
   const stat = await fs.stat(absPath);
   const content = await fs.readFile(absPath, "utf-8");
+  const hash = hashText(content);
+  return {
+    path: path.relative(workspaceDir, absPath).replace(/\\/g, "/"),
+    absPath,
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    hash,
+  };
+}
+
+export function buildFileEntrySync(absPath: string, workspaceDir: string): MemoryFileEntry {
+  const stat = fsSync.statSync(absPath);
+  const content = fsSync.readFileSync(absPath, "utf-8");
   const hash = hashText(content);
   return {
     path: path.relative(workspaceDir, absPath).replace(/\\/g, "/"),

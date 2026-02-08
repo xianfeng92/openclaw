@@ -97,6 +97,40 @@ describe("memory index", () => {
     );
   });
 
+  it("reports dirty=false after a clean sync and restart", async () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          workspace: workspaceDir,
+          memorySearch: {
+            provider: "openai",
+            model: "mock-embed",
+            store: { path: indexPath, vector: { enabled: false } },
+            sync: { watch: false, onSessionStart: false, onSearch: false, intervalMinutes: 0 },
+            query: { minScore: 0 },
+          },
+        },
+        list: [{ id: "main", default: true }],
+      },
+    };
+
+    const first = await getMemorySearchManager({ cfg, agentId: "main" });
+    expect(first.manager).not.toBeNull();
+    if (!first.manager) {
+      throw new Error("manager missing");
+    }
+    await first.manager.sync({ force: true });
+    await first.manager.close();
+
+    const second = await getMemorySearchManager({ cfg, agentId: "main" });
+    expect(second.manager).not.toBeNull();
+    if (!second.manager) {
+      throw new Error("manager missing");
+    }
+    manager = second.manager;
+    expect(second.manager.status().dirty).toBe(false);
+  });
+
   it("reindexes when the embedding model changes", async () => {
     const base = {
       agents: {

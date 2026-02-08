@@ -41,11 +41,13 @@ import {
 import { bm25RankToScore, buildFtsQuery, mergeHybridResults } from "./hybrid.js";
 import {
   buildFileEntry,
+  buildFileEntrySync,
   chunkMarkdown,
   ensureDir,
   hashText,
   isMemoryPath,
   listMemoryFiles,
+  listMemoryFilesSync,
   normalizeExtraMemoryPaths,
   type MemoryChunk,
   type MemoryFileEntry,
@@ -244,8 +246,47 @@ export class MemoryIndexManager implements MemorySearchManager {
     this.ensureWatcher();
     this.ensureSessionListener();
     this.ensureIntervalSync();
-    this.dirty = this.sources.has("memory");
+    this.dirty = this.computeMemoryDirtyOnStartup();
     this.batch = this.resolveBatchConfig();
+  }
+
+  private computeMemoryDirtyOnStartup(): boolean {
+    if (!this.sources.has("memory")) {
+      return false;
+    }
+    try {
+      const files = listMemoryFilesSync(this.workspaceDir, this.settings.extraPaths);
+      const fileEntries = files.map((file) => buildFileEntrySync(file, this.workspaceDir));
+      const activePaths = new Set(fileEntries.map((entry) => entry.path));
+
+      // If the DB has memory rows that no longer exist on disk, we need a sync.
+      const staleRows = this.db
+        .prepare(`SELECT path FROM files WHERE source = ?`)
+        .all("memory") as Array<{ path: string }>;
+      for (const stale of staleRows) {
+        if (!activePaths.has(stale.path)) {
+          return true;
+        }
+      }
+
+      // If any file differs from what's recorded in the DB, we need a sync.
+      // Use content hash to avoid platform/filesystem mtime granularity quirks.
+      for (const entry of fileEntries) {
+        const record = this.db
+          .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
+          .get(entry.path, "memory") as { hash: string } | undefined;
+        if (!record) {
+          return true;
+        }
+        if (record.hash !== entry.hash) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      // Conservative: if we can't determine the state, mark dirty so we self-heal.
+      return true;
+    }
   }
 
   async warmSession(sessionKey?: string): Promise<void> {

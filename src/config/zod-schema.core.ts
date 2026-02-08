@@ -47,7 +47,7 @@ export const ModelDefinitionSchema = z
 
 export const ModelProviderSchema = z
   .object({
-    baseUrl: z.string().min(1),
+    baseUrl: z.string().min(1).optional(),
     apiKey: z.string().optional(),
     auth: z
       .union([z.literal("api-key"), z.literal("aws-sdk"), z.literal("oauth"), z.literal("token")])
@@ -55,9 +55,20 @@ export const ModelProviderSchema = z
     api: ModelApiSchema.optional(),
     headers: z.record(z.string(), z.string()).optional(),
     authHeader: z.boolean().optional(),
-    models: z.array(ModelDefinitionSchema),
+    models: z.array(ModelDefinitionSchema).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((provider, ctx) => {
+    // Allow setting `models.providers.<id>.apiKey` without forcing the user to also set a baseUrl.
+    // If a provider overrides its model list, it must also specify a baseUrl for the registry.
+    if (provider.models !== undefined && !provider.baseUrl?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["baseUrl"],
+        message: "Required when models are set.",
+      });
+    }
+  });
 
 export const BedrockDiscoverySchema = z
   .object({

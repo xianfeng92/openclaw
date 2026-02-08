@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./cli/profile.js";
 import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
+import { installUndiciEnvHttpProxyAgent } from "./infra/net/http-proxy-node.js";
 import { installProcessWarningFilter } from "./infra/warnings.js";
 import { attachChildProcessBridge } from "./process/child-process-bridge.js";
 
@@ -146,6 +147,9 @@ function normalizeWindowsArgv(argv: string[]): string[] {
 process.argv = normalizeWindowsArgv(process.argv);
 
 if (!ensureExperimentalWarningSuppressed()) {
+  // Install proxy support early (and synchronously) so the first outbound fetch does not race.
+  await installUndiciEnvHttpProxyAgent();
+
   const parsed = parseCliProfileArgs(process.argv);
   if (!parsed.ok) {
     // Keep it simple; Commander will handle rich help/errors after we strip flags.

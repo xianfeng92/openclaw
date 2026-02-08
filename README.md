@@ -6,9 +6,10 @@
 · [Releases](https://github.com/openclaw/openclaw/releases)
 · [Discord](https://discord.gg/clawd)
 · [Docs](https://docs.openclaw.ai)
+· [中文文档](docs/zh-CN)
 · [Getting Started](https://docs.openclaw.ai/start/getting-started)
 
-A personal AI assistant you run on your own devices. Works on WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Teams, and more.
+A personal AI assistant you run on your own devices. Works on WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Teams, Matrix, and more.
 
 **Requirements:** Node.js ≥22
 
@@ -53,8 +54,17 @@ See [Development Guide](https://docs.openclaw.ai/development) for details.
 - **[Getting Started](https://docs.openclaw.ai/start/getting-started)** — Installation, onboarding, first message
 - **[Channels](https://docs.openclaw.ai/channels)** — WhatsApp, Telegram, Slack, Discord, etc.
 - **[Concepts](https://docs.openclaw.ai/concepts)** — Architecture, sessions, models
+- **[中文文档](docs/zh-CN)** — 中文概念文档和综合报告
 - **[Troubleshooting](https://docs.openclaw.ai/troubleshooting)** — Common issues and solutions
 - **[Development](https://docs.openclaw.ai/development)** — Contributing, building, debugging
+
+## Key Features
+
+- **Single Gateway, Multi-Channel** — One daemon manages all messaging platform connections
+- **WebSocket Architecture** — Control plane clients connect via WebSocket (macOS app, CLI, Web UI)
+- **Multi-Agent Routing** — Support multiple isolated agent instances with independent workspaces
+- **Plugin System** — Extend functionality with plugins (Mattermost, custom tools)
+- **Mobile Nodes** — iOS and Android nodes with Canvas interface support
 
 ---
 

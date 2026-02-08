@@ -41,3 +41,44 @@ describe("resolveAssistantIdentity avatar normalization", () => {
     expect(resolveAssistantIdentity({ cfg, workspaceDir: "" }).avatar).toBe("avatars/openclaw.png");
   });
 });
+
+describe("resolveAssistantIdentity emoji normalization", () => {
+  it("extracts a leading emoji from annotated values", () => {
+    const cfg: OpenClawConfig = {
+      ui: {
+        assistant: {},
+      },
+      agents: {
+        list: [
+          {
+            id: "main",
+            identity: {
+              emoji: "🤖 (or ⚠️ when alarmed)",
+            },
+          },
+        ],
+      },
+    };
+
+    expect(resolveAssistantIdentity({ cfg, agentId: "main", workspaceDir: "" }).emoji).toBe("🤖");
+  });
+
+  it("does not accept truncated emoji commentary", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [
+          {
+            id: "main",
+            identity: {
+              // Previously this could be truncated upstream and still pass max-length checks.
+              emoji: "🤖 (or ⚠️ when alarmed)",
+            },
+          },
+        ],
+      },
+    };
+
+    const res = resolveAssistantIdentity({ cfg, agentId: "main", workspaceDir: "" });
+    expect(res.emoji).toBe("🤖");
+  });
+});

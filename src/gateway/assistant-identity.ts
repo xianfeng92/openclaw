@@ -21,7 +21,7 @@ export type AssistantIdentity = {
   emoji?: string;
 };
 
-function coerceIdentityValue(value: string | undefined, maxLength: number): string | undefined {
+function coerceIdentityText(value: string | undefined, maxLength: number): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -33,6 +33,14 @@ function coerceIdentityValue(value: string | undefined, maxLength: number): stri
     return trimmed;
   }
   return trimmed.slice(0, maxLength);
+}
+
+function coerceIdentityRaw(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function isAvatarUrl(value: string): boolean {
@@ -54,6 +62,10 @@ function normalizeAvatarValue(value: string | undefined): string | undefined {
   if (!trimmed) {
     return undefined;
   }
+  // Never truncate: dropping avoids producing broken URLs/data URIs/paths.
+  if (trimmed.length > MAX_ASSISTANT_AVATAR) {
+    return undefined;
+  }
   if (isAvatarUrl(trimmed)) {
     return trimmed;
   }
@@ -66,6 +78,9 @@ function normalizeAvatarValue(value: string | undefined): string | undefined {
   return undefined;
 }
 
+const EMOJI_RE =
+  /(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})(?:\uFE0F|\uFE0E)?(?:\u200D(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})(?:\uFE0F|\uFE0E)?)*?/gu;
+
 function normalizeEmojiValue(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
@@ -73,6 +88,12 @@ function normalizeEmojiValue(value: string | undefined): string | undefined {
   const trimmed = value.trim();
   if (!trimmed) {
     return undefined;
+  }
+  // If the user wrote "🤖 (or ⚠️ when alarmed)", keep the first emoji cluster.
+  // This avoids leaking parenthetical commentary into the UI.
+  const match = trimmed.match(EMOJI_RE)?.[0];
+  if (match?.trim()) {
+    return match.trim();
   }
   if (trimmed.length > MAX_ASSISTANT_EMOJI) {
     return undefined;
@@ -105,27 +126,27 @@ export function resolveAssistantIdentity(params: {
   const fileIdentity = workspaceDir ? loadAgentIdentity(workspaceDir) : null;
 
   const name =
-    coerceIdentityValue(configAssistant?.name, MAX_ASSISTANT_NAME) ??
-    coerceIdentityValue(agentIdentity?.name, MAX_ASSISTANT_NAME) ??
-    coerceIdentityValue(fileIdentity?.name, MAX_ASSISTANT_NAME) ??
+    coerceIdentityText(configAssistant?.name, MAX_ASSISTANT_NAME) ??
+    coerceIdentityText(agentIdentity?.name, MAX_ASSISTANT_NAME) ??
+    coerceIdentityText(fileIdentity?.name, MAX_ASSISTANT_NAME) ??
     DEFAULT_ASSISTANT_IDENTITY.name;
 
   const avatarCandidates = [
-    coerceIdentityValue(configAssistant?.avatar, MAX_ASSISTANT_AVATAR),
-    coerceIdentityValue(agentIdentity?.avatar, MAX_ASSISTANT_AVATAR),
-    coerceIdentityValue(agentIdentity?.emoji, MAX_ASSISTANT_AVATAR),
-    coerceIdentityValue(fileIdentity?.avatar, MAX_ASSISTANT_AVATAR),
-    coerceIdentityValue(fileIdentity?.emoji, MAX_ASSISTANT_AVATAR),
+    coerceIdentityRaw(configAssistant?.avatar),
+    coerceIdentityRaw(agentIdentity?.avatar),
+    coerceIdentityRaw(agentIdentity?.emoji),
+    coerceIdentityRaw(fileIdentity?.avatar),
+    coerceIdentityRaw(fileIdentity?.emoji),
   ];
   const avatar =
     avatarCandidates.map((candidate) => normalizeAvatarValue(candidate)).find(Boolean) ??
     DEFAULT_ASSISTANT_IDENTITY.avatar;
 
   const emojiCandidates = [
-    coerceIdentityValue(agentIdentity?.emoji, MAX_ASSISTANT_EMOJI),
-    coerceIdentityValue(fileIdentity?.emoji, MAX_ASSISTANT_EMOJI),
-    coerceIdentityValue(agentIdentity?.avatar, MAX_ASSISTANT_EMOJI),
-    coerceIdentityValue(fileIdentity?.avatar, MAX_ASSISTANT_EMOJI),
+    coerceIdentityRaw(agentIdentity?.emoji),
+    coerceIdentityRaw(fileIdentity?.emoji),
+    coerceIdentityRaw(agentIdentity?.avatar),
+    coerceIdentityRaw(fileIdentity?.avatar),
   ];
   const emoji = emojiCandidates.map((candidate) => normalizeEmojiValue(candidate)).find(Boolean);
 

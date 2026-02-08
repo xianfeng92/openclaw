@@ -3,12 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveControlUiRootSync } from "../infra/control-ui-assets.js";
+import { resolveAgentAvatar } from "../agents/identity-avatar.js";
 import { DEFAULT_ASSISTANT_IDENTITY, resolveAssistantIdentity } from "./assistant-identity.js";
 import {
   buildControlUiAvatarUrl,
   CONTROL_UI_AVATAR_PREFIX,
   normalizeControlUiBasePath,
-  resolveAssistantAvatarUrl,
 } from "./control-ui-shared.js";
 
 const ROOT_PREFIX = "/";
@@ -204,12 +204,19 @@ function serveIndexHtml(res: ServerResponse, indexPath: string, opts: ServeIndex
     typeof (identity as { agentId?: string }).agentId === "string"
       ? (identity as { agentId?: string }).agentId
       : agentId;
-  const avatarValue =
-    resolveAssistantAvatarUrl({
-      avatar: identity.avatar,
-      agentId: resolvedAgentId,
-      basePath,
-    }) ?? identity.avatar;
+  const avatarValue = (() => {
+    if (!config || !resolvedAgentId) {
+      return identity.avatar;
+    }
+    const resolved = resolveAgentAvatar(config, resolvedAgentId);
+    if (resolved.kind === "local") {
+      return buildControlUiAvatarUrl(basePath, resolvedAgentId);
+    }
+    if (resolved.kind === "remote" || resolved.kind === "data") {
+      return resolved.url;
+    }
+    return identity.emoji ?? identity.avatar;
+  })();
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   const raw = fs.readFileSync(indexPath, "utf8");

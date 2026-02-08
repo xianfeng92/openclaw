@@ -27,6 +27,7 @@ import {
 } from "../../utils/message-channel.js";
 import { resolveAssistantIdentity } from "../assistant-identity.js";
 import { parseMessageWithAttachments } from "../chat-attachments.js";
+import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
 import { resolveAssistantAvatarUrl } from "../control-ui-shared.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
 import {
@@ -466,12 +467,20 @@ export const agentHandlers: GatewayRequestHandlers = {
     }
     const cfg = loadConfig();
     const identity = resolveAssistantIdentity({ cfg, agentId });
+    const resolvedAgentId = identity.agentId;
+    const avatarResolution = resolveAgentAvatar(cfg, resolvedAgentId);
     const avatarValue =
-      resolveAssistantAvatarUrl({
-        avatar: identity.avatar,
-        agentId: identity.agentId,
-        basePath: cfg.gateway?.controlUi?.basePath,
-      }) ?? identity.avatar;
+      avatarResolution.kind === "local"
+        ? // Only point the UI at `/avatar/<agentId>` when a local file actually exists.
+          (resolveAssistantAvatarUrl({
+            avatar: identity.avatar,
+            agentId: resolvedAgentId,
+            basePath: cfg.gateway?.controlUi?.basePath,
+          }) ?? identity.avatar)
+        : avatarResolution.kind === "remote" || avatarResolution.kind === "data"
+          ? avatarResolution.url
+          : // Avoid broken <img> URLs when the configured avatar path is missing.
+            identity.emoji ?? identity.avatar;
     respond(true, { ...identity, avatar: avatarValue }, undefined);
   },
   "agent.wait": async ({ params, respond }) => {

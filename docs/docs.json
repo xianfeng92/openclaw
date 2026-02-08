@@ -39,6 +39,14 @@
   },
   "redirects": [
     {
+      "source": "/debugging",
+      "destination": "/development/debugging"
+    },
+    {
+      "source": "/testing",
+      "destination": "/development/testing"
+    },
+    {
       "source": "/cron",
       "destination": "/cron-jobs"
     },

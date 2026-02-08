@@ -9,6 +9,7 @@ import type { Tab } from "./navigation.ts";
 import type { UiSettings } from "./storage.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
+import type { ChatModelId } from "./app.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
@@ -54,6 +55,7 @@ export type AppViewState = {
   chatLoading: boolean;
   chatSending: boolean;
   chatMessage: string;
+  selectedModel: ChatModelId;
   chatAttachments: ChatAttachment[];
   chatMessages: unknown[];
   chatToolMessages: unknown[];

@@ -1502,6 +1502,26 @@
   gap: 10px;
 }
 
+.chat-compose__model {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.chat-compose__model > span {
+  display: none;
+}
+
+.chat-compose__model-select {
+  height: 40px;
+  min-height: 40px;
+  max-width: 220px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .shell--chat .chat-compose {
   position: sticky;
   bottom: 0;

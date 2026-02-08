@@ -1053,9 +1053,9 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "chat"
-            ? renderChat({
-                sessionKey: state.sessionKey,
+	          state.tab === "chat"
+	            ? renderChat({
+	                sessionKey: state.sessionKey,
                 onSessionKeyChange: (next) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
@@ -1083,14 +1083,20 @@ export function renderApp(state: AppViewState) {
                 assistantAvatarUrl: chatAvatarUrl,
                 messages: state.chatMessages,
                 toolMessages: state.chatToolMessages,
-                stream: state.chatStream,
-                streamStartedAt: state.chatStreamStartedAt,
-                draft: state.chatMessage,
-                queue: state.chatQueue,
-                connected: state.connected,
-                canSend: state.connected,
-                disabledReason: chatDisabledReason,
-                error: state.lastError,
+	                stream: state.chatStream,
+	                streamStartedAt: state.chatStreamStartedAt,
+	                draft: state.chatMessage,
+	                selectedModel: state.selectedModel,
+	                onModelChange: (next) => {
+	                  if (next === "gemini" || next === "claude" || next === "gpt") {
+	                    state.selectedModel = next;
+	                  }
+	                },
+	                queue: state.chatQueue,
+	                connected: state.connected,
+	                canSend: state.connected,
+	                disabledReason: chatDisabledReason,
+	                error: state.lastError,
                 sessions: state.sessionsResult,
                 focusMode: chatFocus,
                 onRefresh: () => {

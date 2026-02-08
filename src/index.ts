@@ -29,6 +29,7 @@ import {
 } from "./infra/ports.js";
 import { assertSupportedRuntime } from "./infra/runtime-guard.js";
 import { installUnhandledRejectionHandler } from "./infra/unhandled-rejections.js";
+import { installBrokenPipeHandlers } from "./infra/broken-pipe.js";
 import { enableConsoleCapture } from "./logging.js";
 import { runCommandWithTimeout, runExec } from "./process/exec.js";
 import { assertWebChannel, normalizeE164, toWhatsappJid } from "./utils.js";
@@ -39,6 +40,7 @@ ensureOpenClawCliOnPath();
 
 // Capture all console output into structured logs while keeping stdout/stderr behavior.
 enableConsoleCapture();
+installBrokenPipeHandlers();
 
 // Enforce the minimum supported runtime before doing any work.
 assertSupportedRuntime();

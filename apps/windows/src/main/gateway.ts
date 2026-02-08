@@ -61,6 +61,28 @@ export class GatewayManager extends EventEmitter {
     });
   }
 
+  private async waitForGatewayReady(opts?: { timeoutMs?: number }): Promise<boolean> {
+    const timeoutMs = opts?.timeoutMs ?? 45_000;
+    const startedAt = Date.now();
+    let delayMs = 250;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (this.status === "stopping" || this.status === "stopped") {
+        return false;
+      }
+      if (this.process && this.process.killed) {
+        return false;
+      }
+      if (await this.isGatewayRunning()) {
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+      delayMs = Math.min(Math.floor(delayMs * 1.4), 1_500);
+    }
+
+    return false;
+  }
+
   getState(): GatewayState {
     return {
       status: this.status,
@@ -178,21 +200,15 @@ export class GatewayManager extends EventEmitter {
         }
       });
 
-      // Wait a bit for startup
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          if (this.status === "starting") {
-            this.status = "running";
-            this.emit("state-changed", this.getState());
-          }
-          resolve(null);
-        }, 3000);
+      const ready = await this.waitForGatewayReady();
+      if (!ready) {
+        throw new Error(
+          `Gateway did not become ready on http://127.0.0.1:${this.port}/ within timeout`,
+        );
+      }
 
-        this.process?.once("exit", () => {
-          clearTimeout(timeout);
-          reject(new Error("Gateway process exited during startup"));
-        });
-      });
+      this.status = "running";
+      this.emit("state-changed", this.getState());
 
     } catch (err) {
       this.status = "error";

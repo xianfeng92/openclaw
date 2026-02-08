@@ -194,12 +194,25 @@ function writeConsoleLine(level: LogLevel, line: string) {
       ? line.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "?").replace(/[\uD800-\uDFFF]/g, "?")
       : line;
   const sink = loggingState.rawConsole ?? console;
-  if (loggingState.forceConsoleToStderr || level === "error" || level === "fatal") {
-    (sink.error ?? console.error)(sanitized);
-  } else if (level === "warn") {
-    (sink.warn ?? console.warn)(sanitized);
-  } else {
-    (sink.log ?? console.log)(sanitized);
+  const isBrokenPipeError = (err: unknown): boolean => {
+    const code = (err as NodeJS.ErrnoException | null | undefined)?.code;
+    return code === "EPIPE" || code === "EIO";
+  };
+
+  try {
+    if (loggingState.forceConsoleToStderr || level === "error" || level === "fatal") {
+      (sink.error ?? console.error)(sanitized);
+    } else if (level === "warn") {
+      (sink.warn ?? console.warn)(sanitized);
+    } else {
+      (sink.log ?? console.log)(sanitized);
+    }
+  } catch (err) {
+    // When stdout/stderr is a broken pipe (common for detached/parented processes), ignore.
+    if (isBrokenPipeError(err)) {
+      return;
+    }
+    throw err;
   }
 }
 

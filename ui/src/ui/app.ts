@@ -81,6 +81,8 @@ import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./contro
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 
+export type ChatModelId = "gemini" | "claude" | "gpt";
+
 declare global {
   interface Window {
     __OPENCLAW_CONTROL_UI_BASE_PATH__?: string;
@@ -100,6 +102,28 @@ function resolveOnboardingMode(): boolean {
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function applyModelPrefix(model: ChatModelId, draft: string): string {
+  const text = draft.trim();
+  if (!text) {
+    return draft;
+  }
+
+  // Don’t interfere with slash commands like /stop or /new.
+  if (text.startsWith("/")) {
+    return draft;
+  }
+
+  const ensure = (prefix: string) => (text.startsWith(prefix) ? text : `${prefix} ${text}`);
+
+  if (model === "claude") {
+    return ensure("[claude]");
+  }
+  if (model === "gpt") {
+    return ensure("[gpt]");
+  }
+  return draft;
 }
 
 @customElement("openclaw-app")
@@ -126,6 +150,7 @@ export class OpenClawApp extends LitElement {
   @state() chatLoading = false;
   @state() chatSending = false;
   @state() chatMessage = "";
+  @state() selectedModel: ChatModelId = "gemini";
   @state() chatMessages: unknown[] = [];
   @state() chatToolMessages: unknown[] = [];
   @state() chatStream: string | null = null;
@@ -443,11 +468,27 @@ export class OpenClawApp extends LitElement {
     messageOverride?: string,
     opts?: Parameters<typeof handleSendChatInternal>[2],
   ) {
+    const shouldPrefix = messageOverride == null;
+    const previousDraft = this.chatMessage;
+    const prefixedDraft = shouldPrefix
+      ? applyModelPrefix(this.selectedModel, previousDraft)
+      : previousDraft;
+
+    // Prefer not to mutate the user's draft text; we only rewrite what we send.
+    if (shouldPrefix && prefixedDraft !== previousDraft) {
+      this.chatMessage = prefixedDraft;
+    }
+
     await handleSendChatInternal(
       this as unknown as Parameters<typeof handleSendChatInternal>[0],
       messageOverride,
       opts,
     );
+
+    // If send failed, app-chat restores the previous draft; revert to the user's unprefixed input.
+    if (shouldPrefix && this.chatMessage === prefixedDraft && previousDraft !== prefixedDraft) {
+      this.chatMessage = previousDraft;
+    }
   }
 
   async handleWhatsAppStart(force: boolean) {

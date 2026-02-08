@@ -3,6 +3,7 @@ import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { SessionsListResult } from "../types.ts";
 import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
+import type { ChatModelId } from "../app.ts";
 import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
 import {
   renderMessageGroup,
@@ -35,6 +36,8 @@ export type ChatProps = {
   streamStartedAt: number | null;
   assistantAvatarUrl?: string | null;
   draft: string;
+  selectedModel: ChatModelId;
+  onModelChange: (next: ChatModelId) => void;
   queue: ChatQueueItem[];
   connected: boolean;
   canSend: boolean;
@@ -71,6 +74,22 @@ export type ChatProps = {
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
+
+type ModelOption = {
+  id: ChatModelId;
+  label: string;
+  type: "api" | "cli";
+};
+
+const modelOptions: ModelOption[] = [
+  { id: "gemini", label: "Gemini (API)", type: "api" },
+  { id: "claude", label: "Claude (CLI)", type: "cli" },
+  { id: "gpt", label: "GPT (CLI)", type: "cli" },
+];
+
+function isChatModelId(value: string): value is ChatModelId {
+  return value === "gemini" || value === "claude" || value === "gpt";
+}
 
 function adjustTextareaHeight(el: HTMLTextAreaElement) {
   el.style.height = "auto";
@@ -360,6 +379,23 @@ export function renderChat(props: ChatProps) {
       <div class="chat-compose">
         ${renderAttachmentPreview(props)}
         <div class="chat-compose__row">
+          <label class="field chat-compose__model">
+            <span>Model</span>
+            <select
+              class="chat-compose__model-select"
+              aria-label="Model"
+              title="Model"
+              .value=${props.selectedModel}
+              @change=${(e: Event) => {
+                const next = (e.target as HTMLSelectElement).value;
+                if (isChatModelId(next)) {
+                  props.onModelChange(next);
+                }
+              }}
+            >
+              ${modelOptions.map((opt) => html`<option value=${opt.id}>${opt.label}</option>`)}
+            </select>
+          </label>
           <label class="field chat-compose__field">
             <span>Message</span>
             <textarea

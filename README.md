@@ -47,6 +47,10 @@ pnpm openclaw onboard
 
 See [Development Guide](https://docs.openclaw.ai/development) for details.
 
+### Windows
+
+For Windows-specific setup and desktop app development, see [platform/windows](platform/windows).
+
 ---
 
 ## Documentation
@@ -55,15 +59,17 @@ See [Development Guide](https://docs.openclaw.ai/development) for details.
 - **[Channels](https://docs.openclaw.ai/channels)** — WhatsApp, Telegram, Slack, Discord, etc.
 - **[Concepts](https://docs.openclaw.ai/concepts)** — Architecture, sessions, models
 - **[中文文档](docs/zh-CN)** — 中文概念文档和综合报告
+- **[Windows 平台](platform/windows)** — Windows 一键启动脚本和桌面应用
 - **[Troubleshooting](https://docs.openclaw.ai/troubleshooting)** — Common issues and solutions
 - **[Development](https://docs.openclaw.ai/development)** — Contributing, building, debugging
 
 ## Key Features
 
 - **Single Gateway, Multi-Channel** — One daemon manages all messaging platform connections
-- **WebSocket Architecture** — Control plane clients connect via WebSocket (macOS app, CLI, Web UI)
+- **WebSocket Architecture** — Control plane clients connect via WebSocket (macOS app, Windows app, CLI, Web UI)
 - **Multi-Agent Routing** — Support multiple isolated agent instances with independent workspaces
 - **Plugin System** — Extend functionality with plugins (Mattermost, custom tools)
+- **Desktop Apps** — Native macOS and Windows applications with system tray support
 - **Mobile Nodes** — iOS and Android nodes with Canvas interface support
 
 ---

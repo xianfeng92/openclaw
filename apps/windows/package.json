@@ -1,0 +1,58 @@
+{
+  "name": "openclaw-desktop",
+  "version": "2026.2.6",
+  "description": "OpenClaw Desktop Application for Windows",
+  "main": "dist/main/index.mjs",
+  "author": "OpenClaw",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm build && electron .",
+    "build": "pnpm build:main && pnpm build:preload",
+    "build:main": "tsdown --no-config src/main/index.ts -f esm -d dist/main --target node22 --sourcemap --clean --external electron",
+    "build:preload": "tsdown --no-config src/preload/index.ts -f cjs -d dist/preload --target node22 --sourcemap --no-clean --external electron",
+    "build:prod": "pnpm build && electron-builder --win --x64",
+    "build:dir": "pnpm build && electron-builder --dir",
+    "lint": "oxlint --type-aware",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "ai.openclaw.desktop",
+    "productName": "OpenClaw",
+    "directories": {
+      "output": "dist/installer",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "resources/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "resources/icons/icon.ico",
+      "signAndEditExecutable": false,
+      "signDlls": false,
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "npmRebuild": false
+  }
+}

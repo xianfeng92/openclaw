@@ -1,0 +1,49 @@
+appId: ai.openclaw.desktop
+productName: OpenClaw
+copyright: Copyright © 2026 OpenClaw
+
+# Skip native dependency rebuild
+npmRebuild: false
+
+directories:
+  output: dist/installer
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - resources/**/*
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icons/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: OpenClaw
+  perMachine: false
+  runAfterFinish: true
+
+  # Installer UI
+  installerLanguages:
+    - en_US
+    - zh_CN
+
+  # Uninstaller
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false
+
+# Metadata
+publish:
+  provider: generic
+  url: https://github.com/openclaw/openclaw/releases
+
+# Compression
+compression: maximum

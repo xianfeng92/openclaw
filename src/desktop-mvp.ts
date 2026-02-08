@@ -1,1 +1,1 @@
-export const DESKTOP_MVP_SLIM_MODE = true;
+export const DESKTOP_MVP_SLIM_MODE = false;

@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import type { OpenClawConfig } from "../../config/config.js";
+import { DESKTOP_MVP_SLIM_MODE } from "../../desktop-mvp.js";
 import { isTruthyEnvValue } from "../../infra/env.js";
 import { buildParseArgv, getPrimaryCommand, hasHelpOrVersion } from "../argv.js";
 import { resolveActionArgs } from "./helpers.js";
@@ -12,13 +13,13 @@ type SubCliEntry = {
   register: SubCliRegistrar;
 };
 
-const DISABLED_DESKTOP_MVP_SUBCLIS = new Set([
+const DISABLED_DESKTOP_MVP_SUBCLIS = DESKTOP_MVP_SLIM_MODE ? new Set([
   "channels",
   "plugins",
   "pairing",
   "directory",
   "skills",
-]);
+]) : new Set();
 
 const shouldRegisterPrimaryOnly = (argv: string[]) => {
   if (isTruthyEnvValue(process.env.OPENCLAW_DISABLE_LAZY_SUBCOMMANDS)) {

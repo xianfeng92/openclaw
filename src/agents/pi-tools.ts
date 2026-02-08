@@ -59,7 +59,7 @@ function isOpenAIProvider(provider?: string) {
   return normalized === "openai" || normalized === "openai-codex";
 }
 
-const DESKTOP_MVP_MINIMAL_TOOLSET = true;
+const DESKTOP_MVP_MINIMAL_TOOLSET = false;
 
 function isApplyPatchAllowedForModel(params: {
   modelProvider?: string;

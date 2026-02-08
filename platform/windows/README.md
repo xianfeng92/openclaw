@@ -464,67 +464,53 @@ pnpm openclaw models auth paste-token --provider google
 }
 ```
 
-### 6. 首次配置报错：`memory-core plugin not found`
+### 6. 插件系统说明
 
-**现象**：启动/配置时提示 `plugins.slots.memory: plugin not found: memory-core`（或类似报错）。
+**当前状态**：本版本已启用完整插件生态系统，包括：
 
-**原因**：
-- `plugins.slots.memory` 是一个“独占 slot”，默认会指向 `memory-core`
-- 但在某些本地安装/精简构建里，`memory-core` 可能没有被打包，或者未被插件发现逻辑扫描到（没被发现就会导致配置校验失败）
-- 这会导致配置校验失败，从而阻止 Gateway 正常启动
+- ✅ **消息渠道** (46+): WhatsApp, Telegram, Discord, Slack, Signal, iMessage 等
+- ✅ **插件管理**: `pnpm openclaw plugins list`, `plugins enable`, `plugins disable`
+- ✅ **渠道管理**: `pnpm openclaw channels login`, `channels status`
+- ✅ **内存插件**: `memory-core` (基础) 和 `memory-lancedb` (高级向量存储)
+- ✅ **配对功能**: `pnpm openclaw pairing`
+- ✅ **技能管理**: `pnpm openclaw skills`
 
-**解决**：先禁用 memory slot（不影响 Chat/Gateway 基本使用）
+#### Bundled 插件
+
+本版本包含以下内置插件：
+
+| 插件 | ID | 状态 | 说明 |
+|------|-----|------|------|
+| Memory (Core) | `memory-core` | 默认启用 | 基于文件的内存搜索 |
+| LanceDB Memory | `memory-lancedb` | 可选 | 向量数据库长期内存，支持自动召回/捕获 |
+
+#### 查看插件状态
+
 ```bash
-pnpm openclaw config set plugins.slots.memory none
-```
+# 列出所有插件
+pnpm openclaw plugins list
 
-**影响**：
-- 记忆相关能力会被禁用（例如 `pnpm openclaw memory ...`）
-- 后续如果你需要启用 memory，再改回：
-```bash
-pnpm openclaw config set plugins.slots.memory memory-core
-```
+# 查看内存状态
+pnpm openclaw memory status
 
-#### 想启用 `memory-core` 应该怎么装？
-
-`memory-core` 在很多安装方式里是“随 OpenClaw 一起分发”的 bundled 插件。要让它可用，本质是：
-1. 让插件发现扫描到一个 `memory-core` 插件目录
-2. 该目录里必须包含 `openclaw.plugin.json` 和 `index.ts/js`（插件入口）
-
-OpenClaw 的插件发现会扫描（按优先级）：
-1. `plugins.load.paths`（你手动指定的文件/目录）
-2. `<workspace>/.openclaw/extensions/`
-3. `~/.openclaw(-<profile>)/extensions/`
-4. bundled：`<openclaw>/extensions/`
-
-在 Windows 下，如果你是用 `pnpm openclaw --dev ...` 跑的 dev profile，那么全局扩展目录是：
-- `C:\\Users\\<you>\\.openclaw-dev\\extensions\\`
-
-如果是正式 profile（不带 `--dev`），则是：
-- `C:\\Users\\<you>\\.openclaw\\extensions\\`
-
-**安装方法（推荐）**：
-1. 用官方安装器把 OpenClaw 装好（Windows 推荐走 WSL2）
-2. 在安装位置找到 bundled 的 `extensions\\memory-core\\` 目录（里面应包含 `openclaw.plugin.json`）
-3. 把整个 `memory-core` 目录复制到你正在使用的 profile 的 `...\\extensions\\memory-core\\`
-4. 再执行：
-```bash
-pnpm openclaw config set plugins.slots.memory memory-core
-```
-
-**如何确认当前是否启用/禁用**：
-```bash
+# 查看完整系统状态
 pnpm openclaw status --all
-pnpm openclaw config get plugins.slots.memory
 ```
 
-### 7. `pnpm openclaw plugins ...` 提示 `unknown command 'plugins'`
+#### 启用 LanceDB 高级内存
 
-**原因**：当前这个仓库版本里，`plugins` 子命令在 CLI 注册阶段被禁用，因此不会出现在 `--help` 里，也无法执行。
+LanceDB 插件提供更强大的记忆功能，需要 OpenAI API Key：
 
-**替代方法**：
-- 看插件 slot 配置：`pnpm openclaw config get plugins.slots.memory`
-- 看运行状态汇总：`pnpm openclaw status --all`（包含 Memory Plugin 是否启用及原因）
+```bash
+# 设置 OpenAI API Key
+pnpm openclaw models auth paste-token --provider openai
+
+# 启用 LanceDB 插件
+pnpm openclaw plugins enable memory-lancedb
+
+# 配置内存插槽
+pnpm openclaw config set plugins.slots.memory memory-lancedb
+```
 
 ## 相关文档
 

@@ -23,7 +23,7 @@ Operationalization:
 ## Current State (Snapshot: 2026-02-09)
 
 - Work is on `desktop-mvp-slim`, rebased onto current `origin/main` (no longer behind).
-- Large baseline commit exists: Android/iOS removed; most `extensions/*` removed; Windows desktop app added.
+- Baseline state (from `origin/main`): Android/iOS removed; most `extensions/*` removed; Windows desktop app present.
 - Gates are not green (typecheck/tests/lint/format issues remain).
 
 ## Top Risks / Must-Fix Findings (From Review)
@@ -60,7 +60,7 @@ Green gates (run before push):
 
 Lessons Learned (to append to `AGENTS.md` when Phase 0 completes):
 
-- TBD
+- Completed: appended to `AGENTS.md` (2026-02-09).
 
 ### Phase 1 - Security Hardening (Blockers)
 

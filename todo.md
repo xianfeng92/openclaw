@@ -22,8 +22,8 @@ Operationalization:
 
 ## Current State (Snapshot: 2026-02-09)
 
-- Work is currently on `main`, and local `main` is behind `origin/main` (needs sync/rebase before landing).
-- Very large staged diff (hundreds of files). Android/iOS removed; most `extensions/*` removed; Windows desktop app added.
+- Work is on `desktop-mvp-slim`, rebased onto current `origin/main` (no longer behind).
+- Large baseline commit exists: Android/iOS removed; most `extensions/*` removed; Windows desktop app added.
 - Gates are not green (typecheck/tests/lint/format issues remain).
 
 ## Top Risks / Must-Fix Findings (From Review)
@@ -47,8 +47,16 @@ Operationalization:
 TODO:
 
 - [x] Create a dedicated branch for this work (do not continue directly on `main`). (Created: `desktop-mvp-slim`)
-- [ ] Sync with `origin/main` early so the slim branch is based on current head.
-- [ ] Define "what must stay green" for this slim branch (typecheck, unit tests, gateway tests, desktop build).
+- [x] Sync with `origin/main` early so the slim branch is based on current head. (Rebased: 2026-02-09)
+- [x] Define "what must stay green" for this slim branch.
+
+Green gates (run before push):
+
+- `pnpm check` (typecheck + lint + format)
+- `pnpm build`
+- `pnpm ui:build`
+- `pnpm test` (unit + gateway)
+- Windows desktop: `pnpm --dir apps/windows typecheck` and `pnpm --dir apps/windows build`
 
 Lessons Learned (to append to `AGENTS.md` when Phase 0 completes):
 

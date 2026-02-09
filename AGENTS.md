@@ -187,3 +187,11 @@
 - Publish: `npm publish --access public --otp="<otp>"` (run from the package dir).
 - Verify without local npmrc side effects: `npm view <pkg> version --userconfig "$(mktemp)"`.
 - Kill the tmux session after publish.
+
+## Lessons Learned (Desktop MVP Slim)
+
+### Phase 0 (2026-02-09)
+
+- Rebase onto `origin/main` before doing large "slim" diffs. If upstream already landed similar deletions, your rebase can drop most of your patch, and you need to verify what actually remains.
+- Avoid running `scripts/committer` with broad paths/directories; it uses `git add --force` and can accidentally stage ignored artifacts. Prefer explicit file lists (or `git add -A` when you truly mean "everything except ignored").
+- After any rebase, sanity-check the real delta with `git diff origin/main..HEAD` and `git show --stat` so you do not assume changes landed when they were actually emptied/dropped.

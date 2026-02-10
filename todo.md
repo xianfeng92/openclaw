@@ -74,16 +74,14 @@ Notes:
 - `authorizeGatewayConnect()` no longer skips token/password for localDirect requests (so HTTP endpoints like `/tools/invoke` require auth).
 
 - [x] Restore expected auth semantics and fix affected tests (`src/gateway/auth.test.ts`, `src/gateway/tools-invoke-http.test.ts`).
-- Harden `cli_model` for long-term use:
-- Make it disabled by default (opt-in via config/flag).
-- Restrict `action` to a strict enum / allowlist.
-- Replace shell-string `exec()` with a safe spawn/execFile strategy (no shell injection).
-- Add timeouts, output limits, and integrate with existing exec security/approval policy.
-- Fix `fs_read`:
-- Prevent symlink escape (use `lstat` and/or `realpath` checks).
-- Add max-bytes + truncation for file reads and directory trees.
-- Keep output ASCII-only (no emoji icons).
-- Remove or gate logs that include message content snippets (reply dispatcher, webchat, UI debug logs).
+- [x] `cli_model`: disabled by default (opt-in via `tools.cliModel.enabled`).
+- [x] `cli_model`: restrict `action` to a strict enum / allowlist.
+- [ ] `cli_model`: replace shell-string `exec()` with a safe spawn/execFile strategy (no shell injection).
+- [ ] `cli_model`: add timeouts, output limits, and integrate with existing exec security/approval policy.
+- [ ] `fs_read`: prevent symlink escape (use `lstat` and/or `realpath` checks).
+- [ ] `fs_read`: add max-bytes + truncation for file reads and directory trees.
+- [ ] `fs_read`: keep output ASCII-only (no emoji icons).
+- [ ] Logging: remove or gate logs that include message content snippets (reply dispatcher, webchat, UI debug logs).
 
 Lessons Learned (to append to `AGENTS.md` when Phase 1 completes):
 

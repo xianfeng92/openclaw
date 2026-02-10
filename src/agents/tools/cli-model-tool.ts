@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { OpenClawConfig } from "../../config/config.js";
+import { stringEnum } from "../schema/typebox.js";
 import type { AnyAgentTool } from "./common.js";
 
 const execAsync = promisify(exec);
@@ -12,7 +13,7 @@ const CLI_MODEL_ACTIONS = [
 ] as const;
 
 const CliModelToolSchema = Type.Object({
-  action: Type.String(),
+  action: stringEnum(CLI_MODEL_ACTIONS),
   prompt: Type.String(),
 });
 

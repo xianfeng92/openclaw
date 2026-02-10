@@ -476,6 +476,12 @@ export const ToolsSchema = z
     web: ToolsWebSchema,
     media: ToolsMediaSchema,
     links: ToolsLinksSchema,
+    cliModel: z
+      .object({
+        enabled: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     message: z
       .object({
         allowCrossContextSend: z.boolean().optional(),

@@ -166,6 +166,7 @@ const FIELD_LABELS: Record<string, string> = {
   "tools.links.models": "Link Understanding Models",
   "tools.links.scope": "Link Understanding Scope",
   "tools.profile": "Tool Profile",
+  "tools.cliModel.enabled": "Enable CLI Model Tool",
   "tools.alsoAllow": "Tool Allowlist Additions",
   "agents.list[].tools.profile": "Agent Tool Profile",
   "agents.list[].tools.alsoAllow": "Agent Tool Allowlist Additions",
@@ -448,6 +449,8 @@ const FIELD_HELP: Record<string, string> = {
     "Include full message payloads in trace output (default: true).",
   "diagnostics.cacheTrace.includePrompt": "Include prompt text in trace output (default: true).",
   "diagnostics.cacheTrace.includeSystem": "Include system prompt in trace output (default: true).",
+  "tools.cliModel.enabled":
+    "Enable the cli_model tool (runs local CLI AI tools). Disabled by default.",
   "tools.exec.applyPatch.enabled":
     "Experimental. Enables apply_patch for OpenAI models when allowed by tool policy.",
   "tools.exec.applyPatch.allowModels":

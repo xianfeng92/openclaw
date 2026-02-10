@@ -391,6 +391,14 @@ export type ToolsConfig = {
   };
   media?: MediaToolsConfig;
   links?: LinkToolsConfig;
+  cliModel?: {
+    /**
+     * Enable the cli_model tool (local CLI AI tool runner).
+     *
+     * Default: false.
+     */
+    enabled?: boolean;
+  };
   /** Message tool configuration. */
   message?: {
     /**

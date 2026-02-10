@@ -111,10 +111,14 @@ export function createOpenClawTools(options?: {
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),
-    createCliModelTool({
-      agentSessionKey: options?.agentSessionKey,
-      config: options?.config,
-    }),
+    ...(options?.config?.tools?.cliModel?.enabled === true
+      ? [
+          createCliModelTool({
+            agentSessionKey: options?.agentSessionKey,
+            config: options?.config,
+          }),
+        ]
+      : []),
     createAgentsListTool({
       agentSessionKey: options?.agentSessionKey,
       requesterAgentIdOverride: options?.requesterAgentIdOverride,

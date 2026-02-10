@@ -66,8 +66,14 @@ Lessons Learned (to append to `AGENTS.md` when Phase 0 completes):
 
 TODO:
 
-- Remove or redesign the "localDirect skips auth" behavior. At minimum, require loopback client IP before any bypass, and do not bypass token/password for HTTP endpoints like `/tools/invoke`.
-- Restore expected auth semantics and fix affected tests (`src/gateway/auth.test.ts`, `src/gateway/tools-invoke-http.test.ts`).
+- [x] Remove or redesign the "localDirect skips auth" behavior.
+
+Notes:
+
+- `isLocalDirectRequest()` now requires loopback client IP (no User-Agent/Host-only shortcuts).
+- `authorizeGatewayConnect()` no longer skips token/password for localDirect requests (so HTTP endpoints like `/tools/invoke` require auth).
+
+- [x] Restore expected auth semantics and fix affected tests (`src/gateway/auth.test.ts`, `src/gateway/tools-invoke-http.test.ts`).
 - Harden `cli_model` for long-term use:
 - Make it disabled by default (opt-in via config/flag).
 - Restrict `action` to a strict enum / allowlist.

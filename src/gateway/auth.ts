@@ -109,17 +109,6 @@ export function isLocalDirectRequest(req?: IncomingMessage, trustedProxies?: str
     return false;
   }
 
-  // Check User-Agent for desktop app
-  const userAgent = req.headers?.["user-agent"];
-  if (typeof userAgent === "string" && userAgent.includes("openclaw-desktop")) {
-    // Desktop app connecting from the same machine
-    const host = getHostName(req.headers?.host);
-    const hostIsLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
-    if (hostIsLocal) {
-      return true;
-    }
-  }
-
   const clientIp = resolveRequestClientIp(req, trustedProxies) ?? "";
   if (!isLoopbackAddress(clientIp)) {
     return false;
@@ -257,12 +246,6 @@ export async function authorizeGatewayConnect(params: {
   const { auth, connectAuth, req, trustedProxies } = params;
   const tailscaleWhois = params.tailscaleWhois ?? readTailscaleWhoisIdentity;
   const localDirect = isLocalDirectRequest(req, trustedProxies);
-
-  // Skip auth for local direct requests (desktop app, same machine)
-  // This is safe for desktop applications where the gateway runs locally
-  if (localDirect) {
-    return { ok: true, method: undefined, user: "local" };
-  }
 
   if (auth.allowTailscale && !localDirect) {
     const tailscaleCheck = await resolveVerifiedTailscaleUser({

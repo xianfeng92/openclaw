@@ -4,9 +4,9 @@
 
 Verbatim requirements (from user):
 
-> 1) 无论接下来做什么，都要把计划和 todo 列表放在一个 work.md 或 todo.md 这类文件里。
-> 2) 每完成一个阶段的工作，就把上一阶段的经验教训更新到 agents.md 里。
-> 3) 当一个计划完成并且代码合并后，把这个工作的设计文档添加到项目的知识库中（.codex/knowledge）。
+> 1. 无论接下来做什么，都要把计划和 todo 列表放在一个 work.md 或 todo.md 这类文件里。
+> 2. 每完成一个阶段的工作，就把上一阶段的经验教训更新到 agents.md 里。
+> 3. 当一个计划完成并且代码合并后，把这个工作的设计文档添加到项目的知识库中（.codex/knowledge）。
 
 Operationalization:
 
@@ -138,7 +138,7 @@ TODO:
 - [ ] Replace with a tokenless "auth bridge" approach (TBD): in-app webview seeding localStorage, or a local HTML bridge that seeds storage then redirects, without query params.
 
 - Docs:
-- [ ] Add a short doc on "Desktop Auth" + recovery:
+- [x] Add a short doc on "Desktop Auth" + recovery (`docs/web/dashboard.md`):
 - How token is generated/stored.
 - How to rotate token.
 - How to reset Control UI localStorage if needed.

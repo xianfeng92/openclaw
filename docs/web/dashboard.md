@@ -39,6 +39,37 @@ Prefer localhost, Tailscale Serve, or an SSH tunnel.
 - **Token source**: `gateway.auth.token` (or `OPENCLAW_GATEWAY_TOKEN`); the UI stores a copy in localStorage after you connect.
 - **Not localhost**: use Tailscale Serve (tokenless if `gateway.auth.allowTailscale: true`), tailnet bind with a token, or an SSH tunnel. See [Web surfaces](/web).
 
+## Desktop companion apps
+
+Some OpenClaw desktop apps embed the dashboard (Control UI) in an app window and manage authentication for you.
+
+Security goals:
+
+- Keep gateway auth enabled (token or password).
+- Avoid placing secrets in the URL.
+- Avoid printing secrets to logs.
+- Keep secrets out of process args when possible.
+
+How it typically works:
+
+- The desktop app runs the gateway on a loopback-only address and a known local port.
+- The desktop app generates and stores a random gateway auth token locally.
+- The desktop app injects the token into the gateway process via `OPENCLAW_GATEWAY_TOKEN`.
+- The embedded dashboard stores the token in `localStorage` (key: `openclaw.control.settings.v1`) so reconnects are automatic.
+
+### Recovery and reset
+
+If the embedded dashboard shows `unauthorized` (WS close code 1008) or keeps disconnecting:
+
+1. Restart the gateway from the desktop app (or restart the desktop app).
+2. Rotate the desktop token if your app provides a menu item for it (this forces all embedded dashboard tabs to reconnect).
+3. Clear the dashboard localStorage settings and reload:
+   - Open DevTools for the dashboard page.
+   - Run: `localStorage.removeItem("openclaw.control.settings.v1")`
+   - Reload the page.
+
+If you also open the dashboard in a standalone browser, be aware that the browser may have an old token stored in localStorage. Clearing `openclaw.control.settings.v1` (or using an Incognito window) is the fastest reset.
+
 ## If you see “unauthorized” / 1008
 
 - Ensure the gateway is reachable (local: `openclaw status`; remote: SSH tunnel `ssh -N -L 18789:127.0.0.1:18789 user@host` then open `http://127.0.0.1:18789/`).

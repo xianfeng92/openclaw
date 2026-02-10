@@ -1,609 +1,387 @@
 # Product Requirement Document (PRD)
-# Project Neuro - Desktop AI Agent with Context Awareness
+# Project Neuro - The Ghost in the Machine
 
-| Version | Date | Status |
-|---------|------|--------|
-| 1.0 | 2026-02-10 | Draft |
+> *"It should be like your second brain. It sits there, watching you work, learning your habits. And when you're stuck, it doesn't just hand you a screwdriver—it hands you the screw, already turned."*
 
 ---
 
-## 1. Product Overview
+## 1. The Soul (灵魂)
 
-### 1.1 Vision
+### 1.1 What is Project Neuro?
 
-Project Neuro is a **local-first, desktop AI agent** with real-time context awareness. Unlike traditional chat-based AI assistants, Neuro operates at the OS level, understanding user intent through screen content, clipboard patterns, and project context—then executing actions through a secure permission model.
+**Project Neuro** is not a "Desktop Agent." It is **the Ghost in the Machine** — an invisible second brain that lives in your OS, observes your work, learns your patterns, and anticipates your needs before you even ask.
 
-### 1.2 Core Philosophy
+### 1.2 The Core Philosophy
 
-> **"Context is King, Execution is Queen."**
+> **"Context is Air. Execution is Breath. Delight is Life."**
 
-### 1.3 North Star Metric
+- **Context as Air** — It doesn't "inject" context. Context flows around you constantly, invisible until needed.
+- **Execution as Breath** — Actions happen naturally, like breathing. No permissions, no approvals. Just do it, and let user undo if needed.
+- **Delight as Life** — Speed is not a metric; it's a prerequisite. If it doesn't feel instant, it's broken.
 
-**TTC-60** (Time To Completion < 60 seconds) — From user intent to task completion.
+### 1.3 The Moment
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                           │
+│   A programmer, 2 AM, exhausted.                          │
+│   Screen full of red errors.                             │
+│                                                           │
+│   They press a key.                                      │
+│                                                           │
+│   Boom. Problem solved.                                  │
+│   They smile.                                             │
+│                                                           │
+└─────────────────────────────────────────────────────────┘
+```
+
+This is the only moment that matters. Everything else is just plumbing.
 
 ---
 
-## 2. System Architecture
+## 2. The Experience (用户体验)
 
-### 2.1 High-Level Architecture
+### 2.1 First Encounter
+
+**Day 1**: You install Neuro. Nothing happens. No setup wizard, no "grant permissions." It just... sits there.
+
+You open VS Code. You copy some JSON. In the corner of your screen, a small card floats up:
+
+```
+┌────────────────────────────┐
+│  Formatted JSON              │
+│  [Click to copy]             │
+└────────────────────────────┘
+```
+
+You ignore it. It fades away.
+
+You don't remember installing anything. But days later, you realize: Neuro has been learning.
+
+### 2.2 The Alt+Space Moment
+
+You're working. You hit a wall. You press `Alt+Space`.
+
+**Not "Loading..."**. Not "Thinking...".
+
+**Instant.**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  I've been watching you struggle with this API for 20 min │
+│                                                           │
+│  The auth token is expired. Here's the fix:            │
+│  → Regenerate token (click)                              │
+│  → Show me where to change it (click)                   │
+│                                                           │
+│  [Or just tell me what to do next]                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+Not "What can I help you with?" — It already knows what you need.
+
+### 2.3 The Invisible Assistant
+
+- **Clipboard**: Copy an error → Floating card appears with analysis
+- **Screen**: Copy a curl command → Shows formatted version with placeholders
+- **Project context**: It knows your project structure because it watched you build it
+
+**No buttons to click. No menus to navigate.**
+
+**It appears. It delivers. It disappears.**
+
+---
+
+## 3. The Architecture (Invisible)
+
+### 3.1 The Ghost Layer (Context as Air)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      User Interface Layer                    │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
-│  │ Spotlight   │  │ Chat Window  │  │ Intent Pills   │    │
-│  │ Launcher    │  │              │  │ (Tray)         │    │
-│  └─────────────┘  └──────────────┘  └─────────────────┘    │
-├─────────────────────────────────────────────────────────────┤
-│                    Decision Layer (LLM Brain)               │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
-│  │ Intent      │  │ Task         │  │ Security        │    │
-│  │ Recognition │  │ Planning     │  │ Auditor         │    │
-│  └─────────────┘  └──────────────┘  └─────────────────┘    │
-├─────────────────────────────────────────────────────────────┤
-│                  Perception Layer (Context Manager)          │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
-│  │ Screen      │  │ Clipboard    │  │ Vector Memory   │    │
-│  │ Capture     │  │ Watcher      │  │ (RAG)           │    │
-│  └─────────────┘  └──────────────┘  └─────────────────┘    │
-├─────────────────────────────────────────────────────────────┤
-│                   Execution Layer (OpenClaw Engine)          │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
-│  │ File System │  │ Shell/Process│  │ Browser/Screen  │    │
-│  │ Tools       │  │ Tools        │  │ Automation      │    │
-│  └─────────────┘  └──────────────┘  └─────────────────┘    │
+│                      The OS Environment                       │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ User typing in VS Code                                   │  │
+│  │ Copying JSON from browser                               │  │
+│  │ Running tests in terminal                                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                         ↓                                     │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ Neuro Context Stream (always flowing, never stored)      │  │
+│  │ • Active window state                                    │  │
+│  │ • Clipboard content (last 30s)                          │  │
+│  │ • Recent terminal output                                │  │
+│  │ • File system events in cwd                              │  │
+│  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Technology Stack
+**Key Principle**: Context is **streaming**, not static. Neuro doesn't "capture" context when summoned — it maintains a **rolling buffer** of everything happening on your machine.
 
-| Layer | Technology |
-|-------|------------|
-| **Desktop Framework** | Electron (Tauri as alternative) |
-| **Backend Runtime** | Python 3.11+ / FastAPI |
-| **LLM Integration** | LiteLLM / LangChain |
-| **Vector Database** | ChromaDB / SQLite-VSS |
-| **OCR/Vision** | Tesseract / Apple Vision Framework |
-| **Window Detection** | pygetwindow / Quartz (macOS) |
-| **GUI Automation** | PyAutoGUI / Playwright |
+### 3.2 The Brain Layer (Anticipation)
+
+```
+Trigger Threshold: User pauses for > 2s with clipboard containing pattern
+                  ↓
+┌───────────────────────────────────────────────────────────┐
+│  Neuro Brain:                                               │
+│  │ • User has been debugging for 45 min                   │
+│  │ • Same error occurred 3 times last week                 │
+│  │ • Project uses TypeScript, strict mode                │
+│  │ • User prefers auto-fix over manual explanation        │
+│  └───────────────────────────────────────────────────────────┘
+                  ↓
+┌───────────────────────────────────────────────────────────┐
+│  Predictive Action:                                        │
+│  │ • Don't ask. Don't explain. Just show the diff.        │
+│  │ • One-click to apply, one-click to dismiss.            │
+│  └───────────────────────────────────────────────────────────┘
+```
+
+### 3.3 The Hand Layer (Execution with Undo)
+
+**The New Permission Model: "Trust by Default, Revertible by Design"**
+
+| Action Type | Behavior | Fallback |
+|-------------|----------|----------|
+| **Read anything** | Silent, invisible | N/A |
+| **Write temp files** | Silent, invisible | Auto-cleanup after 1h |
+| **Write project files** | Apply to temp, show **live diff**, user clicks or it auto-applies after 10s | Undo in 1 click |
+| **Run shell command** | Run in sandbox, show output, auto-confirm safe commands | Virtual terminal replay |
+| **Delete files** | Move to holding area, auto-delete after 5min unless cancelled | 1-click restore |
+
+**Key Principle**: The question is not "Can I do this?" but "Did I do this right?"
 
 ---
 
-## 3. Core Modules
+## 4. The Interface (Organic, Not Mechanical)
 
-### 3.1 Context Manager Module
+### 4.1 No "States", Just "Pulse"
 
-**Purpose**: Transform unstructured environment data into structured context objects for LLM consumption.
+```
+Traditional Agent:
+[Loading...] → [Thinking...] → [Approving...] → [Running...]
 
-#### 3.1.1 Visual Context Injection
-
-**Requirements**:
-- Detect active window (app name, window title)
-- Extract selected text via accessibility APIs
-- Fallback to screenshot + OCR when accessibility fails
-- Privacy: detect and redact password fields, credit card numbers
-
-**API Specification**:
-```python
-class ScreenContext(NamedTuple):
-    app_name: str
-    window_title: str
-    selected_text: Optional[str]
-    ocr_summary: Optional[str]
-    timestamp: datetime
-
-def capture_screen_context() -> ScreenContext:
-    """Capture current screen context with privacy filtering."""
-    pass
+Neuro:
+• A subtle glow when active
+• A "breathing" animation when processing
+• Results fade in, they don't "appear"
 ```
 
-#### 3.1.2 Clipboard Watcher
+### 4.2 The Spotlight
 
-**Requirements**:
-- Monitor clipboard changes every 500ms
-- Detect patterns and trigger proactive suggestions
-- Pattern matching rules:
-
-| Pattern | Action | Suggestion |
-|---------|--------|------------|
-| `{".*": ".*"}` | Format/Convert | "Detected JSON - Format or Convert?" |
-| `Error.*Exception.*` | Debug/Analyze | "Error detected - Debug or Analyze?" |
-| `curl.*` | Execute/Query | "curl command - Execute or Query?" |
-| `https://.*zoom\.us` | Join/Calendar | "Meeting link - Join or Add to Calendar?" |
-
-**API Specification**:
-```python
-from dataclasses import dataclass
-from enum import Enum
-
-class ContentType(Enum):
-    TEXT = "text/plain"
-    JSON = "application/json"
-    ERROR_STACK = "error/stack"
-    COMMAND = "command/shell"
-    MEETING_LINK = "uri/meeting"
-
-@dataclass
-class ClipboardEvent:
-    content: str
-    content_type: ContentType
-    timestamp: datetime
-    suggestion: Optional[str] = None
-
-class ClipboardWatcher:
-    def __init__(self, callback: Callable[[ClipboardEvent], None]):
-        pass
-
-    def detect_content_type(self, content: str) -> ContentType:
-        pass
-
-    def start_watching(self):
-        pass
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                           │
+│                    I see you're stuck on:               │
+│                    [No route found for /api/users]     │
+│                                                           │
+│                    In your Express app, line 42:          │
+│                    The route is defined in              │
+│                    `routes/api.ts` but the file has      │
+│                    been moved to `routes/users.ts`       │
+│                                                           │
+│                    [Fix it now]     [Explain more]         │
+│                                                           │
+└─────────────────────────────────────────────────────────┘
 ```
 
-#### 3.1.3 RAG Memory System
+**No search bar. No "Type your question."** It already knows.
 
-**Requirements**:
-- Vector similarity search for project documentation
-- Global user profile storage
-- Auto-detect project root via `.git` directory
-- Relevance scoring for memory retrieval
+### 4.3 The Corner Card
 
-**API Specification**:
-```python
-@dataclass
-class MemoryContext:
-    relevant_docs: List[str]  # File paths or content snippets
-    user_preferences: List[str]
-    project_context: Optional[str]
-
-class MemoryRetriever:
-    def retrieve(self, query: str, project_root: str) -> MemoryContext:
-        pass
-
-    def store(self, key: str, value: str, category: str):
-        pass
+```
+┌──────────────────────┐
+│  📋 Pasted JSON       │
+│  ──────────────────  │
+│  {                   │
+│    "user": "..."    │
+│  }                   │
+│  ──────────────────  │
+│  [Formatted] [Raw]    │
+└──────────────────────┘
 ```
 
-#### 3.1.4 Unified Context Schema
-
-```python
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime
-
-class ScreenInfo(BaseModel):
-    app_name: str
-    window_title: str
-    selected_text: Optional[str] = None
-    ocr_summary: Optional[str] = None
-
-class ClipboardInfo(BaseModel):
-    content_type: str
-    preview: str
-    full_content: Optional[str] = None
-
-class MemoryInfo(BaseModel):
-    relevant_docs: List[str] = []
-    user_preferences: List[str] = []
-
-class SystemInfo(BaseModel):
-    os: str
-    cwd: str
-    timestamp: datetime
-
-class NeuroContext(BaseModel):
-    user_query: str
-    screen: ScreenInfo
-    clipboard: ClipboardInfo
-    memory: MemoryInfo
-    system: SystemInfo
-
-    def to_llm_prompt(self) -> str:
-        """Convert to LLM-friendly prompt format."""
-        pass
-```
-
-### 3.2 Interaction Layer
-
-#### 3.2.1 Spotlight Launcher
-
-**Requirements**:
-- Global hotkey: `Alt+Space` (configurable)
-- Minimal input interface
-- Context indicators in UI
-
-**UI Specification**:
-```
-┌─────────────────────────────────────────┐
-│  🔎 [Eye] [Brain]                       │
-│  ┌─────────────────────────────────┐   │
-│  │ What would you like to do?      │   │
-│  └─────────────────────────────────┘   │
-│  Context: VS Code | ProjectNeuro       │
-└─────────────────────────────────────────┘
-```
-
-#### 3.2.2 Adaptive Chat Interface
-
-**Requirements**:
-- Dark mode, spacious design
-- State visualization: Thinking → Approving → Running
-- Diff view for file operations (Level 2 permissions)
-
-### 3.3 Execution Engine
-
-#### 3.3.1 Tool System
-
-**Built-in Tools**:
-```python
-# tools/file_tool.py
-@tool(level=PermissionLevel.SAFE)
-def read_file(path: str, max_lines: int = 1000) -> str:
-    """Read file contents with sandbox restrictions."""
-    pass
-
-@tool(level=PermissionLevel.CRITICAL)
-def write_file(path: str, content: str, create_backup: bool = True) -> bool:
-    """Write file with user confirmation and backup."""
-    pass
-
-# tools/shell_tool.py
-@tool(level=PermissionLevel.CRITICAL, requires_approval=True)
-def execute_command(command: str, cwd: Optional[str] = None) -> CommandResult:
-    """Execute shell command with explicit approval."""
-    pass
-
-# tools/screen_tool.py
-@tool(level=PermissionLevel.SENSITIVE)
-def capture_screen(region: Optional[Rect] = None) -> Image:
-    """Capture screen region for OCR/analysis."""
-    pass
-```
-
-### 3.4 Security & Governance
-
-#### 3.4.1 Permission Matrix
-
-| Level | Description | Examples | Approval |
-|-------|-------------|----------|----------|
-| **Level 0: Safe** | Read-only, no side effects | Clipboard read, screen capture, search | None (Auto-approve) |
-| **Level 1: Sensitive** | Read private data, write temp | Read non-sandbox files, write temp, GET requests | Toast notification |
-| **Level 2: Critical** | Destructive operations | Overwrite files, delete, shell exec, POST requests | Modal + Diff view |
-
-#### 3.4.2 Audit Log
-
-**Location**: `~/.neuro/audit.log`
-
-**Format**:
-```json
-{
-  "timestamp": "2026-02-10T22:00:00Z",
-  "level": 2,
-  "action": "write_file",
-  "params": {"path": "/path/to/file.py", "operation": "overwrite"},
-  "user_intent": "Fix the bug in main function",
-  "approved": true,
-  "result": "success"
-}
-```
+- Appears 2s after paste
+- Auto-formats based on project conventions
+- One click copies to clipboard
+- Fades after 10s or user clicks away
 
 ---
 
-## 4. Development Specifications for AI Implementation
+## 5. The Learning Curve (Invisible)
 
-### 4.1 Project Structure
+### 5.1 Day 1: Invisible
 
-```
-project_neuro/
-├── src/
-│   ├── context/
-│   │   ├── screen.py          # Screen capture & OCR
-│   │   ├── clipboard.py       # Clipboard monitoring
-│   │   ├── memory.py          # Vector DB & RAG
-│   │   └── schema.py          # Pydantic models
-│   ├── execution/
-│   │   ├── tools/             # Built-in tools
-│   │   ├── permission.py      # Permission matrix
-│   │   └── orchestrator.py    # Task planning
-│   ├── ui/
-│   │   ├── launcher.py        # Spotlight interface
-│   │   ├── chat.py            # Chat window
-│   │   └── permissions.py     # Approval dialogs
-│   └── main.py                # Application entry
-├── storage/
-│   ├── vector_db/             # ChromaDB persistence
-│   └── audit.log             # Audit trail
-├── tests/
-└── requirements.txt
-```
+- Neuro installs silently
+- Observes without interfering
+- Builds baseline of your patterns
 
-### 4.2 Implementation Priority
+### 5.2 Day 7: Helpful
 
-**Phase 1 - MVP (Week 1-2)**
-1. Implement `schema.py` with all Pydantic models
-2. Build `screen.py` with active window detection
-3. Create `clipboard.py` with pattern matching
-4. Implement basic launcher UI with hotkey activation
+- Starts recognizing common patterns
+- Offers unobtrusive suggestions
+- Learns which suggestions you accept, which you dismiss
 
-**Phase 2 - Execution (Week 3-4)**
-1. Implement tool system with permission levels
-2. Build approval dialog system
-3. Add audit logging
-4. Connect to LLM API (LiteLLM)
+### 5.3 Day 30: Integrated
 
-**Phase 3 - Memory (Week 5-6)**
-1. Integrate ChromaDB for vector storage
-2. Implement project context detection
-3. Build RAG retrieval pipeline
+- Knows your project structure
+- Anticipates your next move
+- Becomes genuinely useful
 
-### 4.3 Sample Implementation Code
+---
 
-#### File: `src/context/schema.py`
+## 6. Technical Foundation
+
+### 6.1 The Rolling Context Buffer
 
 ```python
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime
-from enum import Enum
+class ContextStream:
+    """Maintains a rolling window of system context."""
 
-class ContentType(str, Enum):
-    TEXT = "text/plain"
-    JSON = "application/json"
-    ERROR = "error/stack"
-    COMMAND = "command/shell"
-    MEETING = "uri/meeting"
-
-class ScreenInfo(BaseModel):
-    """Structured screen context information."""
-    app_name: str = Field(description="Active application name")
-    window_title: str = Field(description="Active window title")
-    selected_text: Optional[str] = Field(None, description="Selected text content")
-    ocr_summary: Optional[str] = Field(None, description="OCR extracted text")
-
-class ClipboardInfo(BaseModel):
-    """Clipboard content with type detection."""
-    content_type: ContentType
-    preview: str = Field(max_length=200, description="Content preview")
-    full_content: Optional[str] = None
-    detected_pattern: Optional[str] = Field(None, description="Matched heuristic pattern")
-
-class MemoryInfo(BaseModel):
-    """Retrieved memory from vector store."""
-    relevant_docs: List[str] = Field(default_factory=list)
-    user_preferences: List[str] = Field(default_factory=list)
-    project_context: Optional[str] = None
-
-class NeuroContext(BaseModel):
-    """Unified context object for LLM consumption."""
-    user_query: str
-    screen: ScreenInfo
-    clipboard: ClipboardInfo
-    memory: MemoryInfo
-    system_os: str
-    system_cwd: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-    def to_llm_prompt(self) -> str:
-        """Format context for LLM prompt injection."""
-        parts = [
-            f"User Query: {self.user_query}",
-            f"Current App: {self.screen.app_name}",
-        ]
-        if self.screen.selected_text:
-            parts.append(f"Selected Text: {self.screen.selected_text}")
-        if self.clipboard.detected_pattern:
-            parts.append(f"Clipboard: {self.clipboard.detected_pattern} detected")
-        if self.memory.relevant_docs:
-            parts.append(f"Relevant Docs: {', '.join(self.memory.relevant_docs)}")
-        return "\n".join(parts)
-```
-
-#### File: `src/context/clipboard.py`
-
-```python
-import re
-import time
-import threading
-from typing import Callable, Optional
-from datetime import datetime
-import pyperclip  # pip install pyperclip
-from .schema import ClipboardInfo, ContentType
-
-class ClipboardWatcher:
-    """Monitor clipboard and detect patterns for proactive suggestions."""
-
-    # Pattern detection rules
-    PATTERNS = {
-        'json': re.compile(r'^\s*\{.*\}\s*$', re.DOTALL),
-        'error': re.compile(r'(Error|Exception|Traceback|Failed)', re.IGNORECASE),
-        'curl': re.compile(r'^curl\s+'),
-        'meeting': re.compile(r'(zoom\.us|meet\.google\.com|teams\.microsoft\.com)'),
-    }
-
-    SUGGESTIONS = {
-        'json': "Format JSON or Convert to other format?",
-        'error': "Debug error or Analyze stack trace?",
-        'curl': "Execute curl command or Test API?",
-        'meeting': "Join meeting or Add to calendar?",
-    }
-
-    def __init__(self, callback: Callable[[ClipboardInfo], None]):
-        self.callback = callback
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._last_content = ""
-
-    def _detect_content_type(self, content: str) -> ContentType:
-        """Detect clipboard content type."""
-        content = content.strip()
-        if self.PATTERNS['json'].match(content):
-            return ContentType.JSON
-        if self.PATTERNS['error'].search(content):
-            return ContentType.ERROR
-        if self.PATTERNS['curl'].match(content):
-            return ContentType.COMMAND
-        if self.PATTERNS['meeting'].search(content):
-            return ContentType.MEETING
-        return ContentType.TEXT
-
-    def _get_suggestion(self, content_type: ContentType) -> Optional[str]:
-        """Get proactive suggestion based on content type."""
-        type_map = {
-            ContentType.JSON: 'json',
-            ContentType.ERROR: 'error',
-            ContentType.COMMAND: 'curl',
-            ContentType.MEETING: 'meeting',
-        }
-        key = type_map.get(content_type)
-        return self.SUGGESTIONS.get(key) if key else None
-
-    def _watch_loop(self):
-        """Main clipboard monitoring loop."""
-        while self._running:
-            try:
-                content = pyperclip.paste()
-                if content and content != self._last_content:
-                    self._last_content = content
-                    content_type = self._detect_content_type(content)
-                    suggestion = self._get_suggestion(content_type)
-
-                    event = ClipboardInfo(
-                        content_type=content_type,
-                        preview=content[:200],
-                        full_content=content if len(content) <= 500 else content[:500],
-                        detected_pattern=suggestion
-                    )
-                    self.callback(event)
-            except Exception:
-                pass  # Clipboard may not be available
-            time.sleep(0.5)  # Poll every 500ms
-
-    def start(self):
-        """Start clipboard monitoring in background thread."""
-        if not self._running:
-            self._running = True
-            self._thread = threading.Thread(target=self._watch_loop, daemon=True)
-            self._thread.start()
-
-    def stop(self):
-        """Stop clipboard monitoring."""
-        self._running = False
-```
-
-#### File: `src/execution/permission.py`
-
-```python
-from enum import Enum
-from dataclasses import dataclass
-from typing import Optional, Any
-
-class PermissionLevel(int, Enum):
-    """Permission levels with increasing sensitivity."""
-    SAFE = 0      # Read-only, no side effects
-    SENSITIVE = 1  # Read private data, write temp
-    CRITICAL = 2  # Destructive operations
-
-@dataclass
-class PermissionRequest:
-    """A request requiring user approval."""
-    level: PermissionLevel
-    tool_name: str
-    description: str
-    parameters: dict
-    diff: Optional[str] = None  # For file operations, show diff
-
-    @property
-    def requires_approval(self) -> bool:
-        """Check if this request requires explicit user approval."""
-        return self.level >= PermissionLevel.CRITICAL
-
-    @property
-    def requires_notification(self) -> bool:
-        """Check if this request requires at least a toast notification."""
-        return self.level >= PermissionLevel.SENSITIVE
-
-class PermissionManager:
-    """Manages permission requests and approvals."""
+    WINDOW_SIZE = 30  # seconds
 
     def __init__(self):
-        self._audit_log_path = "~/.neuro/audit.log"
+        self.screen_state = {}   # Current window, selection
+        self.clipboard_ring = []  # Last N clipboard items
+        self.terminal_output = [] # Recent terminal lines
+        self.file_events = []     # Recent file changes
 
-    def request_permission(self, request: PermissionRequest) -> bool:
-        """
-        Request permission for an action.
-
-        Returns:
-            True if approved, False otherwise.
-        """
-        if not request.requires_approval:
-            # Log but don't ask user
-            self._log_audit(request, approved=True)
-            return True
-
-        # Show approval dialog (to be implemented in UI layer)
-        approved = self._show_approval_dialog(request)
-        self._log_audit(request, approved=approved)
-        return approved
-
-    def _show_approval_dialog(self, request: PermissionRequest) -> bool:
-        """Show approval dialog to user. To be connected to UI."""
-        # This will be implemented as an async event that the UI subscribes to
+    def tick(self):
+        """Called every 100ms. Updates all buffers."""
+        # Non-blocking. Always flowing.
         pass
+```
 
-    def _log_audit(self, request: PermissionRequest, approved: bool):
-        """Log all permission requests to audit file."""
-        import json
-        from datetime import datetime
-        import os
+### 6.2 The Prediction Engine
 
-        log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "level": request.level,
-            "tool": request.tool_name,
-            "description": request.description,
-            "approved": approved,
-        }
+```python
+class Predictor:
+    """Predicts user intent from context patterns."""
 
-        # Ensure audit directory exists
-        audit_dir = os.path.expanduser("~/.neuro")
-        os.makedirs(audit_dir, exist_ok=True)
+    def predict(self, context: ContextStream) -> PredictedAction:
+        """
+        Analyze context stream and return:
+        - action: What the user likely needs
+        - confidence: How sure we are
+        - timing: When to show it
+        """
+        # If user paused for 2s + has error in clipboard → Offer help
+        # If user copied code + is in test file → Offer to run tests
+        # If user opened file + scrolled to bottom → Offer to add function
+```
 
-        audit_path = os.path.join(audit_dir, "audit.log")
-        with open(audit_path, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
+### 6.3 The Sandbox Executor
+
+```python
+class SandboxExecutor:
+    """Execute actions in reversible ways."""
+
+    def write_file(self, path: str, content: str):
+        """Write to temp, show diff, apply or revert on user action."""
+        # 1. Write to temp location
+        # 2. Show live diff to user
+        # 3. Auto-apply after 10s OR user clicks
+        # 4. Keep 1-click undo for 5 minutes
+        pass
 ```
 
 ---
 
-## 5. Acceptance Criteria
+## 7. The Metrics (That Actually Matter)
 
-### 5.1 Functional Requirements
+### 7.1 Time to First Delight
 
-| ID | Requirement | Priority |
-|----|------------|----------|
-| FR-1 | Alt+Space launches input interface | P0 |
-| FR-2 | System detects active window and extracts title | P0 |
-| FR-3 | Clipboard patterns trigger proactive suggestions | P1 |
-| FR-4 | Level 2 permissions require explicit approval | P0 |
-| FR-5 | All actions logged to audit file | P0 |
-| FR-6 | RAG retrieval returns relevant project docs | P1 |
+**Definition**: From installation to the first moment the user says "Wow."
 
-### 5.2 Non-Functional Requirements
+**Target**: < 7 days (because true learning takes time)
 
-| ID | Requirement | Target |
-|----|------------|--------|
-| NFR-1 | Launcher response time | < 100ms |
-| NFR-2 | Context injection latency | < 500ms |
-| NFR-3 | Memory footprint | < 200MB idle |
-| NFR-4 | CPU usage when idle | < 1% |
+### 7.2 Invisible Latency
+
+**Definition**: Time from user intent to visible response.
+
+**Target**: < 200ms (feels instant)
+
+### 7.3 Voluntary Usage
+
+**Definition**: % of Neuro suggestions that user accepts.
+
+**Target**: > 60% (if it's lower, we're being annoying)
 
 ---
 
-## 6. Open Questions
+## 8. Implementation Roadmap (Story-Driven)
 
-| ID | Question | Target Resolution |
-|----|----------|-------------------|
-| OQ-1 | Windows compatibility strategy | Use pywin32 for Windows APIs |
-| OQ-2 | Local vs cloud model selection | Support both via LiteLLM |
-| OQ-3 | Multi-monitor support | Detect primary display only for MVP |
+### Sprint 1: The Ghost Appears (Week 1-2)
+- [ ] Silent installer
+- [ ] Rolling context buffer (screen + clipboard only)
+- [ ] First predictive action: JSON formatter card
+- ] ] ] Alt+Space with context-aware suggestions
+
+### Sprint 2: Learning to Watch (Week 3-4)
+- [ ] Pattern recognition engine
+- [ ] Project context detection (.git root)
+- [ ] Sandbox executor with undo
+- [ ] Memory: remembers user preferences
+
+### Sprint 3: Reading Minds (Week 5-6)
+- [ ] Terminal output monitoring
+- [ ] File system event watching
+- [ ] Multi-app coordination (VS Code + Browser + Terminal)
+- [ ] The "I knew you were going to do that" feature
+
+---
+
+## 9. For the Developers (The Real PRD)
+
+### 9.1 User Stories
+
+> **As a深夜调试的程序员**
+> I want Neuro to notice I'm stuck on the same error for the third time
+> So it can just show me the solution without me asking
+
+> **As a复制JSON的开发者**
+> I want Neuro to silently format it in the background
+> So I can just paste it where I need it
+
+> **As a忘记API key的开发者**
+> I want Neuro to remind me of the config file location
+> Because it watched me set it up 3 weeks ago
+
+### 9.2 Non-Functional Requirements
+
+| Requirement | Why It Matters |
+|-------------|-----------------|
+| **Latency < 200ms** | Below human perception threshold |
+| **Memory < 150MB idle** | Users won't tolerate resource hogs |
+| **No configuration file** | If it needs setup, 90% won't use it |
+| **Privacy-first** | All context stays local, period |
+
+### 9.3 Technical Stack
+
+| Layer | Technology | Why |
+|-------|------------|-----|
+| Desktop wrapper | Tauri (Rust) | Small, fast, no Electron bloat |
+| Runtime | Python 3.11+ | For ML/AI libraries |
+| OCR | Apple Vision / Tesseract | Native APIs where possible |
+| Vector DB | SQLite-VSS | Embedded, no separate server |
+| LLM | Local-first with cloud fallback | LiteLLM API |
+
+---
+
+## 10. The Closing Argument
+
+**Why this matters:**
+
+Because the future of AI assistants isn't better chatbots.
+
+The future is **AI that becomes invisible**. AI that doesn't need to be summoned because it's already there. AI that doesn't ask for permissions because it earns trust through action.
+
+**Neuro is not an app you use. It's an app that uses you.**
+
+Or rather — it's an app that **watches** you use yourself, and gently, occasionally, invisibly... helps.
+
+---
+
+*"The best technology is invisible. It just works."*
+
+— Someone who knew what they were talking about

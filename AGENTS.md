@@ -195,3 +195,10 @@
 - Rebase onto `origin/main` before doing large "slim" diffs. If upstream already landed similar deletions, your rebase can drop most of your patch, and you need to verify what actually remains.
 - Avoid running `scripts/committer` with broad paths/directories; it uses `git add --force` and can accidentally stage ignored artifacts. Prefer explicit file lists (or `git add -A` when you truly mean "everything except ignored").
 - After any rebase, sanity-check the real delta with `git diff origin/main..HEAD` and `git show --stat` so you do not assume changes landed when they were actually emptied/dropped.
+
+### Phase 1 (2026-02-10)
+
+- Treat "local" shortcuts as hostile by default: only trust loopback source IP (not spoofable headers), and keep HTTP endpoints behind auth even for localDirect traffic.
+- Long-lived tool capabilities (like `cli_model`) must share the same exec approvals/allowlist enforcement as `tools.exec`; add timeouts/output caps, and do not echo prompts/outputs into `details` or logs.
+- Workspace read tools must defend against symlink/junction escapes with `realpath` boundary checks; cap bytes/entries; keep tool-generated directory output ASCII-only.
+- Logging review needs to be end-to-end (gateway/webchat, reply dispatcher, embedded subscribe, UI): log only metadata (lengths/ids), not message content snippets.

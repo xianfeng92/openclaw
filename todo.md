@@ -85,7 +85,7 @@ Notes:
 
 Lessons Learned (to append to `AGENTS.md` when Phase 1 completes):
 
-- TBD
+- Completed: appended to `AGENTS.md` (2026-02-10).
 
 ### Phase 2 - Typecheck / Lint / Format Green
 

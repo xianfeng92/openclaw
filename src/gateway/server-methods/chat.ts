@@ -481,12 +481,12 @@ export const chatHandlers: GatewayRequestHandlers = {
         agentId,
         channel: INTERNAL_MESSAGE_CHANNEL,
       });
-	      const finalReplyParts: string[] = [];
-	      let agentRunId: string | null = null;
-	      const dispatcher = createReplyDispatcher({
-	        ...prefixOptions,
-	        onError: (err) => {
-	          context.logGateway.warn(`webchat dispatch failed: ${formatForLog(err)}`);
+      const finalReplyParts: string[] = [];
+      let agentRunId: string | null = null;
+      const dispatcher = createReplyDispatcher({
+        ...prefixOptions,
+        onError: (err) => {
+          context.logGateway.warn(`webchat dispatch failed: ${formatForLog(err)}`);
         },
         deliver: async (payload, info) => {
           context.logGateway.info(
@@ -516,13 +516,13 @@ export const chatHandlers: GatewayRequestHandlers = {
           abortSignal: abortController.signal,
           images: parsedImages.length > 0 ? parsedImages : undefined,
           disableBlockStreaming: true,
-	          onAgentRunStart: (runId) => {
-	            agentRunStarted = true;
-	            agentRunId = runId;
-	            const connId = typeof client?.connId === "string" ? client.connId : undefined;
-	            const wantsToolEvents = hasGatewayClientCap(
-	              client?.connect?.caps,
-	              GATEWAY_CLIENT_CAPS.TOOL_EVENTS,
+          onAgentRunStart: (runId) => {
+            agentRunStarted = true;
+            agentRunId = runId;
+            const connId = typeof client?.connId === "string" ? client.connId : undefined;
+            const wantsToolEvents = hasGatewayClientCap(
+              client?.connect?.caps,
+              GATEWAY_CLIENT_CAPS.TOOL_EVENTS,
             );
             if (connId && wantsToolEvents) {
               context.registerToolEventRecipient(runId, connId);
@@ -536,10 +536,10 @@ export const chatHandlers: GatewayRequestHandlers = {
           onModelSelected,
         },
       })
-	        .then(() => {
-	          context.logGateway.info(
-	            `[webchat] dispatch settled: agentRunStarted=${agentRunStarted}, finalReplyParts count=${finalReplyParts.length}`,
-	          );
+        .then(() => {
+          context.logGateway.info(
+            `[webchat] dispatch settled: agentRunStarted=${agentRunStarted}, finalReplyParts count=${finalReplyParts.length}`,
+          );
           // Combine final reply parts from the dispatcher (for cases where agent didn't emit assistant events)
           const combinedReply = finalReplyParts
             .map((part) => part.trim())
@@ -547,30 +547,30 @@ export const chatHandlers: GatewayRequestHandlers = {
             .join("\n\n")
             .trim();
 
-	          // Broadcast final reply if we have content from dispatcher
-	          // This handles both directive-only commands (agentRunStarted=false) and
-	          // agent runs that didn't emit assistant events but have dispatcher replies
-	          const agentSeq =
-	            agentRunId && agentRunId.trim() ? context.agentRunSeq.get(agentRunId) : undefined;
-	          const sawAnyAgentEvents = typeof agentSeq === "number" && agentSeq > 0;
-	          const sawAnyChatDelta =
-	            context.chatDeltaSentAt.has(clientRunId) || context.chatRunBuffers.has(clientRunId);
-	          const shouldBroadcastDispatcherReply =
-	            Boolean(combinedReply) &&
-	            // Directive-only commands.
-	            (!agentRunStarted ||
-	              // Agent started but we never observed agent bus events and no chat deltas were emitted.
-	              // In that case, the only user-visible output is the dispatcher reply; broadcast it.
-	              (!sawAnyAgentEvents && !sawAnyChatDelta));
+          // Broadcast final reply if we have content from dispatcher
+          // This handles both directive-only commands (agentRunStarted=false) and
+          // agent runs that didn't emit assistant events but have dispatcher replies
+          const agentSeq =
+            agentRunId && agentRunId.trim() ? context.agentRunSeq.get(agentRunId) : undefined;
+          const sawAnyAgentEvents = typeof agentSeq === "number" && agentSeq > 0;
+          const sawAnyChatDelta =
+            context.chatDeltaSentAt.has(clientRunId) || context.chatRunBuffers.has(clientRunId);
+          const shouldBroadcastDispatcherReply =
+            Boolean(combinedReply) &&
+            // Directive-only commands.
+            (!agentRunStarted ||
+              // Agent started but we never observed agent bus events and no chat deltas were emitted.
+              // In that case, the only user-visible output is the dispatcher reply; broadcast it.
+              (!sawAnyAgentEvents && !sawAnyChatDelta));
 
-		          if (shouldBroadcastDispatcherReply) {
-		            // Broadcast via dispatcher when we otherwise would not emit a chat final/error event.
-		            context.logGateway.info(
-		              `[webchat] broadcasting reply: chars=${combinedReply.length} (agentRunStarted=${agentRunStarted})`,
-		            );
-		            let message: Record<string, unknown> | undefined;
-	            const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
-	              p.sessionKey,
+          if (shouldBroadcastDispatcherReply) {
+            // Broadcast via dispatcher when we otherwise would not emit a chat final/error event.
+            context.logGateway.info(
+              `[webchat] broadcasting reply: chars=${combinedReply.length} (agentRunStarted=${agentRunStarted})`,
+            );
+            let message: Record<string, unknown> | undefined;
+            const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
+              p.sessionKey,
             );
             const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
             const appended = appendAssistantTranscriptMessage({
@@ -595,15 +595,15 @@ export const chatHandlers: GatewayRequestHandlers = {
                 usage: { input: 0, output: 0, totalTokens: 0 },
               };
             }
-	            broadcastChatFinal({
-	              context,
-	              runId: clientRunId,
-	              sessionKey: p.sessionKey,
-	              message,
-	            });
-	          } else if (!agentRunStarted && !combinedReply) {
-	            context.logGateway.warn(`[webchat] directive-only command produced no reply`);
-	          }
+            broadcastChatFinal({
+              context,
+              runId: clientRunId,
+              sessionKey: p.sessionKey,
+              message,
+            });
+          } else if (!agentRunStarted && !combinedReply) {
+            context.logGateway.warn(`[webchat] directive-only command produced no reply`);
+          }
           // If agentRunStarted=true, the response should have come through emitChatDelta/emitChatFinal (agent events)
           // If agentRunStarted=false and combinedReply is empty, that's an error (directive-only command with no output)
           context.dedupe.set(`chat:${clientRunId}`, {

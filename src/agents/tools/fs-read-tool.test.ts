@@ -57,7 +57,9 @@ describe("fs_read tool hardening", () => {
       await fs.symlink(outside, linkPath, process.platform === "win32" ? "junction" : undefined);
     } catch (err) {
       const code =
-        err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: unknown }).code)
+          : "";
       if (code === "EPERM" || code === "EACCES") {
         // Symlink creation is environment-dependent; skip if not permitted.
         return;
@@ -66,9 +68,9 @@ describe("fs_read tool hardening", () => {
     }
 
     const tool = createFsReadTool(workspace);
-    await expect(tool.execute("tool_fs_read_symlink_escape", { path: "escape" }, undefined)).rejects.toThrow(
-      /within workspace/i,
-    );
+    await expect(
+      tool.execute("tool_fs_read_symlink_escape", { path: "escape" }, undefined),
+    ).rejects.toThrow(/within workspace/i);
   });
 
   it("truncates directory trees by maxBytes", async () => {
@@ -99,4 +101,3 @@ describe("fs_read tool hardening", () => {
     expect(details.truncatedByEntries).toBe(false);
   });
 });
-

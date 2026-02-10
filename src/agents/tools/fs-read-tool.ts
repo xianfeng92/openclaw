@@ -1,6 +1,6 @@
+import { Type } from "@sinclair/typebox";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "./common.js";
 
 const fsReadSchema = Type.Object({
@@ -90,7 +90,11 @@ async function renderTree(params: {
   let emittedBytes = 0;
   const lines: string[] = [];
   const walk = async (current: string, depth: number) => {
-    if (emitted >= params.maxEntries || depth > params.maxDepth || emittedBytes >= params.maxBytes) {
+    if (
+      emitted >= params.maxEntries ||
+      depth > params.maxDepth ||
+      emittedBytes >= params.maxBytes
+    ) {
       return;
     }
     const entries = await fs.readdir(current, { withFileTypes: true });
@@ -148,7 +152,12 @@ export function createFsReadTool(workspaceRoot: string): AnyAgentTool {
     description: "Read a file or list a directory tree inside the workspace.",
     parameters: fsReadSchema,
     execute: async (_toolCallId, args, _signal, onUpdate) => {
-      const params = args as { path?: unknown; maxDepth?: unknown; maxEntries?: unknown; maxBytes?: unknown };
+      const params = args as {
+        path?: unknown;
+        maxDepth?: unknown;
+        maxEntries?: unknown;
+        maxBytes?: unknown;
+      };
       const rawPath = typeof params.path === "string" ? params.path.trim() : "";
       if (!rawPath) {
         throw new Error("path required");

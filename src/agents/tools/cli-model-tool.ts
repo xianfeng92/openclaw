@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 import { execFile, type ExecException, type ExecFileOptions } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { AnyAgentTool } from "./common.js";
 import {
   addAllowlistEntry,
   analyzeArgvCommand,
@@ -17,7 +18,6 @@ import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { stringEnum } from "../schema/typebox.js";
-import type { AnyAgentTool } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
 
 function execFileText(
@@ -29,8 +29,11 @@ function execFileText(
   return new Promise((resolve, reject) => {
     execFile(file, args, options, (error, stdout, stderr) => {
       if (error) {
-        (error as ExecException & { stdout?: unknown; stderr?: unknown }).stdout = stdout;
-        (error as ExecException & { stdout?: unknown; stderr?: unknown }).stderr = stderr;
+        // Preserve captured output for callers (string-only, to avoid Buffer typing churn).
+        const stdoutText = toText(stdout);
+        const stderrText = toText(stderr);
+        (error as ExecException & { stdout?: string; stderr?: string }).stdout = stdoutText;
+        (error as ExecException & { stdout?: string; stderr?: string }).stderr = stderrText;
         reject(error);
         return;
       }
@@ -46,10 +49,30 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_BUFFER_BYTES = 512_000;
 const DEFAULT_MAX_OUTPUT_CHARS = 50_000;
 
-const CLI_MODEL_ACTIONS = [
-  "claude",
-  "gpt",
-] as const;
+function describeUnknownError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === "string") {
+    return err;
+  }
+  if (typeof err === "number" || typeof err === "bigint") {
+    return err.toString();
+  }
+  if (typeof err === "boolean") {
+    return err ? "true" : "false";
+  }
+  if (!err) {
+    return "ENOENT";
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+const CLI_MODEL_ACTIONS = ["claude", "gpt"] as const;
 
 const CliModelToolSchema = Type.Object({
   action: stringEnum(CLI_MODEL_ACTIONS),
@@ -111,11 +134,18 @@ export function createCliModelTool(opts?: {
           windowsHide: true,
           encoding: "utf8",
         });
-        return { stdout: res.stdout, stderr: res.stderr, errorMessage: null, truncatedByMaxBuffer: false };
+        return {
+          stdout: res.stdout,
+          stderr: res.stderr,
+          errorMessage: null,
+          truncatedByMaxBuffer: false,
+        };
       } catch (err) {
         lastError = err;
         const code =
-          err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
+          err && typeof err === "object" && "code" in err
+            ? String((err as { code?: unknown }).code)
+            : "";
         if (code === "ENOENT") {
           continue;
         }
@@ -132,7 +162,7 @@ export function createCliModelTool(opts?: {
         };
       }
     }
-    const message = lastError instanceof Error ? lastError.message : lastError ? String(lastError) : "ENOENT";
+    const message = describeUnknownError(lastError);
     return { stdout: "", stderr: "", errorMessage: message, truncatedByMaxBuffer: false };
   };
 

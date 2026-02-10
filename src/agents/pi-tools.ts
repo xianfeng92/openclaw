@@ -24,7 +24,6 @@ import { listChannelAgentTools } from "./channel-tools.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
-import { createFsReadTool } from "./tools/fs-read-tool.js";
 import {
   filterToolsByPolicy,
   isToolAllowedByPolicies,
@@ -53,6 +52,7 @@ import {
   resolveToolProfilePolicy,
   stripPluginOnlyAllowlist,
 } from "./tool-policy.js";
+import { createFsReadTool } from "./tools/fs-read-tool.js";
 
 function isOpenAIProvider(provider?: string) {
   const normalized = provider?.trim().toLowerCase();
@@ -64,7 +64,9 @@ function isTruthyEnv(value: string | undefined): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-function resolveDesktopMvpMinimalToolset(options?: { desktopMvpMinimalToolset?: boolean }): boolean {
+function resolveDesktopMvpMinimalToolset(options?: {
+  desktopMvpMinimalToolset?: boolean;
+}): boolean {
   if (typeof options?.desktopMvpMinimalToolset === "boolean") {
     return options.desktopMvpMinimalToolset;
   }
@@ -295,8 +297,7 @@ export function createOpenClawCodingTools(options?: {
     ...execDefaults,
     host: options?.exec?.host ?? execConfig.host,
     security:
-      options?.exec?.security ??
-      (desktopMvpMinimalToolset ? "allowlist" : execConfig.security),
+      options?.exec?.security ?? (desktopMvpMinimalToolset ? "allowlist" : execConfig.security),
     ask: options?.exec?.ask ?? (desktopMvpMinimalToolset ? "on-miss" : execConfig.ask),
     node: options?.exec?.node ?? execConfig.node,
     pathPrepend: options?.exec?.pathPrepend ?? execConfig.pathPrepend,
@@ -324,7 +325,8 @@ export function createOpenClawCodingTools(options?: {
     sessionKey: options?.sessionKey,
     messageProvider: options?.messageProvider,
     backgroundMs: options?.exec?.backgroundMs ?? execConfig.backgroundMs,
-    timeoutSec: options?.exec?.timeoutSec ?? (desktopMvpMinimalToolset ? 60 : execConfig.timeoutSec),
+    timeoutSec:
+      options?.exec?.timeoutSec ?? (desktopMvpMinimalToolset ? 60 : execConfig.timeoutSec),
     approvalRunningNoticeMs:
       options?.exec?.approvalRunningNoticeMs ?? execConfig.approvalRunningNoticeMs,
     notifyOnExit: options?.exec?.notifyOnExit ?? execConfig.notifyOnExit,

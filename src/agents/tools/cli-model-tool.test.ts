@@ -19,7 +19,7 @@ import { createCliModelTool } from "./cli-model-tool.js";
 
 describe("cli_model tool", () => {
   const tempDirs: string[] = [];
-  let homedirSpy: ReturnType<typeof vi.spyOn> | null = null;
+  let homedirSpy: { mockRestore: () => void } | null = null;
 
   beforeEach(() => {
     execFileMock.mockReset();

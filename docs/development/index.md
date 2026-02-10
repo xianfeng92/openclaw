@@ -75,13 +75,13 @@ OpenClaw follows a **Gateway-based architecture**:
 
 ### Key Modules
 
-| Module | Responsibility | Location |
-|--------|---------------|----------|
-| **Gateway** | HTTP/WS service, auth, routing, events | `src/gateway/` |
-| **Orchestrator** | Request handling, agent invocation | `src/gateway/server-methods/agent.ts` |
-| **Sessions** | Session storage, transcripts | `src/config/sessions/` |
-| **Tools** | Tool assembly, execution | `src/agents/pi-tools.ts` |
-| **Channels** | Platform integrations | `src/channels/`, `src/telegram/`, etc. |
+| Module           | Responsibility                         | Location                               |
+| ---------------- | -------------------------------------- | -------------------------------------- |
+| **Gateway**      | HTTP/WS service, auth, routing, events | `src/gateway/`                         |
+| **Orchestrator** | Request handling, agent invocation     | `src/gateway/server-methods/agent.ts`  |
+| **Sessions**     | Session storage, transcripts           | `src/config/sessions/`                 |
+| **Tools**        | Tool assembly, execution               | `src/agents/pi-tools.ts`               |
+| **Channels**     | Platform integrations                  | `src/channels/`, `src/telegram/`, etc. |
 
 ### Communication Protocol
 
@@ -135,11 +135,11 @@ See [Testing](/development/testing) for complete details.
 
 ### Test Suites
 
-| Suite | Command | Scope |
-|-------|---------|-------|
-| Unit/Integration | `pnpm test` | Pure unit tests, in-process integration |
-| E2E | `pnpm test:e2e` | Gateway smoke tests, networking |
-| Live | `pnpm test:live` | Real providers/models (requires keys) |
+| Suite            | Command          | Scope                                   |
+| ---------------- | ---------------- | --------------------------------------- |
+| Unit/Integration | `pnpm test`      | Pure unit tests, in-process integration |
+| E2E              | `pnpm test:e2e`  | Gateway smoke tests, networking         |
+| Live             | `pnpm test:live` | Real providers/models (requires keys)   |
 
 ### Before Pushing
 
@@ -204,6 +204,7 @@ openclaw gateway --verbose
 ### Session Debugging
 
 Session files are stored at:
+
 - Dev: `~/.openclaw-dev/agents/main/sessions/*.jsonl`
 - Prod: `~/.openclaw/agents/main/sessions/*.jsonl`
 

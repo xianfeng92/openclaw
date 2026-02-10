@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import { validateConfigObject } from "./config.js";
 
 describe("models.providers partial config", () => {
@@ -35,4 +34,3 @@ describe("models.providers partial config", () => {
     expect(res.issues.some((issue) => issue.path === "models.providers.google.baseUrl")).toBe(true);
   });
 });
-

@@ -18,7 +18,8 @@ function readToolResultText(message: Record<string, unknown>): string | undefine
     return undefined;
   }
   const result = content.find(
-    (item) => item && typeof item === "object" && (item as Record<string, unknown>).type === "toolresult",
+    (item) =>
+      item && typeof item === "object" && (item as Record<string, unknown>).type === "toolresult",
   ) as Record<string, unknown> | undefined;
   return typeof result?.text === "string" ? result.text : undefined;
 }
@@ -40,7 +41,7 @@ describe("app tool stream", () => {
     expect(host.chatToolMessages).toHaveLength(1);
     expect(host.chatToolMessages[0]?.toolCallId).toBe("call-1");
     expect(host.chatToolMessages[0]?.runId).toBe("run-1");
-    expect(readToolResultText(host.chatToolMessages[0] as Record<string, unknown>)).toBeUndefined();
+    expect(readToolResultText(host.chatToolMessages[0])).toBeUndefined();
 
     handleAgentEvent(host, {
       runId: "run-1",
@@ -56,7 +57,7 @@ describe("app tool stream", () => {
       },
     });
     flushToolStreamSync(host);
-    expect(readToolResultText(host.chatToolMessages[0] as Record<string, unknown>)).toContain("listing");
+    expect(readToolResultText(host.chatToolMessages[0])).toContain("listing");
 
     handleAgentEvent(host, {
       runId: "run-1",
@@ -71,6 +72,6 @@ describe("app tool stream", () => {
         result: { content: [{ type: "text", text: "done" }] },
       },
     });
-    expect(readToolResultText(host.chatToolMessages[0] as Record<string, unknown>)).toContain("done");
+    expect(readToolResultText(host.chatToolMessages[0])).toContain("done");
   });
 });

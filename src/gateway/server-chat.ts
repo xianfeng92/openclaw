@@ -227,7 +227,7 @@ export function createAgentEventHandler({
   clearAgentRunContext,
   toolEventRecipients,
 }: AgentEventHandlerOptions) {
-  const debugLog = (msg: string) => {
+  const debugLog = (_msg: string) => {
     // Disabled: Comment out to enable debug logging
     // process.stderr.write(`[DEBUG] ${msg}\n`);
   };

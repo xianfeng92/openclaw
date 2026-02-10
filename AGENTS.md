@@ -202,3 +202,9 @@
 - Long-lived tool capabilities (like `cli_model`) must share the same exec approvals/allowlist enforcement as `tools.exec`; add timeouts/output caps, and do not echo prompts/outputs into `details` or logs.
 - Workspace read tools must defend against symlink/junction escapes with `realpath` boundary checks; cap bytes/entries; keep tool-generated directory output ASCII-only.
 - Logging review needs to be end-to-end (gateway/webchat, reply dispatcher, embedded subscribe, UI): log only metadata (lengths/ids), not message content snippets.
+
+### Phase 2 (2026-02-10)
+
+- Make `pnpm check` green by running the full chain repeatedly (`tsgo` -> `lint` -> `format`), not by fixing each gate in isolation.
+- Keep generated and operator-owned docs out of formatting gates (e.g. `docs/zh-CN/**`, PRDs that must not be touched) to avoid churn and accidental edits.
+- When TypeScript errors are on `unknown`/`Error` surfaces, prefer explicit safe stringification and structured error details over `String(x)` and implicit coercions.

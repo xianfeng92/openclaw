@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import "./test-helpers/fast-core-tools.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
 
@@ -34,4 +33,3 @@ describe("cli_model tool gating", () => {
     expect(schema.properties?.action?.enum).toEqual(["claude", "gpt"]);
   });
 });
-

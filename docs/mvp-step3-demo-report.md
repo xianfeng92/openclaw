@@ -1,13 +1,16 @@
 # Step 3 Demo Report
 
 ## Task
+
 - Use fs.read to list a directory tree
 - Use bash.exec to run a whitelisted command
 
 ## Tool Streaming Contract
+
 - Tool stream includes phase=start|update|result and toolCallId (already emitted in runtime handlers)
 
 ## fs.read Output
+
 # Directory Tree
 
 - Path: `src/agents`
@@ -136,8 +139,11 @@
   - 📄 src\agents\tools\cron-tool.test.ts
 
 ## bash.exec Output
-`	ext
-Path                           
-----                           
+
+` ext
+Path
+
+---
+
 C:\Users\xforg\Desktop\openclaw
 `

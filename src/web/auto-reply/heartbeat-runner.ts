@@ -23,7 +23,6 @@ import { newConnectionId } from "../reconnect.js";
 import { formatError } from "../session.js";
 import { whatsappHeartbeatLog } from "./loggers.js";
 import { getSessionSnapshot } from "./session-snapshot.js";
-import { elide } from "./util.js";
 
 function resolveHeartbeatReplyPayload(
   replyResult: ReplyPayload | ReplyPayload[] | undefined,

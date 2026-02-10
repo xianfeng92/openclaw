@@ -16,6 +16,7 @@ import {
   saveSessionStore,
 } from "./config/sessions.js";
 import { ensureBinary } from "./infra/binaries.js";
+import { installBrokenPipeHandlers } from "./infra/broken-pipe.js";
 import { loadDotEnv } from "./infra/dotenv.js";
 import { normalizeEnv } from "./infra/env.js";
 import { formatUncaughtError } from "./infra/errors.js";
@@ -29,7 +30,6 @@ import {
 } from "./infra/ports.js";
 import { assertSupportedRuntime } from "./infra/runtime-guard.js";
 import { installUnhandledRejectionHandler } from "./infra/unhandled-rejections.js";
-import { installBrokenPipeHandlers } from "./infra/broken-pipe.js";
 import { enableConsoleCapture } from "./logging.js";
 import { runCommandWithTimeout, runExec } from "./process/exec.js";
 import { assertWebChannel, normalizeE164, toWhatsappJid } from "./utils.js";

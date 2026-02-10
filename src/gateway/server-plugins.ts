@@ -21,7 +21,9 @@ export function loadGatewayPlugins(params: {
         enabled: false,
       }
     : params.cfg.plugins;
-  const cfgForPlugins = DESKTOP_MVP_SLIM_MODE ? { ...params.cfg, plugins: pluginConfig } : params.cfg;
+  const cfgForPlugins = DESKTOP_MVP_SLIM_MODE
+    ? { ...params.cfg, plugins: pluginConfig }
+    : params.cfg;
   if (DESKTOP_MVP_SLIM_MODE) {
     params.log.info("desktop MVP slim mode: plugin ecosystem disabled");
   }

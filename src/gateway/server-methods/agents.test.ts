@@ -45,7 +45,9 @@ describe("gateway agents handler (files)", () => {
     await agentsHandlers["agents.files.list"]({
       params: { agentId: "Dev" },
       respond,
-      context: {} as unknown as Parameters<(typeof agentsHandlers)["agents.files.list"]>[0]["context"],
+      context: {} as unknown as Parameters<
+        (typeof agentsHandlers)["agents.files.list"]
+      >[0]["context"],
       client: null,
       req: { id: "req-1", type: "req", method: "agents.files.list" },
       isWebchatConnect: () => false,
@@ -75,7 +77,9 @@ describe("gateway agents handler (files)", () => {
     await agentsHandlers["agents.files.list"]({
       params: { agentId: "main" },
       respond,
-      context: {} as unknown as Parameters<(typeof agentsHandlers)["agents.files.list"]>[0]["context"],
+      context: {} as unknown as Parameters<
+        (typeof agentsHandlers)["agents.files.list"]
+      >[0]["context"],
       client: null,
       req: { id: "req-2", type: "req", method: "agents.files.list" },
       isWebchatConnect: () => false,
@@ -91,4 +95,3 @@ describe("gateway agents handler (files)", () => {
     );
   });
 });
-

@@ -34,4 +34,3 @@ export function installBrokenPipeHandlers(): void {
   attach(process.stdout);
   attach(process.stderr);
 }
-

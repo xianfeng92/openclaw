@@ -118,7 +118,9 @@ function resolveAgentIdOrError(agentIdRaw: string, cfg: ReturnType<typeof loadCo
   const agentId = normalizeAgentId(agentIdRaw);
   // Keep agent id validation consistent with what the Control UI shows in `agents.list`.
   // Otherwise the UI can list "derived" agents (ex: discovered from disk) that can't load files.
-  const allowed = new Set(listAgentsForGateway(cfg).agents.map((agent) => normalizeAgentId(agent.id)));
+  const allowed = new Set(
+    listAgentsForGateway(cfg).agents.map((agent) => normalizeAgentId(agent.id)),
+  );
   if (!allowed.has(agentId)) {
     return null;
   }

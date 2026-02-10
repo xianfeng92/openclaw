@@ -91,15 +91,14 @@ Lessons Learned (to append to `AGENTS.md` when Phase 1 completes):
 
 TODO:
 
-- Fix `pnpm tsgo` errors:
-- `src/cli/gateway-cli/dev.ts`: type `baseConfig` as `OpenClawConfig` (avoid string widening).
-- `ui/src/ui/app-view-state.ts`: add `chatWaitingForResponse`.
-- `ui/src/ui/controllers/chat.test.ts`: ensure `chatWaitingForResponse` is always provided (boolean).
-- Run and fix `pnpm check` (lint + format) until clean.
+- [x] `src/cli/gateway-cli/dev.ts`: type `baseConfig` as `OpenClawConfig` (avoid string widening).
+- [x] `ui/src/ui/app-view-state.ts`: add `chatWaitingForResponse`.
+- [x] `ui/src/ui/controllers/chat.test.ts`: ensure `chatWaitingForResponse` is always provided (boolean).
+- [x] Make `pnpm check` green (tsgo + lint + format). (Green: 2026-02-10)
 
 Lessons Learned (to append to `AGENTS.md` when Phase 2 completes):
 
-- TBD
+- Completed: appended to `AGENTS.md` (2026-02-10).
 
 ### Phase 3 - Desktop Auth UX ("Tokenless Feel", Still Secure)
 

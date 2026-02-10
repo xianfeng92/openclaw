@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CHAT_RUN_STALL_TIMEOUT_MS,
-  clearStalledRunIfNeeded,
-  type ChatHost,
-} from "./app-chat.ts";
+import { CHAT_RUN_STALL_TIMEOUT_MS, clearStalledRunIfNeeded, type ChatHost } from "./app-chat.ts";
 
 function createHost(overrides: Partial<ChatHost> = {}): ChatHost {
   return {
@@ -53,4 +49,3 @@ describe("clearStalledRunIfNeeded", () => {
     expect(host.chatRunId).toBe("run-1");
   });
 });
-

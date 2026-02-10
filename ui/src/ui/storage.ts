@@ -28,9 +28,9 @@ function isLikelyUiDevPort(port: string): boolean {
 
 function resolveDefaultGatewayUrl(): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const envGatewayUrl = ((import.meta as ImportMeta & { env?: ViteEnv }).env?.VITE_GATEWAY_URL ??
-    "")
-    .trim();
+  const envGatewayUrl = (
+    (import.meta as ImportMeta & { env?: ViteEnv }).env?.VITE_GATEWAY_URL ?? ""
+  ).trim();
   if (envGatewayUrl) {
     return envGatewayUrl;
   }

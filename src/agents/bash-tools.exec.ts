@@ -667,6 +667,14 @@ async function runExecProcess(opts: {
     });
   };
 
+  const stripTrailingNulls = (value: string): string => {
+    let end = value.length;
+    while (end > 0 && value.charCodeAt(end - 1) === 0) {
+      end -= 1;
+    }
+    return end === value.length ? value : value.slice(0, end);
+  };
+
   const handleStdout = (data: Buffer | string) => {
     // Handle encoding correctly for Windows PowerShell output
     // PowerShell outputs UTF-16 LE on Windows, but Node.js may read it as binary
@@ -681,7 +689,7 @@ async function runExecProcess(opts: {
         if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) {
           start = 2; // UTF-16 LE BOM
         }
-        str = data.toString("utf16le", start).replace(/\0$/, "");
+        str = stripTrailingNulls(data.toString("utf16le", start));
       } else {
         str = data.toString("utf8");
       }
@@ -705,7 +713,7 @@ async function runExecProcess(opts: {
         if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) {
           start = 2;
         }
-        str = data.toString("utf16le", start).replace(/\0$/, "");
+        str = stripTrailingNulls(data.toString("utf16le", start));
       } else {
         str = data.toString("utf8");
       }
@@ -730,7 +738,7 @@ async function runExecProcess(opts: {
         // Try UTF-16 LE decoding for Windows PTY output
         const isUtf16Le = data.length >= 2 && data[1] === 0 && data[3] === 0;
         if (isUtf16Le && process.platform === "win32") {
-          raw = data.toString("utf16le").replace(/\0$/, "");
+          raw = stripTrailingNulls(data.toString("utf16le"));
         } else {
           raw = data.toString("utf8");
         }

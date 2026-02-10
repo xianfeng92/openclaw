@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { GatewayRequestHandlers } from "./types.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
+import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
 import { agentCommand } from "../../commands/agent.js";
 import { loadConfig } from "../../config/config.js";
 import {
@@ -27,7 +28,6 @@ import {
 } from "../../utils/message-channel.js";
 import { resolveAssistantIdentity } from "../assistant-identity.js";
 import { parseMessageWithAttachments } from "../chat-attachments.js";
-import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
 import { resolveAssistantAvatarUrl } from "../control-ui-shared.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
 import {
@@ -480,7 +480,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         : avatarResolution.kind === "remote" || avatarResolution.kind === "data"
           ? avatarResolution.url
           : // Avoid broken <img> URLs when the configured avatar path is missing.
-            identity.emoji ?? identity.avatar;
+            (identity.emoji ?? identity.avatar);
     respond(true, { ...identity, avatar: avatarValue }, undefined);
   },
   "agent.wait": async ({ params, respond }) => {

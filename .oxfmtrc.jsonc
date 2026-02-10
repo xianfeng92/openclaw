@@ -11,6 +11,8 @@
     "assets/",
     "dist/",
     "docs/_layouts/",
+    "docs/prd/project-neuro.md",
+    "docs/zh-CN/",
     "node_modules/",
     "patches/",
     "pnpm-lock.yaml/",

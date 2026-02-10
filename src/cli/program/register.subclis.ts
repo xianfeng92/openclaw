@@ -13,13 +13,9 @@ type SubCliEntry = {
   register: SubCliRegistrar;
 };
 
-const DISABLED_DESKTOP_MVP_SUBCLIS = DESKTOP_MVP_SLIM_MODE ? new Set([
-  "channels",
-  "plugins",
-  "pairing",
-  "directory",
-  "skills",
-]) : new Set();
+const DISABLED_DESKTOP_MVP_SUBCLIS = DESKTOP_MVP_SLIM_MODE
+  ? new Set(["channels", "plugins", "pairing", "directory", "skills"])
+  : new Set();
 
 const shouldRegisterPrimaryOnly = (argv: string[]) => {
   if (isTruthyEnvValue(process.env.OPENCLAW_DISABLE_LAZY_SUBCOMMANDS)) {

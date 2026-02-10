@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { OpenClawConfig } from "../../config/config.js";
 import { resolveWorkspaceTemplateDir } from "../../agents/workspace-templates.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { handleReset } from "../../commands/onboard-helpers.js";
 import { createConfigIO, writeConfigFile } from "../../config/config.js";
-import type { OpenClawConfig } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveUserPath, shortenHomePath } from "../../utils.js";
 
@@ -119,7 +119,7 @@ export async function ensureDevGatewayConfig(opts: { reset?: boolean }) {
   const io = createConfigIO();
   const configPath = io.configPath;
   const configExists = fs.existsSync(configPath);
-  const baseConfig = {
+  const baseConfig: OpenClawConfig = {
     gateway: {
       mode: "local",
       bind: "loopback",

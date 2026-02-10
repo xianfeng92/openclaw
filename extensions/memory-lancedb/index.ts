@@ -6,7 +6,6 @@
  * Provides seamless auto-recall and auto-capture via lifecycle hooks.
  */
 
-import type * as LanceDB from "@lancedb/lancedb";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { Type } from "@sinclair/typebox";
 import { randomUUID } from "node:crypto";
@@ -23,10 +22,32 @@ import {
 // Types
 // ============================================================================
 
-let lancedbImportPromise: Promise<typeof import("@lancedb/lancedb")> | null = null;
-const loadLanceDB = async (): Promise<typeof import("@lancedb/lancedb")> => {
+// Keep LanceDB typing minimal so this plugin can be linted even when `@lancedb/lancedb`
+// is not installed in the current workspace (desktop-mvp-slim may omit extensions deps).
+type LanceDbVectorSearch = {
+  limit: (count: number) => { toArray: () => Promise<unknown[]> };
+};
+
+type LanceDbTable = {
+  delete: (filter: string) => Promise<void>;
+  add: (rows: unknown[]) => Promise<void>;
+  vectorSearch: (vector: number[]) => LanceDbVectorSearch;
+};
+
+type LanceDbConnection = {
+  tableNames: () => Promise<string[]>;
+  openTable: (name: string) => Promise<LanceDbTable>;
+  createTable: (name: string, rows: unknown[]) => Promise<LanceDbTable>;
+};
+
+type LanceDbModule = {
+  connect: (dbPath: string) => Promise<LanceDbConnection>;
+};
+
+let lancedbImportPromise: Promise<LanceDbModule> | null = null;
+const loadLanceDB = async (): Promise<LanceDbModule> => {
   if (!lancedbImportPromise) {
-    lancedbImportPromise = import("@lancedb/lancedb");
+    lancedbImportPromise = import("@lancedb/lancedb") as unknown as Promise<LanceDbModule>;
   }
   try {
     return await lancedbImportPromise;
@@ -57,8 +78,8 @@ type MemorySearchResult = {
 const TABLE_NAME = "memories";
 
 class MemoryDB {
-  private db: LanceDB.Connection | null = null;
-  private table: LanceDB.Table | null = null;
+  private db: LanceDbConnection | null = null;
+  private table: LanceDbTable | null = null;
   private initPromise: Promise<void> | null = null;
 
   constructor(

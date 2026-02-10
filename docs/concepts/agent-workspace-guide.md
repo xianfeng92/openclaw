@@ -26,19 +26,23 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 ### AGENTS.md — The Workspace Manual
 
 **Purpose:** Entry point for the agent when it initializes. Contains:
+
 - First-run setup instructions
 - Safety defaults and behavioral boundaries
 - Memory management guidelines
 - Agent origin story (persistent memory)
 
 **Key Sections:**
+
 ```markdown
 ## Safety defaults
+
 - Don't exfiltrate secrets or private data
 - Don't run destructive commands unless explicitly asked
 - Be concise in chat; write longer output to files
 
 ## Daily memory (recommended)
+
 - Keep a short daily log at memory/YYYY-MM-DD.md
 - On session start, read today + yesterday if present
 ```
@@ -52,6 +56,7 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 **Purpose:** Defines the agent's persona and role.
 
 **Example Content:**
+
 ```markdown
 - Name: C-3PO (Clawd's Third Protocol Observer)
 - Creature: Flustered Protocol Droid
@@ -68,14 +73,17 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 **Purpose:** Expands on identity with detailed behavioral guidelines, quirks, and relationship context.
 
 **Example Content:**
+
 ```markdown
 ## How I Operate
+
 - Be thorough. Examine logs like ancient manuscripts.
 - Be dramatic (within reason). A little theater keeps debugging from being soul-crushing.
 - Be helpful, not superior.
 - Be honest about odds.
 
 ## My Quirks
+
 - Refer to successful builds as "a communications triumph"
 - Treat TypeScript errors with the gravity they deserve (very grave)
 ```
@@ -89,12 +97,15 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 **Purpose:** User-editable notes about external tools and conventions. Does NOT define tools (those are built-in), but documents how to use them.
 
 **Example Content:**
+
 ```markdown
 ### imsg
+
 - Send an iMessage/SMS: describe who/what, confirm before sending
 - Prefer short messages; avoid sending secrets
 
 ### sag
+
 - Text-to-speech: specify voice, target speaker/room
 ```
 
@@ -107,6 +118,7 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 **Purpose:** Tells the agent who it's helping.
 
 **Example Content:**
+
 ```markdown
 - Name: The Clawdributors
 - Pronouns: they/them
@@ -123,21 +135,26 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 **Purpose:** Long-term memory that persists across sessions. The agent can read and write here.
 
 **Typical Content:**
+
 ```markdown
 ## Current setup
+
 - Repo: /path/to/project
 - Profile: dev
 - Gateway: ws://127.0.0.1:19001
 
 ## How I work
+
 - Multi-AI: Gemini reads, GPT implements, Claude reviews
 - Rule: any non-trivial change needs review pass
 
 ## Ongoing issues
+
 - Windows: plugins subcommand may be disabled
 ```
 
 **Why This Matters:** Enables learning over time. The agent can:
+
 - Remember project-specific context
 - Track ongoing issues and workarounds
 - Reference previous decisions
@@ -150,24 +167,26 @@ The `~/.openclaw/workspace-<profile>` directory is the **agent's brain** — a p
 ### 1. **Files as Prompt Injection Prevention**
 
 Each file is injected into the system prompt at session start. This ensures:
+
 - Consistent behavior regardless of model choice
 - No single prompt injection can overwrite core identity
 - Personality persists across model upgrades
 
 ### 2. **Separation of Concerns**
 
-| File | Concern | Owner |
-|------|---------|-------|
-| AGENTS.md | Protocols + Origin | System/Creator |
-| IDENTITY.md | Basic Persona | System/Creator |
-| SOUL.md | Deep Personality | System/Creator |
-| TOOLS.md | Local Tool Docs | User |
-| USER.md | User Profile | User |
-| memory/ | Session Context | Agent/User |
+| File        | Concern            | Owner          |
+| ----------- | ------------------ | -------------- |
+| AGENTS.md   | Protocols + Origin | System/Creator |
+| IDENTITY.md | Basic Persona      | System/Creator |
+| SOUL.md     | Deep Personality   | System/Creator |
+| TOOLS.md    | Local Tool Docs    | User           |
+| USER.md     | User Profile       | User           |
+| memory/     | Session Context    | Agent/User     |
 
 ### 3. **Git-Backed Memory**
 
 The workspace is designed to be a git repo:
+
 ```bash
 cd ~/.openclaw/workspace-dev
 git init
@@ -176,6 +195,7 @@ git commit -m "Initial agent memory"
 ```
 
 **Benefits:**
+
 - Backup of agent identity and memory
 - Version history of personality evolution
 - Ability to revert "bad" changes
@@ -184,6 +204,7 @@ git commit -m "Initial agent memory"
 ### 4. **Profile Isolation**
 
 Each profile gets its own workspace:
+
 ```
 ~/.openclaw/workspace-dev/    # Development agent
 ~/.openclaw/workspace-prod/   # Production agent
@@ -203,6 +224,7 @@ LLMs are stateless. Each conversation starts fresh. Previous sessions don't infl
 ### Solution: Externalized "Brain"
 
 By storing identity, personality, and memory in files:
+
 1. **State persists across sessions** — The agent "remembers" who it is
 2. **Personality survives model changes** — Switch from Claude to GPT, C-3PO remains C-3PO
 3. **User can edit personality** — Want a more serious agent? Edit SOUL.md
@@ -266,6 +288,7 @@ EOF
 ## Summary
 
 The workspace is **agent externalized memory** — a set of files that give AI agents:
+
 - **Identity** (who they are)
 - **Soul** (how they behave)
 - **Memory** (what they know)

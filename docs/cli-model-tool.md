@@ -15,6 +15,7 @@
 1. **确保命令行工具可用**
 
 在 PowerShell 7 中测试：
+
 ```powershell
 claude "hello"
 ```
@@ -56,10 +57,10 @@ Agent 会自动调用 `cli_model` 工具来执行你的请求。
 
 ## 工具参数
 
-| 参数 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| action | string | 是 | `claude` 或 `gpt` |
-| prompt | string | 是 | 要发送给 AI 的问题 |
+| 参数   | 类型   | 必需 | 说明               |
+| ------ | ------ | ---- | ------------------ |
+| action | string | 是   | `claude` 或 `gpt`  |
+| prompt | string | 是   | 要发送给 AI 的问题 |
 
 ## 示例
 
@@ -75,11 +76,13 @@ cli_model(action="claude", prompt="写一个 Python 函数来反转字符串")
 ### 问题：命令执行失败
 
 1. **检查 PowerShell 7 是否在 PATH 中**
+
    ```powershell
    pwsh --version
    ```
 
 2. **检查 claude 命令是否可用**
+
    ```powershell
    claude "test"
    ```

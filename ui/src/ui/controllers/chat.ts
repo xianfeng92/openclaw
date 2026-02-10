@@ -196,7 +196,6 @@ export async function abortChatRun(state: ChatState): Promise<boolean> {
 }
 
 export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
-  console.log("[DEBUG] handleChatEvent:", payload);
   if (!payload) {
     return null;
   }

@@ -120,7 +120,7 @@ export async function runWebHeartbeatOnce(opts: {
     if (overrideBody) {
       if (dryRun) {
         whatsappHeartbeatLog.info(
-          `[dry-run] web send -> ${to}: ${elide(overrideBody.trim(), 200)} (manual message)`,
+          `[dry-run] web send -> ${to} (manual message, chars ${overrideBody.trim().length})`,
         );
         return;
       }
@@ -293,7 +293,7 @@ export async function runWebHeartbeatOnce(opts: {
 
     if (dryRun) {
       heartbeatLogger.info({ to, reason: "dry-run", chars: finalText.length }, "heartbeat dry-run");
-      whatsappHeartbeatLog.info(`[dry-run] heartbeat -> ${to}: ${elide(finalText, 200)}`);
+      whatsappHeartbeatLog.info(`[dry-run] heartbeat -> ${to} (chars ${finalText.length})`);
       return;
     }
 
@@ -311,7 +311,6 @@ export async function runWebHeartbeatOnce(opts: {
         to,
         messageId: sendResult.messageId,
         chars: finalText.length,
-        preview: elide(finalText, 140),
       },
       "heartbeat sent",
     );

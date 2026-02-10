@@ -232,7 +232,7 @@ export function createAgentEventHandler({
     // process.stderr.write(`[DEBUG] ${msg}\n`);
   };
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
-    debugLog(`emitChatDelta: runId=${clientRunId}, seq=${seq}, text="${text.slice(0, 50)}..."`);
+    debugLog(`emitChatDelta: runId=${clientRunId}, seq=${seq}, textLen=${text.length}`);
     chatRunState.buffers.set(clientRunId, text);
     const now = Date.now();
     const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
@@ -267,7 +267,7 @@ export function createAgentEventHandler({
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
     debugLog(
-      `emitChatFinal: runId=${clientRunId}, jobState=${jobState}, bufferText="${text.slice(0, 100)}...", buffer has text: ${!!text}`,
+      `emitChatFinal: runId=${clientRunId}, jobState=${jobState}, bufferTextLen=${text.length}, buffer has text: ${!!text}`,
     );
     chatRunState.buffers.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);

@@ -299,7 +299,7 @@ export function handleMessageEnd(
         )
       ) {
         ctx.log.debug(
-          `Skipping message_end block reply - already sent via messaging tool: ${text.slice(0, 50)}...`,
+          `Skipping message_end block reply - already sent via messaging tool (chars ${text.length})`,
         );
       } else {
         ctx.state.lastBlockReplyText = text;

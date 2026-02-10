@@ -490,7 +490,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         },
         deliver: async (payload, info) => {
           context.logGateway.info(
-            `[webchat] deliver callback: kind=${info.kind}, text="${payload.text?.slice(0, 100) ?? ""}..."`,
+            `[webchat] deliver callback: kind=${info.kind}, textLen=${payload.text?.length ?? 0}`,
           );
           if (info.kind !== "final") {
             context.logGateway.info(`[webchat] skipping non-final kind: ${info.kind}`);
@@ -501,7 +501,7 @@ export const chatHandlers: GatewayRequestHandlers = {
             context.logGateway.warn(`[webchat] skipping empty final reply part`);
             return;
           }
-          context.logGateway.info(`[webchat] collecting final reply part: "${text.slice(0, 100)}..."`);
+          context.logGateway.info(`[webchat] collecting final reply part: chars=${text.length}`);
           finalReplyParts.push(text);
         },
       });
@@ -563,14 +563,14 @@ export const chatHandlers: GatewayRequestHandlers = {
 	              // In that case, the only user-visible output is the dispatcher reply; broadcast it.
 	              (!sawAnyAgentEvents && !sawAnyChatDelta));
 
-	          if (shouldBroadcastDispatcherReply) {
-	            // Broadcast via dispatcher when we otherwise would not emit a chat final/error event.
-	            context.logGateway.info(
-	              `[webchat] broadcasting reply: "${combinedReply.slice(0, 100)}..." (agentRunStarted=${agentRunStarted})`,
-	            );
-	            let message: Record<string, unknown> | undefined;
-            const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
-              p.sessionKey,
+		          if (shouldBroadcastDispatcherReply) {
+		            // Broadcast via dispatcher when we otherwise would not emit a chat final/error event.
+		            context.logGateway.info(
+		              `[webchat] broadcasting reply: chars=${combinedReply.length} (agentRunStarted=${agentRunStarted})`,
+		            );
+		            let message: Record<string, unknown> | undefined;
+	            const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
+	              p.sessionKey,
             );
             const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
             const appended = appendAssistantTranscriptMessage({

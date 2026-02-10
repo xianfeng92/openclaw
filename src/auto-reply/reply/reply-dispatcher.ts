@@ -110,7 +110,6 @@ export function createReplyDispatcher(options: ReplyDispatcherOptions): ReplyDis
   };
 
   const enqueue = (kind: ReplyDispatchKind, payload: ReplyPayload) => {
-    console.log(`[DEBUG] reply-dispatcher enqueue: kind=${kind}, text="${payload.text?.slice(0, 50) ?? ""}..."`);
     const normalized = normalizeReplyPayloadInternal(payload, {
       responsePrefix: options.responsePrefix,
       responsePrefixContext: options.responsePrefixContext,
@@ -119,10 +118,8 @@ export function createReplyDispatcher(options: ReplyDispatcherOptions): ReplyDis
       onSkip: (reason) => options.onSkip?.(payload, { kind, reason }),
     });
     if (!normalized) {
-      console.log(`[DEBUG] reply-dispatcher normalized returned null, skipping`);
       return false;
     }
-    console.log(`[DEBUG] reply-dispatcher normalized: kind=${kind}, text="${normalized.text?.slice(0, 50) ?? ""}..."`);
     queuedCounts[kind] += 1;
     pending += 1;
 

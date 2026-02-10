@@ -81,7 +81,7 @@ Notes:
 - [x] `fs_read`: prevent symlink escape (use `lstat` and/or `realpath` checks).
 - [x] `fs_read`: add max-bytes + truncation for file reads and directory trees.
 - [x] `fs_read`: keep output ASCII-only (no emoji icons).
-- [ ] Logging: remove or gate logs that include message content snippets (reply dispatcher, webchat, UI debug logs).
+- [x] Logging: remove or gate logs that include message content snippets (reply dispatcher, webchat, UI debug logs).
 
 Lessons Learned (to append to `AGENTS.md` when Phase 1 completes):
 

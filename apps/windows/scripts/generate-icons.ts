@@ -26,7 +26,10 @@ const STATUS_COLORS = {
   error: { r: 244, g: 67, b: 54 },      // Red (error)
 };
 
-async function generateTrayIcon(suffix: string, tintColor: { r: number; g: number; b: number }): Promise<void> {
+async function generateTrayIcon(
+  suffix: string,
+  tintColor: { r: number; g: number; b: number },
+): Promise<void> {
   const outputPath = path.join(outputDir, `icon${suffix}.png`);
 
   // Load and resize source image
@@ -42,10 +45,10 @@ async function generateTrayIcon(suffix: string, tintColor: { r: number; g: numbe
 
   if (hasAlpha) {
     // Create a tinted overlay
-    const tinted = await image
+    await image
       .linear(
         // RGB multipliers for tinting
-        [tinctor.r / 255, tinctor.g / 255, tinctor.b / 255],
+        [tintColor.r / 255, tintColor.g / 255, tintColor.b / 255],
         // Alpha channel multiplier (keep original)
         [1, 1, 1, 1]
       )

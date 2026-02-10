@@ -12,7 +12,6 @@ const outputIco = path.resolve(__dirname, "../resources/icons/icon.ico");
 async function createSimpleIco(): Promise<void> {
   // Use the 256x256 version as the main icon
   const png256Path = path.join(icoTempDir, "256x256.png");
-  const pngData = fs.readFileSync(png256Path);
 
   // ICO file format:
   // - 6 byte header

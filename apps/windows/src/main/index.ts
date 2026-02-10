@@ -79,7 +79,9 @@ if (!gotTheLock) {
   });
 }
 
-app.whenReady().then(() => {
+void app
+  .whenReady()
+  .then(() => {
   console.log("[App] Electron app ready");
 
   // Initialize managers
@@ -102,7 +104,11 @@ app.whenReady().then(() => {
       sandbox: false,
     },
   });
-  hiddenWindow.loadURL("data:text/html;charset=utf-8,<html><body>Hidden</body></html>");
+  void hiddenWindow
+    .loadURL("data:text/html;charset=utf-8,<html><body>Hidden</body></html>")
+    .catch((err) => {
+      console.error("[App] Failed to load hidden window:", err);
+    });
   console.log("[App] Hidden window created");
 
   // Create system tray
@@ -117,10 +123,13 @@ app.whenReady().then(() => {
   setupIpc(gatewayManager, chatWindowManager);
 
   console.log("[App] App setup complete, should stay running");
-});
+  })
+  .catch((err) => {
+    console.error("[App] app.whenReady failed:", err);
+  });
 
 
-app.on("before-quit", async (event) => {
+app.on("before-quit", async (_event) => {
   console.log("[App] before-quit event");
 
   // Cleanup

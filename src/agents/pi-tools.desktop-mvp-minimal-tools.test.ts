@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import "./test-helpers/fast-coding-tools.js";
 import { createOpenClawCodingTools } from "./pi-tools.js";
 
 const tempDirs: string[] = [];
@@ -22,7 +23,7 @@ afterEach(async () => {
 
 describe("desktop MVP minimal toolset", () => {
   it("exposes only fs_read and bash_exec", () => {
-    const tools = createOpenClawCodingTools();
+    const tools = createOpenClawCodingTools({ desktopMvpMinimalToolset: true });
     expect(tools.map((tool) => tool.name)).toEqual(["fs_read", "bash_exec"]);
   });
 
@@ -32,7 +33,7 @@ describe("desktop MVP minimal toolset", () => {
     await fs.writeFile(path.join(dir, "README.md"), "# Demo\n", "utf8");
     await fs.writeFile(path.join(dir, "docs", "report.md"), "ok\n", "utf8");
 
-    const tools = createOpenClawCodingTools({ workspaceDir: dir });
+    const tools = createOpenClawCodingTools({ workspaceDir: dir, desktopMvpMinimalToolset: true });
     const tool = tools.find((entry) => entry.name === "fs_read");
     expect(tool).toBeTruthy();
 

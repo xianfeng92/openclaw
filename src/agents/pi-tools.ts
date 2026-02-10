@@ -59,7 +59,17 @@ function isOpenAIProvider(provider?: string) {
   return normalized === "openai" || normalized === "openai-codex";
 }
 
-const DESKTOP_MVP_MINIMAL_TOOLSET = false;
+function isTruthyEnv(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function resolveDesktopMvpMinimalToolset(options?: { desktopMvpMinimalToolset?: boolean }): boolean {
+  if (typeof options?.desktopMvpMinimalToolset === "boolean") {
+    return options.desktopMvpMinimalToolset;
+  }
+  return isTruthyEnv(process.env.OPENCLAW_DESKTOP_MVP_MINIMAL_TOOLSET);
+}
 
 function isApplyPatchAllowedForModel(params: {
   modelProvider?: string;
@@ -167,9 +177,15 @@ export function createOpenClawCodingTools(options?: {
   disableMessageTool?: boolean;
   /** Whether the sender is an owner (required for owner-only tools). */
   senderIsOwner?: boolean;
+  /**
+   * Desktop MVP slim mode: return only a minimal toolset (currently fs_read + bash_exec).
+   * If omitted, this can also be enabled via `OPENCLAW_DESKTOP_MVP_MINIMAL_TOOLSET=1`.
+   */
+  desktopMvpMinimalToolset?: boolean;
 }): AnyAgentTool[] {
   const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
+  const desktopMvpMinimalToolset = resolveDesktopMvpMinimalToolset(options);
   const {
     agentId,
     globalPolicy,
@@ -280,13 +296,13 @@ export function createOpenClawCodingTools(options?: {
     host: options?.exec?.host ?? execConfig.host,
     security:
       options?.exec?.security ??
-      (DESKTOP_MVP_MINIMAL_TOOLSET ? "allowlist" : execConfig.security),
-    ask: options?.exec?.ask ?? (DESKTOP_MVP_MINIMAL_TOOLSET ? "on-miss" : execConfig.ask),
+      (desktopMvpMinimalToolset ? "allowlist" : execConfig.security),
+    ask: options?.exec?.ask ?? (desktopMvpMinimalToolset ? "on-miss" : execConfig.ask),
     node: options?.exec?.node ?? execConfig.node,
     pathPrepend: options?.exec?.pathPrepend ?? execConfig.pathPrepend,
     safeBins:
       options?.exec?.safeBins ??
-      (DESKTOP_MVP_MINIMAL_TOOLSET
+      (desktopMvpMinimalToolset
         ? [
             "ls",
             "pwd",
@@ -308,7 +324,7 @@ export function createOpenClawCodingTools(options?: {
     sessionKey: options?.sessionKey,
     messageProvider: options?.messageProvider,
     backgroundMs: options?.exec?.backgroundMs ?? execConfig.backgroundMs,
-    timeoutSec: options?.exec?.timeoutSec ?? (DESKTOP_MVP_MINIMAL_TOOLSET ? 60 : execConfig.timeoutSec),
+    timeoutSec: options?.exec?.timeoutSec ?? (desktopMvpMinimalToolset ? 60 : execConfig.timeoutSec),
     approvalRunningNoticeMs:
       options?.exec?.approvalRunningNoticeMs ?? execConfig.approvalRunningNoticeMs,
     notifyOnExit: options?.exec?.notifyOnExit ?? execConfig.notifyOnExit,
@@ -467,7 +483,7 @@ export function createOpenClawCodingTools(options?: {
     ? withHooks.map((tool) => wrapToolWithAbortSignal(tool, options.abortSignal))
     : withHooks;
 
-  if (DESKTOP_MVP_MINIMAL_TOOLSET) {
+  if (desktopMvpMinimalToolset) {
     const workspaceRoot = options?.workspaceDir ?? process.cwd();
     const fsReadTool = createFsReadTool(workspaceRoot);
     const execCore = withAbort.find((tool) => normalizeToolName(tool.name) === "exec");

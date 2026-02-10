@@ -1,11 +1,27 @@
 import { Type } from "@sinclair/typebox";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile, type ExecException, type ExecFileOptions } from "node:child_process";
 import type { OpenClawConfig } from "../../config/config.js";
 import { stringEnum } from "../schema/typebox.js";
 import type { AnyAgentTool } from "./common.js";
 
-const execAsync = promisify(exec);
+function execFileText(
+  file: string,
+  args: string[],
+  options: ExecFileOptions,
+): Promise<{ stdout: string; stderr: string }> {
+  const toText = (value: string | Buffer) => (typeof value === "string" ? value : value.toString());
+  return new Promise((resolve, reject) => {
+    execFile(file, args, options, (error, stdout, stderr) => {
+      if (error) {
+        (error as ExecException & { stdout?: unknown; stderr?: unknown }).stdout = stdout;
+        (error as ExecException & { stdout?: unknown; stderr?: unknown }).stderr = stderr;
+        reject(error);
+        return;
+      }
+      resolve({ stdout: toText(stdout), stderr: toText(stderr) });
+    });
+  });
+}
 
 const CLI_MODEL_ACTIONS = [
   "claude",
@@ -58,18 +74,8 @@ export function createCliModelTool(opts?: {
         };
       }
 
-      // 根据不同的 action 选择命令
-      let command: string;
-      let shell: string;
-
-      if (action === "claude") {
-        // Windows PowerShell 7
-        command = `claude "${prompt.replace(/"/g, '\\"')}"`;
-        shell = "pwsh"; // PowerShell 7
-      } else if (action === "gpt") {
-        command = `gpt "${prompt.replace(/"/g, '\\"')}"`;
-        shell = "pwsh";
-      } else {
+      const command = action === "claude" ? "claude" : action === "gpt" ? "gpt" : null;
+      if (!command) {
         return {
           content: [
             {
@@ -82,12 +88,40 @@ export function createCliModelTool(opts?: {
       }
 
       try {
-        // 执行命令，超时 120 秒
-        const { stdout, stderr } = await execAsync(command, {
-          shell,
-          timeout: 120_000,
-          windowsHide: true,
-        });
+        const candidates =
+          process.platform === "win32" && !command.includes(".")
+            ? [command, `${command}.cmd`]
+            : [command];
+        let lastError: unknown;
+        let stdout = "";
+        let stderr = "";
+        for (const candidate of candidates) {
+          try {
+            // Security: avoid shell-string execution; run the binary directly with argv args.
+            const res = await execFileText(candidate, [prompt], {
+              timeout: 120_000,
+              windowsHide: true,
+              encoding: "utf8",
+            });
+            stdout = res.stdout;
+            stderr = res.stderr;
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err;
+            const code =
+              err && typeof err === "object" && "code" in err
+                ? String((err as { code?: unknown }).code)
+                : "";
+            if (code === "ENOENT") {
+              continue;
+            }
+            throw err;
+          }
+        }
+        if (lastError) {
+          throw lastError;
+        }
 
         const output = stdout || stderr;
         const result = output.trim() || "No output from command";

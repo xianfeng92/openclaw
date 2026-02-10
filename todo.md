@@ -76,7 +76,7 @@ Notes:
 - [x] Restore expected auth semantics and fix affected tests (`src/gateway/auth.test.ts`, `src/gateway/tools-invoke-http.test.ts`).
 - [x] `cli_model`: disabled by default (opt-in via `tools.cliModel.enabled`).
 - [x] `cli_model`: restrict `action` to a strict enum / allowlist.
-- [ ] `cli_model`: replace shell-string `exec()` with a safe spawn/execFile strategy (no shell injection).
+- [x] `cli_model`: replace shell-string `exec()` with a safe spawn/execFile strategy (no shell injection).
 - [ ] `cli_model`: add timeouts, output limits, and integrate with existing exec security/approval policy.
 - [ ] `fs_read`: prevent symlink escape (use `lstat` and/or `realpath` checks).
 - [ ] `fs_read`: add max-bytes + truncation for file reads and directory trees.

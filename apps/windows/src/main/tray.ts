@@ -166,16 +166,31 @@ function updateContextMenu(
       enabled: !isStartingOrStopping,
       click: () => {
         if (isRunning) {
-          gatewayManager.stop();
+          void gatewayManager.stop();
         } else {
-          gatewayManager.start();
+          void gatewayManager.start();
         }
       },
     },
     {
       label: "Restart Gateway",
       enabled: isRunning && !isStartingOrStopping,
-      click: () => gatewayManager.restart(),
+      click: () => void gatewayManager.restart(),
+    },
+    {
+      label: "Rotate Desktop Token",
+      enabled: !isStartingOrStopping,
+      click: () => {
+        void (async () => {
+          try {
+            gatewayManager.rotateAuthToken();
+            await gatewayManager.restart();
+            chatWindowManager.reloadToGatewayUi();
+          } catch (err) {
+            console.error("[Tray] Failed to rotate desktop token:", err);
+          }
+        })();
+      },
     },
     { type: "separator" },
     {
@@ -191,7 +206,7 @@ function updateContextMenu(
       label: "Quit",
       click: () => {
         // ESM-safe: use the imported `app` from Electron.
-        gatewayManager.stop().finally(() => app.quit());
+        void gatewayManager.stop().finally(() => app.quit());
       },
     },
   ];

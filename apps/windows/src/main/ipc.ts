@@ -8,6 +8,15 @@ export function setupIpc(
   gatewayManager: GatewayManager,
   chatWindowManager: ChatWindowManager
 ): void {
+  // Synchronous auth bootstrap for the preload script (must run before the Control UI app code).
+  // Never expose this token via the window globals; preload seeds localStorage and keeps the token private.
+  ipcMain.on("gateway:get-auth-sync", (event) => {
+    event.returnValue = {
+      token: gatewayManager.getAuthToken(),
+      port: gatewayManager.getState().port,
+    };
+  });
+
   // Get gateway state
   ipcMain.handle("gateway:get-state", (): GatewayState => {
     return gatewayManager.getState();

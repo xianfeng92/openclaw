@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { EventEmitter } from "events";
 import { app, net } from "electron";
 import fs from "fs";
+import { loadOrCreateGatewayAuth, rotateGatewayAuthToken } from "./gateway-auth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,11 +24,16 @@ export class GatewayManager extends EventEmitter {
   private port = 19001;
   private error: string | null = null;
   private externalProcess = false; // Track if gateway was started externally
+  private authToken: string;
+  private authPath: string;
 
   constructor() {
     super();
     // Read port from env or use default
     this.port = parseInt(process.env.OPENCLAW_GATEWAY_PORT || process.env.OPENCLAW_PORT || "19001", 10);
+    const auth = loadOrCreateGatewayAuth();
+    this.authToken = auth.token;
+    this.authPath = auth.path;
   }
 
   /**
@@ -92,6 +98,16 @@ export class GatewayManager extends EventEmitter {
     };
   }
 
+  getAuthToken(): string {
+    return this.authToken;
+  }
+
+  rotateAuthToken(): void {
+    const rotated = rotateGatewayAuthToken();
+    this.authToken = rotated.token;
+    this.authPath = rotated.path;
+  }
+
   async start(): Promise<void> {
     if (this.status === "running" || this.status === "starting") {
       return;
@@ -124,8 +140,21 @@ export class GatewayManager extends EventEmitter {
         // Installed/portable app: shell out to npx to run the published CLI.
         console.log(`[Gateway] Packaged mode - using npx openclaw`);
         command = "npx";
-        args = ["-y", "openclaw", "gateway"];
-        cwd = process.env.APPDATA || path.resolve(__dirname, "../../../..");
+        args = [
+          "-y",
+          "openclaw",
+          "--profile",
+          "desktop",
+          "gateway",
+          "--allow-unconfigured",
+          "--bind",
+          "loopback",
+          "--port",
+          String(this.port),
+          "--auth",
+          "token",
+        ];
+        cwd = process.cwd();
       } else {
         // Dev: run the gateway from the local repo checkout.
         const repoRoot = path.resolve(__dirname, "../../../..");
@@ -139,7 +168,19 @@ export class GatewayManager extends EventEmitter {
         }
 
         command = "node";
-        args = [scriptPath, "--dev", "gateway"];
+        args = [
+          scriptPath,
+          "--profile",
+          "desktop",
+          "gateway",
+          "--allow-unconfigured",
+          "--bind",
+          "loopback",
+          "--port",
+          String(this.port),
+          "--auth",
+          "token",
+        ];
         cwd = repoRoot;
       }
 
@@ -154,13 +195,21 @@ export class GatewayManager extends EventEmitter {
           ...process.env,
           OPENCLAW_PROFILE: "desktop",
           OPENCLAW_SKIP_CHANNELS: "1",
+          OPENCLAW_GATEWAY_PORT: String(this.port),
+          OPENCLAW_GATEWAY_TOKEN: this.authToken,
+          // Desktop app always uses token auth; clear any ambient password env that would switch modes.
+          OPENCLAW_GATEWAY_PASSWORD: "",
           NODE_ENV: "production",
         },
         detached: false,
-        shell: true, // Use shell to resolve npx properly
+        shell: isPackaged, // npx is typically a .cmd shim on Windows; dev mode uses node.exe directly.
       });
 
       console.log(`[Gateway] Process spawned with PID: ${this.process.pid}`);
+
+      const logChildOutput =
+        process.env.OPENCLAW_DESKTOP_GATEWAY_LOG_OUTPUT === "1" ||
+        process.env.OPENCLAW_DESKTOP_DEBUG === "1";
 
       this.process.on("error", (err) => {
         this.status = "error";
@@ -169,12 +218,14 @@ export class GatewayManager extends EventEmitter {
         this.emit("error", err);
       });
 
-      // Log stdout for debugging
+      // Log stdout/stderr only when explicitly enabled to avoid leaking sensitive content.
       this.process.stdout?.on("data", (data) => {
-        console.log(`[Gateway stdout] ${data}`);
+        if (!logChildOutput) {
+          return;
+        }
+        console.log(`[Gateway stdout] ${data.toString()}`);
       });
 
-      // Log stderr for debugging
       this.process.stderr?.on("data", (data) => {
         const msg = data.toString();
         // Check if it's the "already running" error
@@ -187,10 +238,12 @@ export class GatewayManager extends EventEmitter {
           this.emit("state-changed", this.getState());
           return;
         }
-        console.error(`[Gateway stderr] ${msg}`);
+        if (logChildOutput) {
+          console.error(`[Gateway stderr] ${msg}`);
+        }
       });
 
-      this.process.on("exit", (code, signal) => {
+      this.process.on("exit", (code, _signal) => {
         this.status = "stopped";
         this.process = null;
         this.emit("state-changed", this.getState());

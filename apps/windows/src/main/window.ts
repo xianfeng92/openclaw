@@ -1,4 +1,4 @@
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import type { GatewayManager } from "./gateway.js";
@@ -255,6 +255,15 @@ export class ChatWindowManager {
     } else {
       this.showChatWindow();
     }
+  }
+
+  reloadToGatewayUi(): void {
+    if (!this.window) {
+      return;
+    }
+    this.window.loadURL(this.getWebUiUrl()).catch((err) => {
+      console.error("Failed to load Web UI:", err);
+    });
   }
 
   close(): void {

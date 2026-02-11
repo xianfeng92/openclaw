@@ -36,6 +36,21 @@ export class GatewayManager extends EventEmitter {
     this.authPath = auth.path;
   }
 
+  private redactSensitiveArgs(args: string[]): string[] {
+    const redacted: string[] = [];
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i];
+      redacted.push(arg);
+      if (arg === "--token" || arg === "--password") {
+        if (i + 1 < args.length) {
+          redacted.push("<redacted>");
+          i += 1;
+        }
+      }
+    }
+    return redacted;
+  }
+
   /**
    * Check if Gateway is already running on the configured port
    */
@@ -113,6 +128,11 @@ export class GatewayManager extends EventEmitter {
       return;
     }
 
+    this.status = "starting";
+    this.error = null;
+    this.externalProcess = false;
+    this.emit("state-changed", this.getState());
+
     // Check if Gateway is already running (started by another process)
     const alreadyRunning = await this.isGatewayRunning();
     if (alreadyRunning) {
@@ -123,11 +143,6 @@ export class GatewayManager extends EventEmitter {
       console.log(`[Gateway] Already running on port ${this.port} (external process)`);
       return;
     }
-
-    this.status = "starting";
-    this.error = null;
-    this.externalProcess = false;
-    this.emit("state-changed", this.getState());
 
     try {
       // Determine how to run Gateway based on environment
@@ -153,6 +168,8 @@ export class GatewayManager extends EventEmitter {
           String(this.port),
           "--auth",
           "token",
+          "--token",
+          this.authToken,
         ];
         cwd = process.cwd();
       } else {
@@ -180,15 +197,18 @@ export class GatewayManager extends EventEmitter {
           String(this.port),
           "--auth",
           "token",
+          "--token",
+          this.authToken,
         ];
         cwd = repoRoot;
       }
 
-      console.log(`[Gateway] Spawning: ${command} ${args.join(" ")}`);
+      const safeArgs = this.redactSensitiveArgs(args);
+      console.log(`[Gateway] Spawning: ${command} ${safeArgs.join(" ")}`);
       console.log(`[Gateway] Working directory: ${cwd}`);
 
       // Spawn the gateway process
-      this.process = spawn(command, args, {
+      const child = spawn(command, args, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
@@ -204,14 +224,18 @@ export class GatewayManager extends EventEmitter {
         detached: false,
         shell: isPackaged, // npx is typically a .cmd shim on Windows; dev mode uses node.exe directly.
       });
+      this.process = child;
 
-      console.log(`[Gateway] Process spawned with PID: ${this.process.pid}`);
+      console.log(`[Gateway] Process spawned with PID: ${child.pid}`);
 
       const logChildOutput =
         process.env.OPENCLAW_DESKTOP_GATEWAY_LOG_OUTPUT === "1" ||
         process.env.OPENCLAW_DESKTOP_DEBUG === "1";
 
-      this.process.on("error", (err) => {
+      child.on("error", (err) => {
+        if (this.process !== child) {
+          return;
+        }
         this.status = "error";
         this.error = err.message;
         this.emit("state-changed", this.getState());
@@ -219,17 +243,20 @@ export class GatewayManager extends EventEmitter {
       });
 
       // Log stdout/stderr only when explicitly enabled to avoid leaking sensitive content.
-      this.process.stdout?.on("data", (data) => {
+      child.stdout?.on("data", (data) => {
         if (!logChildOutput) {
           return;
         }
         console.log(`[Gateway stdout] ${data.toString()}`);
       });
 
-      this.process.stderr?.on("data", (data) => {
+      child.stderr?.on("data", (data) => {
         const msg = data.toString();
         // Check if it's the "already running" error
         if (msg.includes("Gateway already running locally")) {
+          if (this.process !== child) {
+            return;
+          }
           // Gateway is already running, switch to external mode
           console.log("[Gateway] Detected already running Gateway");
           this.status = "running";
@@ -243,7 +270,10 @@ export class GatewayManager extends EventEmitter {
         }
       });
 
-      this.process.on("exit", (code, _signal) => {
+      child.on("exit", (code, _signal) => {
+        if (this.process !== child) {
+          return;
+        }
         this.status = "stopped";
         this.process = null;
         this.emit("state-changed", this.getState());

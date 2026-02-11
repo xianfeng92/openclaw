@@ -89,17 +89,6 @@ export class ChatWindowManager {
       const errorDiv = document.getElementById('error');
       const statusSpan = document.getElementById('status');
 
-      async function navigateToUi() {
-        try {
-          const state = await desktop.gateway.getState();
-          const port = (state && state.port) || 19001;
-          window.location.href = 'http://127.0.0.1:' + String(port) + '/';
-        } catch {
-          // Fall back to a plain reload if we can't read state for any reason.
-          location.reload();
-        }
-      }
-
       async function startGateway() {
         startBtn.disabled = true;
         startBtn.textContent = 'Starting...';
@@ -109,9 +98,8 @@ export class ChatWindowManager {
         try {
           const result = await desktop.gateway.start();
           if (result && result.success) {
-            startBtn.textContent = 'Starting Gateway...';
+            startBtn.textContent = 'Gateway Running';
             statusSpan.textContent = 'Running';
-            setTimeout(() => void navigateToUi(), 2000);
           } else {
             startBtn.disabled = false;
             startBtn.textContent = 'Start Gateway';
@@ -137,10 +125,6 @@ export class ChatWindowManager {
           if (state.error) {
             errorDiv.textContent = state.error;
           }
-          // User explicitly opened the chat window; automatically start the gateway on first load.
-          if (state.status === 'stopped') {
-            void startGateway();
-          }
         }).catch(() => {
           errorDiv.textContent = 'Could not get Gateway state';
         });
@@ -149,9 +133,6 @@ export class ChatWindowManager {
           statusSpan.textContent = state.status || 'unknown';
           if (state.error) {
             errorDiv.textContent = state.error;
-          }
-          if (state.status === 'running') {
-            setTimeout(() => void navigateToUi(), 500);
           }
         });
       }
@@ -164,6 +145,59 @@ export class ChatWindowManager {
     // Gateway serves the Control UI at `/` by default (unless gateway.controlUi.basePath is set).
     const { port } = this.gatewayManager.getState();
     return `http://127.0.0.1:${port}/`;
+  }
+
+  private getFallbackDataUrl(): string {
+    return `data:text/html;charset=utf-8,${encodeURIComponent(this.buildGatewayErrorPageHtml())}`;
+  }
+
+  private loadFallbackPage(): void {
+    const dataUrl = this.getFallbackDataUrl();
+    this.window?.loadURL(dataUrl).catch((loadErr) => {
+      console.error("Failed to load fallback error page:", loadErr);
+    });
+  }
+
+  private loadWebUiWithFallback(): void {
+    this.window?.loadURL(this.getWebUiUrl()).catch((err) => {
+      console.error("Failed to load Web UI:", err);
+      // Navigate to a local error page (data: URL) so we can reliably run the preload bridge + start the gateway.
+      this.loadFallbackPage();
+
+      // Keep retrying while the window is alive; startup can race briefly even after process spawn.
+      setTimeout(() => {
+        if (!this.window) {
+          return;
+        }
+        this.loadWebUiWithFallback();
+      }, 800);
+    });
+  }
+
+  private waitForGatewayRunning(timeoutMs = 45_000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const current = this.gatewayManager.getState();
+      if (current.status === "running") {
+        resolve(true);
+        return;
+      }
+
+      const onStateChanged = (state: { status: string }) => {
+        if (state.status !== "running") {
+          return;
+        }
+        this.gatewayManager.off("state-changed", onStateChanged);
+        clearTimeout(timer);
+        resolve(true);
+      };
+
+      const timer = setTimeout(() => {
+        this.gatewayManager.off("state-changed", onStateChanged);
+        resolve(false);
+      }, timeoutMs);
+
+      this.gatewayManager.on("state-changed", onStateChanged);
+    });
   }
 
   createWindow(): BrowserWindow {
@@ -189,30 +223,32 @@ export class ChatWindowManager {
       },
     });
 
-	    // Load the web UI
-	    this.window.loadURL(this.getWebUiUrl()).catch((err) => {
-	      console.error("Failed to load Web UI:", err);
-	      // Navigate to a local error page (data: URL) so we can reliably run the preload bridge + start the gateway.
-	      const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(this.buildGatewayErrorPageHtml())}`;
-	      this.window?.loadURL(dataUrl).catch((loadErr) => {
-	        console.error("Failed to load fallback error page:", loadErr);
-	      });
-
-	      // Also retry from the main process once the gateway is running (more reliable than in-page reloads).
-	      const retry = () => {
-	        try {
-	          this.window?.loadURL(this.getWebUiUrl()).catch(() => undefined);
-	        } finally {
-	          this.gatewayManager.off("state-changed", onStateChanged);
-	        }
-	      };
-	      const onStateChanged = (state: { status: string }) => {
-	        if (state.status === "running") {
-	          retry();
-	        }
-	      };
-	      this.gatewayManager.on("state-changed", onStateChanged);
-	    });
+    const state = this.gatewayManager.getState();
+    if (state.status === "running") {
+      this.loadWebUiWithFallback();
+    } else if (state.status === "starting") {
+      // Gateway is already starting (e.g. from another trigger); wait for running before navigating.
+      this.loadFallbackPage();
+      void this.waitForGatewayRunning().then((ok) => {
+        if (!ok || !this.window) {
+          return;
+        }
+        this.loadWebUiWithFallback();
+      });
+    } else {
+      // Avoid an initial ERR_CONNECTION_REFUSED by showing fallback first when the gateway is not up yet.
+      this.loadFallbackPage();
+      void this.gatewayManager.start()
+        .then(() => {
+          if (!this.window) {
+            return;
+          }
+          this.loadWebUiWithFallback();
+        })
+        .catch((err) => {
+          console.error("Auto-start gateway failed:", err);
+        });
+    }
 
     // Handle window closed
     this.window.on("closed", () => {
@@ -261,9 +297,7 @@ export class ChatWindowManager {
     if (!this.window) {
       return;
     }
-    this.window.loadURL(this.getWebUiUrl()).catch((err) => {
-      console.error("Failed to load Web UI:", err);
-    });
+    this.loadWebUiWithFallback();
   }
 
   close(): void {

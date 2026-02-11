@@ -218,9 +218,11 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
           });
         }
       }
-      // Only load chat history if we didn't already load it via loadSessions above
-      // (which triggers chat history refresh via session list update)
-      if (state === "final" && !(runId && host.refreshSessionsAfterChat.has(runId))) {
+      // Load chat history if not already loaded via loadSessions path
+      // (loadSessions triggers syncUrlWithSessionKey which triggers loadChatHistory)
+      // Only load directly if runId is NOT in refreshSessionsAfterChat (wasn't a loadSessions run)
+      const wasLoadedViaLoadSessions = runId && host.refreshSessionsAfterChat.has(runId);
+      if (state === "final" && !wasLoadedViaLoadSessions) {
         void loadChatHistory(host as unknown as OpenClawApp);
       }
     }

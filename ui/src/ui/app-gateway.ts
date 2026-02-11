@@ -218,9 +218,11 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
           });
         }
       }
-    }
-    if (state === "final") {
-      void loadChatHistory(host as unknown as OpenClawApp);
+      // Only load chat history if we didn't already load it via loadSessions above
+      // (which triggers chat history refresh via session list update)
+      if (state === "final" && !(runId && host.refreshSessionsAfterChat.has(runId))) {
+        void loadChatHistory(host as unknown as OpenClawApp);
+      }
     }
     return;
   }

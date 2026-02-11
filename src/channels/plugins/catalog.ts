@@ -38,6 +38,46 @@ type CatalogOptions = {
   catalogPaths?: string[];
 };
 
+const BUILTIN_CHANNEL_PLUGIN_CATALOG_ENTRIES: ChannelPluginCatalogEntry[] = [
+  {
+    id: "msteams",
+    meta: {
+      id: "msteams",
+      label: "Microsoft Teams",
+      selectionLabel: "Microsoft Teams (Bot Framework)",
+      docsPath: "/channels/msteams",
+      blurb: "Bot Framework; enterprise support.",
+      aliases: ["teams"],
+    },
+    install: {
+      npmSpec: "@openclaw/msteams",
+    },
+  },
+  {
+    id: "bluebubbles",
+    meta: {
+      id: "bluebubbles",
+      label: "BlueBubbles",
+      selectionLabel: "BlueBubbles",
+      docsPath: "/channels/bluebubbles",
+      blurb: "iMessage bridge (BlueBubbles).",
+      preferOver: ["imessage"],
+    },
+    install: {
+      npmSpec: "@openclaw/bluebubbles",
+    },
+  },
+];
+
+export function listBuiltinChannelPluginCatalogEntries(): ChannelPluginCatalogEntry[] {
+  // Return fresh objects to prevent accidental mutation in callsites/tests.
+  return BUILTIN_CHANNEL_PLUGIN_CATALOG_ENTRIES.map((entry) => ({
+    ...entry,
+    meta: { ...entry.meta },
+    install: { ...entry.install },
+  }));
+}
+
 const ORIGIN_PRIORITY: Record<PluginOrigin, number> = {
   config: 0,
   workspace: 1,
@@ -266,6 +306,10 @@ export function listChannelPluginCatalogEntries(
   const discovery = discoverOpenClawPlugins({ workspaceDir: options.workspaceDir });
   const resolved = new Map<string, { entry: ChannelPluginCatalogEntry; priority: number }>();
 
+  for (const entry of listBuiltinChannelPluginCatalogEntries()) {
+    resolved.set(entry.id, { entry, priority: 100 });
+  }
+
   for (const candidate of discovery.candidates) {
     const entry = buildCatalogEntry(candidate);
     if (!entry) {
@@ -282,8 +326,10 @@ export function listChannelPluginCatalogEntries(
     .map((entry) => buildExternalCatalogEntry(entry))
     .filter((entry): entry is ChannelPluginCatalogEntry => Boolean(entry));
   for (const entry of externalEntries) {
-    if (!resolved.has(entry.id)) {
-      resolved.set(entry.id, { entry, priority: 99 });
+    const priority = 99;
+    const existing = resolved.get(entry.id);
+    if (!existing || priority < existing.priority) {
+      resolved.set(entry.id, { entry, priority });
     }
   }
 

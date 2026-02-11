@@ -14,30 +14,30 @@ let config: Record<string, unknown> = {};
 const readAllowFromStoreMock = vi.fn();
 const upsertPairingRequestMock = vi.fn();
 
-vi.mock("../config/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/config.js")>();
+vi.mock("../config/config.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../config/config.ts")>();
   return {
     ...actual,
     loadConfig: () => config,
   };
 });
 
-vi.mock("../auto-reply/reply.js", () => ({
+vi.mock("../auto-reply/reply.ts", () => ({
   getReplyFromConfig: (...args: unknown[]) => replyMock(...args),
 }));
 
-vi.mock("./send.js", () => ({
+vi.mock("./send.ts", () => ({
   sendMessageSignal: (...args: unknown[]) => sendMock(...args),
   sendTypingSignal: vi.fn().mockResolvedValue(true),
   sendReadReceiptSignal: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("../pairing/pairing-store.js", () => ({
+vi.mock("../pairing/pairing-store.ts", () => ({
   readChannelAllowFromStore: (...args: unknown[]) => readAllowFromStoreMock(...args),
   upsertChannelPairingRequest: (...args: unknown[]) => upsertPairingRequestMock(...args),
 }));
 
-vi.mock("../config/sessions.js", () => ({
+vi.mock("../config/sessions.ts", () => ({
   resolveStorePath: vi.fn(() => "/tmp/openclaw-sessions.json"),
   updateLastRoute: (...args: unknown[]) => updateLastRouteMock(...args),
   readSessionUpdatedAt: vi.fn(() => undefined),
@@ -48,17 +48,17 @@ const streamMock = vi.fn();
 const signalCheckMock = vi.fn();
 const signalRpcRequestMock = vi.fn();
 
-vi.mock("./client.js", () => ({
+vi.mock("./client.ts", () => ({
   streamSignalEvents: (...args: unknown[]) => streamMock(...args),
   signalCheck: (...args: unknown[]) => signalCheckMock(...args),
   signalRpcRequest: (...args: unknown[]) => signalRpcRequestMock(...args),
 }));
 
-vi.mock("./daemon.js", () => ({
+vi.mock("./daemon.ts", () => ({
   spawnSignalDaemon: vi.fn(() => ({ stop: vi.fn() })),
 }));
 
-vi.mock("../infra/transport-ready.js", () => ({
+vi.mock("../infra/transport-ready.ts", () => ({
   waitForTransportReady: (...args: unknown[]) => waitForTransportReadyMock(...args),
 }));
 

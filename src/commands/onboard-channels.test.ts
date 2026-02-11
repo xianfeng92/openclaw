@@ -2,14 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
-import { discordPlugin } from "../../extensions/discord/src/channel.js";
-import { imessagePlugin } from "../../extensions/imessage/src/channel.js";
-import { signalPlugin } from "../../extensions/signal/src/channel.js";
-import { slackPlugin } from "../../extensions/slack/src/channel.js";
-import { telegramPlugin } from "../../extensions/telegram/src/channel.js";
-import { whatsappPlugin } from "../../extensions/whatsapp/src/channel.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
-import { createTestRegistry } from "../test-utils/channel-plugins.js";
+import {
+  createDiscordTestPlugin,
+  createIMessageTestPlugin,
+  createSignalTestPlugin,
+  createSlackTestPlugin,
+  createTelegramTestPlugin,
+  createTestRegistry,
+  createWhatsAppTestPlugin,
+} from "../test-utils/channel-plugins.js";
 import { setupChannels } from "./onboard-channels.js";
 
 vi.mock("node:fs/promises", () => ({
@@ -32,12 +34,12 @@ describe("setupChannels", () => {
   beforeEach(() => {
     setActivePluginRegistry(
       createTestRegistry([
-        { pluginId: "discord", plugin: discordPlugin, source: "test" },
-        { pluginId: "slack", plugin: slackPlugin, source: "test" },
-        { pluginId: "telegram", plugin: telegramPlugin, source: "test" },
-        { pluginId: "whatsapp", plugin: whatsappPlugin, source: "test" },
-        { pluginId: "signal", plugin: signalPlugin, source: "test" },
-        { pluginId: "imessage", plugin: imessagePlugin, source: "test" },
+        { pluginId: "discord", plugin: createDiscordTestPlugin(), source: "test" },
+        { pluginId: "slack", plugin: createSlackTestPlugin(), source: "test" },
+        { pluginId: "telegram", plugin: createTelegramTestPlugin(), source: "test" },
+        { pluginId: "whatsapp", plugin: createWhatsAppTestPlugin(), source: "test" },
+        { pluginId: "signal", plugin: createSignalTestPlugin(), source: "test" },
+        { pluginId: "imessage", plugin: createIMessageTestPlugin(), source: "test" },
       ]),
     );
   });

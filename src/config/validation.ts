@@ -2,6 +2,7 @@ import path from "node:path";
 import type { OpenClawConfig, ConfigValidationIssue } from "./types.js";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { CHANNEL_IDS, normalizeChatChannelId } from "../channels/registry.js";
+import { listBuiltinChannelPluginCatalogEntries } from "../channels/plugins/catalog.js";
 import {
   normalizePluginsConfig,
   resolveEnableState,
@@ -162,6 +163,12 @@ export function validateConfigObjectWithPlugins(raw: unknown):
   });
 
   const knownIds = new Set(registry.plugins.map((record) => record.id));
+  for (const channelId of CHANNEL_IDS) {
+    knownIds.add(channelId);
+  }
+  for (const entry of listBuiltinChannelPluginCatalogEntries()) {
+    knownIds.add(entry.id);
+  }
 
   for (const diag of registry.diagnostics) {
     let path = diag.pluginId ? `plugins.entries.${diag.pluginId}` : "plugins";

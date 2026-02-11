@@ -4,12 +4,18 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type { OpenClawConfig } from "../config/config.js";
-import { discordPlugin } from "../../extensions/discord/src/channel.js";
-import { slackPlugin } from "../../extensions/slack/src/channel.js";
-import { telegramPlugin } from "../../extensions/telegram/src/channel.js";
+import {
+  createDiscordTestPlugin,
+  createSlackTestPlugin,
+  createTelegramTestPlugin,
+} from "../test-utils/channel-plugins.js";
 import { runSecurityAudit } from "./audit.js";
 
 const isWindows = process.platform === "win32";
+
+const discordPlugin = createDiscordTestPlugin();
+const slackPlugin = createSlackTestPlugin();
+const telegramPlugin = createTelegramTestPlugin();
 
 describe("security audit", () => {
   it("includes an attack surface summary (info)", async () => {

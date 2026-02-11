@@ -5,9 +5,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi 
 import { WebSocket } from "ws";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type { PluginRegistry } from "../plugins/registry.js";
-import { whatsappPlugin } from "../../extensions/whatsapp/src/channel.js";
 import { emitAgentEvent, registerAgentRunContext } from "../infra/agent-events.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
+import { createWhatsAppTestPlugin } from "../test-utils/channel-plugins.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import {
   agentCommand,
@@ -107,7 +107,7 @@ const defaultRegistry = createRegistry([
   {
     pluginId: "whatsapp",
     source: "test",
-    plugin: whatsappPlugin,
+    plugin: createWhatsAppTestPlugin(),
   },
 ]);
 

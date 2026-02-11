@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { monitorIMessageProvider } from "./monitor.js";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+let monitorIMessageProvider: typeof import("./monitor.js").monitorIMessageProvider;
 
 const requestMock = vi.fn();
 const stopMock = vi.fn();
@@ -69,6 +70,10 @@ async function waitForSubscribe() {
     await flush();
   }
 }
+
+beforeAll(async () => {
+  ({ monitorIMessageProvider } = await import("./monitor.js"));
+});
 
 beforeEach(() => {
   config = {

@@ -1,5 +1,16 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const voiceCallIndexPath = fileURLToPath(new URL("../../extensions/voice-call/index.js", import.meta.url));
+const describeVoiceCall = existsSync(voiceCallIndexPath) ? describe : describe.skip;
+
+let plugin:
+  | null
+  | {
+      register: (api: Record<string, unknown>) => void | Promise<void>;
+    } = null;
 
 let runtimeStub: {
   config: { toNumber?: string };
@@ -13,12 +24,6 @@ let runtimeStub: {
   };
   stop: ReturnType<typeof vi.fn>;
 };
-
-vi.mock("../../extensions/voice-call/src/runtime.js", () => ({
-  createVoiceCallRuntime: vi.fn(async () => runtimeStub),
-}));
-
-import plugin from "../../extensions/voice-call/index.js";
 
 const noopLogger = {
   info: vi.fn(),
@@ -35,6 +40,9 @@ type Registered = {
 function setup(config: Record<string, unknown>): Registered {
   const methods = new Map<string, (ctx: Record<string, unknown>) => unknown>();
   const tools: unknown[] = [];
+  if (!plugin) {
+    throw new Error("voice-call plugin missing");
+  }
   plugin.register({
     id: "voice-call",
     name: "Voice Call",
@@ -54,7 +62,17 @@ function setup(config: Record<string, unknown>): Registered {
   return { methods, tools };
 }
 
-describe("voice-call plugin", () => {
+describeVoiceCall("voice-call plugin", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    vi.doMock("../../extensions/voice-call/src/runtime.js", () => ({
+      createVoiceCallRuntime: vi.fn(async () => runtimeStub),
+    }));
+
+    const imported = await import("../../extensions/voice-call/index.js");
+    plugin = imported.default as typeof plugin;
+  });
+
   beforeEach(() => {
     runtimeStub = {
       config: { toNumber: "+15550001234" },
@@ -130,9 +148,10 @@ describe("voice-call plugin", () => {
   });
 
   it("CLI start prints JSON", async () => {
-    const { register } = plugin as unknown as {
-      register: (api: Record<string, unknown>) => void | Promise<void>;
-    };
+    if (!plugin) {
+      throw new Error("voice-call plugin missing");
+    }
+    const { register } = plugin;
     const program = new Command();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await register({

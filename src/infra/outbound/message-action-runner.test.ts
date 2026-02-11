@@ -4,12 +4,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelPlugin } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import { slackPlugin } from "../../../extensions/slack/src/channel.js";
-import { telegramPlugin } from "../../../extensions/telegram/src/channel.js";
-import { whatsappPlugin } from "../../../extensions/whatsapp/src/channel.js";
 import { jsonResult } from "../../agents/tools/common.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
-import { createIMessageTestPlugin, createTestRegistry } from "../../test-utils/channel-plugins.js";
+import {
+  createIMessageTestPlugin,
+  createSlackTestPlugin,
+  createTelegramTestPlugin,
+  createTestRegistry,
+  createWhatsAppTestPlugin,
+} from "../../test-utils/channel-plugins.js";
 import { loadWebMedia } from "../../web/media.js";
 import { runMessageAction } from "./message-action-runner.js";
 
@@ -39,31 +42,23 @@ const whatsappConfig = {
 } as OpenClawConfig;
 
 describe("runMessageAction context isolation", () => {
-  beforeEach(async () => {
-    const { createPluginRuntime } = await import("../../plugins/runtime/index.js");
-    const { setSlackRuntime } = await import("../../../extensions/slack/src/runtime.js");
-    const { setTelegramRuntime } = await import("../../../extensions/telegram/src/runtime.js");
-    const { setWhatsAppRuntime } = await import("../../../extensions/whatsapp/src/runtime.js");
-    const runtime = createPluginRuntime();
-    setSlackRuntime(runtime);
-    setTelegramRuntime(runtime);
-    setWhatsAppRuntime(runtime);
+  beforeEach(() => {
     setActivePluginRegistry(
       createTestRegistry([
         {
           pluginId: "slack",
           source: "test",
-          plugin: slackPlugin,
+          plugin: createSlackTestPlugin(),
         },
         {
           pluginId: "whatsapp",
           source: "test",
-          plugin: whatsappPlugin,
+          plugin: createWhatsAppTestPlugin(),
         },
         {
           pluginId: "telegram",
           source: "test",
-          plugin: telegramPlugin,
+          plugin: createTelegramTestPlugin(),
         },
         {
           pluginId: "imessage",
@@ -483,17 +478,13 @@ describe("runMessageAction sendAttachment hydration", () => {
 });
 
 describe("runMessageAction sandboxed media validation", () => {
-  beforeEach(async () => {
-    const { createPluginRuntime } = await import("../../plugins/runtime/index.js");
-    const { setSlackRuntime } = await import("../../../extensions/slack/src/runtime.js");
-    const runtime = createPluginRuntime();
-    setSlackRuntime(runtime);
+  beforeEach(() => {
     setActivePluginRegistry(
       createTestRegistry([
         {
           pluginId: "slack",
           source: "test",
-          plugin: slackPlugin,
+          plugin: createSlackTestPlugin(),
         },
       ]),
     );

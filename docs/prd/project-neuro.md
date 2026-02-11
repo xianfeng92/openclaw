@@ -170,17 +170,19 @@ interface ContextStream {
     url?: string;
   };
 
-  // Clipboard (last 30s, non-persistent)
+  // Clipboard (last 30s, volatile, size-capped)
+  // Privacy: Sensitive patterns are redacted before storage
   clipboardRing: Array<{
-    content: string;
+    content: string;      // Max 10KB per entry, redacted
     timestamp: number;
     type: 'text' | 'image' | 'file';
+    redacted: boolean;    // True if sensitive content detected
   }>;
 
-  // Recent terminal output (via watching)
+  // Recent terminal output (via watching, last 100 lines)
   terminalOutput: string[];
 
-  // File system events in workspace root
+  // File system events in workspace root (last 100 events)
   fileEvents: Array<{
     path: string;
     action: 'created' | 'modified' | 'deleted';
@@ -194,7 +196,24 @@ interface ContextStream {
     diagnostics: Diagnostic[];
   };
 }
+
+// Privacy: Patterns that trigger redaction
+const SENSITIVE_PATTERNS = [
+  /api[_-]?key/i,
+  /password/i,
+  /secret/i,
+  /token/i,
+  /bearer/i,
+  /sk-[a-zA-Z0-9]{32,}/,  // OpenAI keys
+  /ghp_[a-zA-Z0-9]{36,}/,  // GitHub tokens
+];
 ```
+
+**Privacy & Performance Guarantees**:
+- All buffer data is **volatile** (memory-only, never written to disk)
+- Clipboard content is **redacted** for sensitive patterns
+- Size caps: 10KB per clipboard entry, 100 terminal lines, 100 file events
+- Buffer clears on app exit (no persistence)
 
 ### 4.3 The Prediction Engine
 
@@ -216,7 +235,56 @@ Trigger Threshold: User pauses for > 2s with clipboard containing pattern
 │  └───────────────────────────────────────────────────────────┘
 ```
 
-### 4.4 Execution: Trust by Default, Revertible by Design
+**Technical Implementation (Phase 3)**:
+
+The prediction engine requires a **Behavioral Context Store** that sits alongside sessions:
+
+```typescript
+// Storage: ~/.openclaw/behavioral.db (SQLite)
+interface BehaviorEvent {
+  id: string;
+  timestamp: number;
+  type: 'clipboard' | 'error' | 'file_edit' | 'command_run' | 'suggestion';
+  pattern: string;        // Hashed pattern for matching
+  context: {              // Capture context at event time
+    workspace: string;
+    file?: string;
+    app?: string;
+  };
+  userAction?: 'accept' | 'dismiss' | 'modify' | 'ignore';
+  confidence?: number;    // ML model confidence (0-1)
+}
+
+// Query interface
+interface PredictionEngine {
+  // Find similar past events
+  findSimilar(pattern: string, context: Context): BehaviorEvent[];
+
+  // Get user preference for this pattern
+  getUserPreference(pattern: string): 'auto_apply' | 'suggest' | 'ignore';
+
+  // Record user feedback
+  recordFeedback(eventId: string, action: string): void;
+}
+```
+
+**Data Retention Policy**:
+- Events retained for 30 days
+- Aggregate preferences (patterns → actions) retained indefinitely
+- User can export/delete behavioral data at any time
+
+### 4.4 Execution Modes: Safe vs Flow
+
+To resolve the "Trust by Default" tension with security, OpenClaw offers two distinct modes:
+
+| Mode | Description | Use Case | Write Behavior |
+|------|-------------|----------|----------------|
+| **Safe Mode** (default) | Every write/action requires confirmation | New users, sensitive projects | Always prompt, show diff |
+| **Flow Mode** (opt-in) | Allowlist actions execute automatically | Trusted workflows, repetitive tasks | Auto-apply allowlisted actions |
+
+Users enter Flow Mode by explicitly adding commands to the allowlist via the "Always Allow" approval prompt.
+
+### 4.5 Execution: Revertible by Design
 
 | Action Type | Behavior | Fallback |
 |-------------|----------|----------|
@@ -289,12 +357,15 @@ OpenClaw:
 
 ### 5.4 Desktop Integration Points
 
-| Platform | Entry Points | Status |
-|----------|--------------|--------|
-| **macOS** | Menu bar app, Alt+Space, `openclaw://agent` deep links | ✅ Complete |
-| **Windows** | System tray, hotkey, desktop app | 🚧 In Progress |
-| **CLI** | `openclaw agent --message "..."` | ✅ Complete |
-| **Web** | WebChat UI | ✅ Complete |
+| Platform | Entry Points | Floating UI | Status |
+|----------|--------------|-------------|--------|
+| **macOS** | Menu bar app, Alt+Space, `openclaw://agent` deep links | NSPanel (native) | ✅ Complete |
+| **Windows** | System tray, hotkey, desktop app | Win32 overlay layer | 🚧 In Progress |
+| **Linux** | CLI only | N/A | 📋 Future |
+| **CLI** | `openclaw agent --message "..."` | N/A | ✅ Complete |
+| **Web** | WebChat UI | Toast notifications | ✅ Complete |
+
+**MVP Scope**: Floating cards target macOS + Windows only. Linux users get CLI-only experience.
 
 ---
 
@@ -407,9 +478,18 @@ OpenClaw automatically injects these files into context:
 
 **Definition**: Time from user intent to visible response.
 
-**Target**: < 200ms (feels instant)
+**Breakdown**:
+| Layer | Target | Status |
+|-------|--------|--------|
+| UI Response (card appears, skeleton loads) | < 100ms | ✅ Achieved |
+| WebSocket round-trip | < 50ms | ✅ Achieved (~50-100ms) |
+| LLM first token (Claude Sonnet) | 500-2000ms | ⚠️ External dependency |
+| **Total (AI response)** | < 2500ms | 🚧 In progress |
 
-**Status**: Gateway WebSocket protocol achieves ~50-100ms for simple queries
+**Strategy**:
+- UI shows immediate feedback (pulse, skeleton) within 100ms
+- AI content streams in asynchronously
+- For local operations (JSON format, file reads): < 200ms total
 
 ### 8.3 Voluntary Usage
 
@@ -445,18 +525,28 @@ OpenClaw automatically injects these files into context:
 
 ### Phase 3: Learning to Watch (Planned) 📋
 
-- [ ] Pattern recognition engine
+**Prerequisite**: Complete Behavioral Context Store TDD
+
+- [ ] Behavioral Context Store (SQLite schema, migration path)
+- [ ] Pattern recognition engine (event → pattern matching)
 - [ ] Project context deepening (.git root watching)
-- [ ] Terminal output monitoring
-- [ ] File system event watching
-- [ ] Memory: remembers user preferences
+- [ ] Terminal output monitoring (pty integration)
+- [ ] File system event watching (chokidar integration)
+- [ ] User preference learning (accept/dismiss tracking)
 
 ### Phase 4: Reading Minds (Planned) 📋
 
+**Prerequisite**: Phase 3 complete + 30 days of aggregated data
+
 - [ ] Multi-app coordination (VS Code + Browser + Terminal)
 - [ ] The "I knew you were going to do that" feature
-- [ ] Predictive suggestions
+- [ ] Predictive suggestions (ML model or heuristics)
 - [ ] Auto-apply with 1-click undo
+- [ ] Flow Mode (graduated from Safe Mode)
+
+**Technical Design Documents Required**:
+- Before Phase 3: `docs/prd/behavioral-context-store.md` — Data model, privacy, storage
+- Before Phase 4: `docs/prd/prediction-engine.md` — ML vs heuristics, evaluation metrics
 
 ---
 
@@ -478,12 +568,22 @@ OpenClaw automatically injects these files into context:
 
 ### 10.2 Non-Functional Requirements
 
-| Requirement | Why It Matters | Status |
-|-------------|----------------|--------|
-| **Latency < 200ms** | Below human perception threshold | ✅ Gateway ~50-100ms |
-| **Memory < 150MB idle** | Users won't tolerate resource hogs | 🚧 Optimization needed |
-| **No configuration file required** | If it needs setup, 90% won't use it | ✅ Sensible defaults |
-| **Privacy-first** | All context stays local, period | ✅ Local-only by default |
+| Requirement | Why It Matters | Target | Status |
+|-------------|----------------|--------|--------|
+| **UI Response < 100ms** | Below human perception threshold | < 100ms | ✅ Achieved |
+| **AI First Token < 2s** | User doesn't abandon flow | < 2000ms | 🚧 Optimizing |
+| **Memory Budget** | Users won't tolerate resource hogs | < 200MB idle | 🚧 See breakdown |
+| **No config required** | If it needs setup, 90% won't use it | Sensible defaults | ✅ Achieved |
+| **Privacy-first** | All context stays local | Local-only by default | ✅ Enforced |
+
+**Memory Budget Breakdown**:
+| Component | Target | Notes |
+|-----------|--------|-------|
+| Desktop App (UI) | 80MB | SwiftUI / React Native |
+| Gateway Daemon | 60MB | Node.js + Express |
+| Rolling Context Buffer | 30MB | Size-capped, volatile |
+| Agent Runtime | 30MB | pi-mono embedded |
+| **Total** | **< 200MB** | Measured at idle |
 
 ### 10.3 Security Considerations
 
@@ -493,6 +593,49 @@ From the Desktop MVP Slim branch lessons learned:
 2. **Tool execution must be sandboxed** — `exec` uses allowlist with "Always Allow" persistence
 3. **File reads must be bounded** — Prevent symlink escapes, cap bytes, keep output ASCII
 4. **Logging must be metadata-only** — Never log message content, only lengths/ids
+
+### 10.4 Offline Capabilities
+
+| Feature | Online Required | Fallback |
+|---------|-----------------|----------|
+| Context capture (clipboard, files) | No | Works fully offline |
+| Pattern matching (local) | No | Uses local behavioral.db |
+| AI suggestions | Yes | Queue for later, show "waiting for connection" |
+| File operations | No | Works fully offline |
+
+**Strategy**: The "Ghost" (context capture, pattern recognition) works offline. The "Brain" (AI) requires connectivity but gracefully degrades.
+
+### 10.5 Multi-Device Sync
+
+Behavioral preferences sync across user devices via the gateway:
+
+```
+┌─────────────────┐     sync      ┌─────────────────┐
+│   Mac (home)    │ ───────────→  │   Windows (work)│
+│  learned:       │               │  inherits:      │
+│  • JSON format  │   preferences  • JSON format    │
+│  • npm patterns │               • npm patterns   │
+└─────────────────┘               └─────────────────┘
+        ↓                                 ↓
+   Shared Gateway (remote mode or self-hosted)
+```
+
+**Implementation**: Preferences stored in `~/.openclaw/behavioral.db`, synced via:
+- Option A: User's self-hosted gateway (recommended)
+- Option B: Encrypted cloud storage (opt-in, future)
+
+### 10.6 Graduated Rollout
+
+To avoid overwhelming users with "sudden AI intelligence":
+
+| Phase | Trigger | Capabilities Enabled |
+|-------|---------|---------------------|
+| **Silent** | Day 0-1 | Observation only, no UI |
+| **Hint** | Day 2-7 | Small corner cards for obvious patterns (JSON format) |
+| **Helpful** | Day 8-30 | Context-aware suggestions, user can dismiss |
+| **Integrated** | Day 30+ | Full prediction, Flow Mode available |
+
+Users can accelerate or pause this progression in settings.
 
 ---
 

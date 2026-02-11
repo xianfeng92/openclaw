@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetInboundDedupe } from "../auto-reply/reply/inbound-dedupe.js";
 import { resetSystemEventsForTest } from "../infra/system-events.js";
-import { monitorSignalProvider } from "./monitor.js";
 
 const sendMock = vi.fn();
 const replyMock = vi.fn();
@@ -55,6 +54,8 @@ vi.mock("./daemon.js", () => ({
 }));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const { monitorSignalProvider } = await import("./monitor.js");
 
 beforeEach(() => {
   resetInboundDedupe();

@@ -128,13 +128,13 @@ describe("QmdMemoryManager", () => {
     await manager.close();
   });
 
-  it("blocks non-markdown or symlink reads for qmd paths", async () => {
-    const resolved = resolveMemoryBackendConfig({ cfg, agentId });
-    const manager = await QmdMemoryManager.create({ cfg, agentId, resolved });
-    expect(manager).toBeTruthy();
-    if (!manager) {
-      throw new Error("manager missing");
-    }
+	  it("blocks non-markdown or symlink reads for qmd paths", async () => {
+	    const resolved = resolveMemoryBackendConfig({ cfg, agentId });
+	    const manager = await QmdMemoryManager.create({ cfg, agentId, resolved });
+	    expect(manager).toBeTruthy();
+	    if (!manager) {
+	      throw new Error("manager missing");
+	    }
 
     const textPath = path.join(workspaceDir, "secret.txt");
     await fs.writeFile(textPath, "nope", "utf-8");
@@ -142,14 +142,24 @@ describe("QmdMemoryManager", () => {
       "path required",
     );
 
-    const target = path.join(workspaceDir, "target.md");
-    await fs.writeFile(target, "ok", "utf-8");
-    const link = path.join(workspaceDir, "link.md");
-    await fs.symlink(target, link);
-    await expect(manager.readFile({ relPath: "qmd/workspace/link.md" })).rejects.toThrow(
-      "path required",
-    );
+	    const target = path.join(workspaceDir, "target.md");
+	    await fs.writeFile(target, "ok", "utf-8");
+	    const link = path.join(workspaceDir, "link.md");
+	    try {
+	      await fs.symlink(target, link);
+	    } catch (err) {
+	      const code = (err as NodeJS.ErrnoException).code;
+	      if (code === "EPERM" || code === "EACCES") {
+	        // Some Windows environments disallow symlink creation without admin/developer mode.
+	        await manager.close();
+	        return;
+	      }
+	      throw err;
+	    }
+	    await expect(manager.readFile({ relPath: "qmd/workspace/link.md" })).rejects.toThrow(
+	      "path required",
+	    );
 
-    await manager.close();
-  });
+	    await manager.close();
+	  });
 });

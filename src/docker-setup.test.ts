@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+const isWindows = process.platform === "win32";
 
 async function writeDockerStub(binDir: string, logPath: string) {
   const stub = `#!/usr/bin/env bash
@@ -32,7 +33,7 @@ exit 0
 }
 
 describe("docker-setup.sh", () => {
-  it("handles unset optional env vars under strict mode", async () => {
+  (isWindows ? it.skip : it)("handles unset optional env vars under strict mode", async () => {
     const assocCheck = spawnSync("bash", ["-c", "declare -A _t=()"], {
       encoding: "utf8",
     });
@@ -82,7 +83,9 @@ describe("docker-setup.sh", () => {
     expect(envFile).toContain("OPENCLAW_HOME_VOLUME=");
   });
 
-  it("plumbs OPENCLAW_DOCKER_APT_PACKAGES into .env and docker build args", async () => {
+  (isWindows ? it.skip : it)(
+    "plumbs OPENCLAW_DOCKER_APT_PACKAGES into .env and docker build args",
+    async () => {
     const assocCheck = spawnSync("bash", ["-c", "declare -A _t=()"], {
       encoding: "utf8",
     });
@@ -131,7 +134,8 @@ describe("docker-setup.sh", () => {
 
     const log = await readFile(logPath, "utf8");
     expect(log).toContain("--build-arg OPENCLAW_DOCKER_APT_PACKAGES=ffmpeg build-essential");
-  });
+    },
+  );
 
   it("keeps docker-compose gateway command in sync", async () => {
     const compose = await readFile(join(repoRoot, "docker-compose.yml"), "utf8");

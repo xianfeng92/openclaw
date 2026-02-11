@@ -56,6 +56,8 @@ type SettingsHost = {
   pendingGatewayUrl?: string | null;
 };
 
+const DASHBOARD_PASSWORD_SESSION_KEY = "openclaw.control.password.v1";
+
 export function applySettings(host: SettingsHost, next: UiSettings) {
   const normalized = {
     ...next,
@@ -82,6 +84,15 @@ export function setLastActiveSessionKey(host: SettingsHost, next: string) {
 }
 
 export function applySettingsFromUrl(host: SettingsHost) {
+  const bridgedPasswordRaw = window.sessionStorage.getItem(DASHBOARD_PASSWORD_SESSION_KEY);
+  if (bridgedPasswordRaw != null) {
+    const password = bridgedPasswordRaw.trim();
+    if (password) {
+      (host as { password: string }).password = password;
+    }
+    window.sessionStorage.removeItem(DASHBOARD_PASSWORD_SESSION_KEY);
+  }
+
   if (!window.location.search) {
     return;
   }

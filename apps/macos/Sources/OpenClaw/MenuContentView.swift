@@ -337,8 +337,7 @@ struct MenuContent: View {
     private func openDashboard() async {
         do {
             let config = try await GatewayEndpointStore.shared.requireConfig()
-            let url = try GatewayEndpointStore.dashboardURL(for: config)
-            NSWorkspace.shared.open(url)
+            try DashboardBridgeManager.shared.open(config: config)
         } catch {
             let alert = NSAlert()
             alert.messageText = "Dashboard unavailable"

@@ -634,18 +634,8 @@ extension GatewayEndpointStore {
             components.scheme = "http"
         }
         components.path = "/"
-        var queryItems: [URLQueryItem] = []
-        if let token = config.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !token.isEmpty
-        {
-            queryItems.append(URLQueryItem(name: "token", value: token))
-        }
-        if let password = config.password?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !password.isEmpty
-        {
-            queryItems.append(URLQueryItem(name: "password", value: password))
-        }
-        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        components.query = nil
+        components.fragment = nil
         guard let url = components.url else {
             throw NSError(domain: "Dashboard", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "Failed to build dashboard URL",

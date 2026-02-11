@@ -42,6 +42,7 @@ describe("applySettingsFromUrl", () => {
 
   afterEach(() => {
     window.history.replaceState({}, "", originalHref);
+    window.sessionStorage.removeItem("openclaw.control.password.v1");
   });
 
   it("applies token from URL query and clears it from address bar", () => {
@@ -55,5 +56,15 @@ describe("applySettingsFromUrl", () => {
     expect(replaceState).toHaveBeenCalledTimes(1);
     const [, , replacedUrl] = replaceState.mock.calls[0] ?? [];
     expect(String(replacedUrl)).not.toContain("token=");
+  });
+
+  it("loads bridged password from sessionStorage and clears it", () => {
+    window.sessionStorage.setItem("openclaw.control.password.v1", "bridge-password");
+    const host = createHost("chat");
+
+    applySettingsFromUrl(host);
+
+    expect(host.password).toBe("bridge-password");
+    expect(window.sessionStorage.getItem("openclaw.control.password.v1")).toBeNull();
   });
 });

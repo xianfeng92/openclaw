@@ -133,8 +133,8 @@ TODO:
 - Rotate token -> restart gateway -> reload chat window.
 
 - macOS desktop (apps/macos) follow-up (likely needed):
-- [ ] Stop adding token/password as dashboard URL query params (`GatewayEndpointStore.dashboardURL`).
-- [ ] Replace with a tokenless "auth bridge" approach (TBD): in-app webview seeding localStorage, or a local HTML bridge that seeds storage then redirects, without query params.
+- [x] Stop adding token/password as dashboard URL query params (`GatewayEndpointStore.dashboardURL`).
+- [x] Replace with a tokenless "auth bridge" approach (TBD): in-app webview seeding localStorage, or a local HTML bridge that seeds storage then redirects, without query params.
 
 - Docs:
 - [x] Add a short doc on "Desktop Auth" + recovery (`docs/web/dashboard.md`):

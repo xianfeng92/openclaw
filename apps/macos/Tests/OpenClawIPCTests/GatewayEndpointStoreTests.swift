@@ -181,4 +181,15 @@ import Testing
         #expect(url?.port == 18789)
         #expect(url?.absoluteString == "ws://gateway:18789")
     }
+
+    @Test func dashboardURLUsesCleanRootWithoutAuthQuery() throws {
+        let config: GatewayConnection.Config = (
+            url: URL(string: "ws://127.0.0.1:18789/control?token=old#section")!,
+            token: "openclaw-token",
+            password: "openclaw-password")
+
+        let url = try GatewayEndpointStore.dashboardURL(for: config)
+        #expect(url.absoluteString == "http://127.0.0.1:18789/")
+        #expect(url.query == nil)
+    }
 }

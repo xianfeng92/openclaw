@@ -1,16 +1,16 @@
+import { Command } from "commander";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const voiceCallIndexPath = fileURLToPath(new URL("../../extensions/voice-call/index.js", import.meta.url));
+const voiceCallIndexPath = fileURLToPath(
+  new URL("../../extensions/voice-call/index.js", import.meta.url),
+);
 const describeVoiceCall = existsSync(voiceCallIndexPath) ? describe : describe.skip;
 
-let plugin:
-  | null
-  | {
-      register: (api: Record<string, unknown>) => void | Promise<void>;
-    } = null;
+let plugin: null | {
+  register: (api: Record<string, unknown>) => void | Promise<void>;
+} = null;
 
 let runtimeStub: {
   config: { toNumber?: string };
@@ -43,7 +43,7 @@ function setup(config: Record<string, unknown>): Registered {
   if (!plugin) {
     throw new Error("voice-call plugin missing");
   }
-  plugin.register({
+  void plugin.register({
     id: "voice-call",
     name: "Voice Call",
     description: "test",

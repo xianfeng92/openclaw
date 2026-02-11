@@ -65,7 +65,9 @@ describe("channels command", () => {
       profiles: {},
     });
     setActivePluginRegistry(
-      createTestRegistry([{ pluginId: "signal", source: "test", plugin: createSignalTestPlugin() }]),
+      createTestRegistry([
+        { pluginId: "signal", source: "test", plugin: createSignalTestPlugin() },
+      ]),
     );
   });
 

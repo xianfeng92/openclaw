@@ -482,7 +482,6 @@ export const chatHandlers: GatewayRequestHandlers = {
         channel: INTERNAL_MESSAGE_CHANNEL,
       });
       const finalReplyParts: string[] = [];
-      let agentRunId: string | null = null;
       const dispatcher = createReplyDispatcher({
         ...prefixOptions,
         onError: (err) => {
@@ -518,7 +517,6 @@ export const chatHandlers: GatewayRequestHandlers = {
           disableBlockStreaming: true,
           onAgentRunStart: (runId) => {
             agentRunStarted = true;
-            agentRunId = runId;
             const connId = typeof client?.connId === "string" ? client.connId : undefined;
             const wantsToolEvents = hasGatewayClientCap(
               client?.connect?.caps,
@@ -550,18 +548,18 @@ export const chatHandlers: GatewayRequestHandlers = {
           // Broadcast final reply if we have content from dispatcher
           // This handles both directive-only commands (agentRunStarted=false) and
           // agent runs that didn't emit assistant events but have dispatcher replies
-          const agentSeq =
-            agentRunId && agentRunId.trim() ? context.agentRunSeq.get(agentRunId) : undefined;
-          const sawAnyAgentEvents = typeof agentSeq === "number" && agentSeq > 0;
           const sawAnyChatDelta =
             context.chatDeltaSentAt.has(clientRunId) || context.chatRunBuffers.has(clientRunId);
+          context.logGateway.info(
+            `[webchat] dispatcher reply check: agentRunStarted=${agentRunStarted}, sawAnyChatDelta=${sawAnyChatDelta}, combinedReply.len=${combinedReply.length}`,
+          );
           const shouldBroadcastDispatcherReply =
             Boolean(combinedReply) &&
             // Directive-only commands.
             (!agentRunStarted ||
-              // Agent started but we never observed agent bus events and no chat deltas were emitted.
+              // Agent started but no chat deltas were emitted.
               // In that case, the only user-visible output is the dispatcher reply; broadcast it.
-              (!sawAnyAgentEvents && !sawAnyChatDelta));
+              !sawAnyChatDelta);
 
           if (shouldBroadcastDispatcherReply) {
             // Broadcast via dispatcher when we otherwise would not emit a chat final/error event.

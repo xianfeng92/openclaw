@@ -6,9 +6,10 @@ import type {
 } from "../channels/plugins/types.js";
 import type { PluginRegistry } from "../plugins/registry.js";
 import { getChannelDock } from "../channels/dock.js";
-import { getChatChannelMeta } from "../channels/registry.js";
-import { deleteAccountFromConfigSection, setAccountEnabledInConfigSection } from "../channels/plugins/config-helpers.js";
-import { applyAccountNameToChannelSection, migrateBaseNameToDefaultAccount } from "../channels/plugins/setup-helpers.js";
+import {
+  deleteAccountFromConfigSection,
+  setAccountEnabledInConfigSection,
+} from "../channels/plugins/config-helpers.js";
 import { discordOnboardingAdapter } from "../channels/plugins/onboarding/discord.js";
 import { imessageOnboardingAdapter } from "../channels/plugins/onboarding/imessage.js";
 import { signalOnboardingAdapter } from "../channels/plugins/onboarding/signal.js";
@@ -21,16 +22,21 @@ import { signalOutbound } from "../channels/plugins/outbound/signal.js";
 import { slackOutbound } from "../channels/plugins/outbound/slack.js";
 import { telegramOutbound } from "../channels/plugins/outbound/telegram.js";
 import { whatsappOutbound } from "../channels/plugins/outbound/whatsapp.js";
+import {
+  applyAccountNameToChannelSection,
+  migrateBaseNameToDefaultAccount,
+} from "../channels/plugins/setup-helpers.js";
 import { collectDiscordStatusIssues } from "../channels/plugins/status-issues/discord.js";
 import { collectTelegramStatusIssues } from "../channels/plugins/status-issues/telegram.js";
 import { collectWhatsAppStatusIssues } from "../channels/plugins/status-issues/whatsapp.js";
+import { getChatChannelMeta } from "../channels/registry.js";
 import { resolveDiscordAccount, listDiscordAccountIds } from "../discord/accounts.js";
 import { normalizeIMessageHandle } from "../imessage/targets.js";
+import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import { listSignalAccountIds, resolveSignalAccount } from "../signal/accounts.js";
 import { listSlackAccountIds, resolveSlackAccount } from "../slack/accounts.js";
 import { listTelegramAccountIds, resolveTelegramAccount } from "../telegram/accounts.js";
 import { probeTelegram } from "../telegram/probe.js";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import { listWhatsAppAccountIds, resolveWhatsAppAccount } from "../web/accounts.js";
 
 export const createTestRegistry = (channels: PluginRegistry["channels"] = []): PluginRegistry => ({
@@ -111,7 +117,9 @@ export const createIMessageTestPlugin = (params?: {
   },
 });
 
-export const createDiscordTestPlugin = (params?: { outbound?: ChannelOutboundAdapter }): ChannelPlugin => ({
+export const createDiscordTestPlugin = (params?: {
+  outbound?: ChannelOutboundAdapter;
+}): ChannelPlugin => ({
   id: "discord",
   meta: getChatChannelMeta("discord"),
   capabilities: capOrFallback("discord"),
@@ -225,7 +233,9 @@ export const createDiscordTestPlugin = (params?: { outbound?: ChannelOutboundAda
   },
 });
 
-export const createSlackTestPlugin = (params?: { outbound?: ChannelOutboundAdapter }): ChannelPlugin => ({
+export const createSlackTestPlugin = (params?: {
+  outbound?: ChannelOutboundAdapter;
+}): ChannelPlugin => ({
   id: "slack",
   meta: getChatChannelMeta("slack"),
   capabilities: capOrFallback("slack"),
@@ -307,7 +317,9 @@ export const createSlackTestPlugin = (params?: { outbound?: ChannelOutboundAdapt
   outbound: params?.outbound ?? slackOutbound,
 });
 
-export const createTelegramTestPlugin = (params?: { outbound?: ChannelOutboundAdapter }): ChannelPlugin => ({
+export const createTelegramTestPlugin = (params?: {
+  outbound?: ChannelOutboundAdapter;
+}): ChannelPlugin => ({
   id: "telegram",
   meta: getChatChannelMeta("telegram"),
   capabilities: capOrFallback("telegram"),
@@ -347,7 +359,10 @@ export const createTelegramTestPlugin = (params?: { outbound?: ChannelOutboundAd
       const tokenFile = input.tokenFile?.trim() || "";
       let next = cfg;
 
-      if (accountId !== DEFAULT_ACCOUNT_ID || Object.keys(next.channels?.telegram?.accounts ?? {}).length > 0) {
+      if (
+        accountId !== DEFAULT_ACCOUNT_ID ||
+        Object.keys(next.channels?.telegram?.accounts ?? {}).length > 0
+      ) {
         next = migrateBaseNameToDefaultAccount({ cfg: next, channelKey: "telegram" });
       }
 
@@ -400,7 +415,11 @@ export const createTelegramTestPlugin = (params?: { outbound?: ChannelOutboundAd
   status: {
     probeAccount: async ({ account, timeoutMs }) => {
       const token = (account as ReturnType<typeof resolveTelegramAccount>).token;
-      return await probeTelegram(token, timeoutMs, (account as ReturnType<typeof resolveTelegramAccount>).config.proxy);
+      return await probeTelegram(
+        token,
+        timeoutMs,
+        (account as ReturnType<typeof resolveTelegramAccount>).config.proxy,
+      );
     },
     collectStatusIssues: collectTelegramStatusIssues,
   },
@@ -413,7 +432,9 @@ export const createTelegramTestPlugin = (params?: { outbound?: ChannelOutboundAd
   },
 });
 
-export const createWhatsAppTestPlugin = (params?: { outbound?: ChannelOutboundAdapter }): ChannelPlugin => ({
+export const createWhatsAppTestPlugin = (params?: {
+  outbound?: ChannelOutboundAdapter;
+}): ChannelPlugin => ({
   id: "whatsapp",
   meta: getChatChannelMeta("whatsapp"),
   capabilities: capOrFallback("whatsapp"),
@@ -487,7 +508,9 @@ export const createWhatsAppTestPlugin = (params?: { outbound?: ChannelOutboundAd
   },
 });
 
-export const createSignalTestPlugin = (params?: { outbound?: ChannelOutboundAdapter }): ChannelPlugin => ({
+export const createSignalTestPlugin = (params?: {
+  outbound?: ChannelOutboundAdapter;
+}): ChannelPlugin => ({
   id: "signal",
   meta: getChatChannelMeta("signal"),
   capabilities: capOrFallback("signal"),

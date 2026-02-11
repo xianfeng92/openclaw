@@ -105,6 +105,15 @@ export function startGatewayMaintenanceTimers(params: {
       );
     }
 
+    const CHAT_DELTA_TRACK_TTL_MS = 60 * 60_000;
+    for (const [runId, lastDeltaAt] of params.chatDeltaSentAt) {
+      if (now - lastDeltaAt <= CHAT_DELTA_TRACK_TTL_MS) {
+        continue;
+      }
+      params.chatDeltaSentAt.delete(runId);
+      params.chatRunBuffers.delete(runId);
+    }
+
     const ABORTED_RUN_TTL_MS = 60 * 60_000;
     for (const [runId, abortedAt] of params.chatRunState.abortedRuns) {
       if (now - abortedAt <= ABORTED_RUN_TTL_MS) {

@@ -49,6 +49,55 @@ describe("agent event handler", () => {
     nowSpy.mockRestore();
   });
 
+  it("keeps chat delta markers after final so webchat fallback does not double-broadcast", () => {
+    const broadcast = vi.fn();
+    const broadcastToConnIds = vi.fn();
+    const nodeSendToSession = vi.fn();
+    const agentRunSeq = new Map<string, number>();
+    const chatRunState = createChatRunState();
+    const toolEventRecipients = createToolEventRecipientRegistry();
+    chatRunState.registry.add("run-dup-1", {
+      sessionKey: "session-1",
+      clientRunId: "client-dup-1",
+    });
+
+    const handler = createAgentEventHandler({
+      broadcast,
+      broadcastToConnIds,
+      nodeSendToSession,
+      agentRunSeq,
+      chatRunState,
+      resolveSessionKeyForRun: () => undefined,
+      clearAgentRunContext: vi.fn(),
+      toolEventRecipients,
+    });
+
+    handler({
+      runId: "run-dup-1",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "Hello world" },
+    });
+    expect(chatRunState.deltaSentAt.has("client-dup-1")).toBe(true);
+
+    handler({
+      runId: "run-dup-1",
+      seq: 2,
+      stream: "lifecycle",
+      ts: Date.now(),
+      data: { phase: "end" },
+    });
+
+    expect(chatRunState.buffers.has("client-dup-1")).toBe(false);
+    expect(chatRunState.deltaSentAt.has("client-dup-1")).toBe(true);
+    const chatCalls = broadcast.mock.calls.filter(([event]) => event === "chat");
+    const finalCalls = chatCalls.filter(([, payload]) => {
+      return (payload as { state?: string })?.state === "final";
+    });
+    expect(finalCalls).toHaveLength(1);
+  });
+
   it("routes tool events only to registered recipients when verbose is enabled", () => {
     const broadcast = vi.fn();
     const broadcastToConnIds = vi.fn();

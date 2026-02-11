@@ -270,7 +270,9 @@ export function createAgentEventHandler({
       `emitChatFinal: runId=${clientRunId}, jobState=${jobState}, bufferTextLen=${text.length}, buffer has text: ${!!text}`,
     );
     chatRunState.buffers.delete(clientRunId);
-    chatRunState.deltaSentAt.delete(clientRunId);
+    // Keep deltaSentAt until maintenance cleanup so chat.send can reliably detect
+    // that this run already emitted assistant chat output and avoid duplicate
+    // dispatcher fallback finals.
     if (jobState === "done") {
       const payload = {
         runId: clientRunId,

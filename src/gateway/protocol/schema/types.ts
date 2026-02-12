@@ -90,6 +90,11 @@ import type {
   LogsTailResultSchema,
 } from "./logs-chat.js";
 import type {
+  ContextEventSchema,
+  SuggestionCardSchema,
+  SuggestionFeedbackSchema,
+} from "./neuro.js";
+import type {
   NodeDescribeParamsSchema,
   NodeEventParamsSchema,
   NodeInvokeParamsSchema,
@@ -223,6 +228,9 @@ export type DeviceTokenRevokeParams = Static<typeof DeviceTokenRevokeParamsSchem
 export type ChatAbortParams = Static<typeof ChatAbortParamsSchema>;
 export type ChatInjectParams = Static<typeof ChatInjectParamsSchema>;
 export type ChatEvent = Static<typeof ChatEventSchema>;
+export type ContextEvent = Static<typeof ContextEventSchema>;
+export type SuggestionCard = Static<typeof SuggestionCardSchema>;
+export type SuggestionFeedback = Static<typeof SuggestionFeedbackSchema>;
 export type UpdateRunParams = Static<typeof UpdateRunParamsSchema>;
 export type TickEvent = Static<typeof TickEventSchema>;
 export type ShutdownEvent = Static<typeof ShutdownEventSchema>;

@@ -91,6 +91,10 @@ import type {
 } from "./logs-chat.js";
 import type {
   ContextEventSchema,
+  NeuroContextIngestParamsSchema,
+  NeuroContextIngestResultSchema,
+  NeuroContextSnapshotParamsSchema,
+  NeuroContextSnapshotResultSchema,
   SuggestionCardSchema,
   SuggestionFeedbackSchema,
 } from "./neuro.js";
@@ -229,6 +233,10 @@ export type ChatAbortParams = Static<typeof ChatAbortParamsSchema>;
 export type ChatInjectParams = Static<typeof ChatInjectParamsSchema>;
 export type ChatEvent = Static<typeof ChatEventSchema>;
 export type ContextEvent = Static<typeof ContextEventSchema>;
+export type NeuroContextIngestParams = Static<typeof NeuroContextIngestParamsSchema>;
+export type NeuroContextIngestResult = Static<typeof NeuroContextIngestResultSchema>;
+export type NeuroContextSnapshotParams = Static<typeof NeuroContextSnapshotParamsSchema>;
+export type NeuroContextSnapshotResult = Static<typeof NeuroContextSnapshotResultSchema>;
 export type SuggestionCard = Static<typeof SuggestionCardSchema>;
 export type SuggestionFeedback = Static<typeof SuggestionFeedbackSchema>;
 export type UpdateRunParams = Static<typeof UpdateRunParamsSchema>;

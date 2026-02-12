@@ -114,6 +114,10 @@ import {
   LogsTailResultSchema,
   type ModelsListParams,
   ModelsListParamsSchema,
+  type NeuroContextIngestParams,
+  NeuroContextIngestParamsSchema,
+  type NeuroContextSnapshotParams,
+  NeuroContextSnapshotParamsSchema,
   type NodeDescribeParams,
   NodeDescribeParamsSchema,
   type NodeEventParams,
@@ -343,6 +347,12 @@ export const validateChatSendParams = ajv.compile(ChatSendParamsSchema);
 export const validateChatAbortParams = ajv.compile<ChatAbortParams>(ChatAbortParamsSchema);
 export const validateChatInjectParams = ajv.compile<ChatInjectParams>(ChatInjectParamsSchema);
 export const validateChatEvent = ajv.compile(ChatEventSchema);
+export const validateNeuroContextIngestParams = ajv.compile<NeuroContextIngestParams>(
+  NeuroContextIngestParamsSchema,
+);
+export const validateNeuroContextSnapshotParams = ajv.compile<NeuroContextSnapshotParams>(
+  NeuroContextSnapshotParamsSchema,
+);
 export const validateUpdateRunParams = ajv.compile<UpdateRunParams>(UpdateRunParamsSchema);
 export const validateWebLoginStartParams =
   ajv.compile<WebLoginStartParams>(WebLoginStartParamsSchema);
@@ -463,6 +473,8 @@ export {
   ChatHistoryParamsSchema,
   ChatSendParamsSchema,
   ChatInjectParamsSchema,
+  NeuroContextIngestParamsSchema,
+  NeuroContextSnapshotParamsSchema,
   UpdateRunParamsSchema,
   TickEventSchema,
   ShutdownEventSchema,
@@ -561,6 +573,8 @@ export type {
   ExecApprovalsSnapshot,
   LogsTailParams,
   LogsTailResult,
+  NeuroContextIngestParams,
+  NeuroContextSnapshotParams,
   PollParams,
   UpdateRunParams,
   ChatInjectParams,

@@ -96,6 +96,12 @@ import {
   LogsTailResultSchema,
 } from "./logs-chat.js";
 import {
+  NeuroContextIngestParamsSchema,
+  NeuroContextIngestResultSchema,
+  NeuroContextSnapshotParamsSchema,
+  NeuroContextSnapshotResultSchema,
+} from "./neuro.js";
+import {
   NodeDescribeParamsSchema,
   NodeEventParamsSchema,
   NodeInvokeParamsSchema,
@@ -238,6 +244,10 @@ export const ProtocolSchemas: Record<string, TSchema> = {
   ChatAbortParams: ChatAbortParamsSchema,
   ChatInjectParams: ChatInjectParamsSchema,
   ChatEvent: ChatEventSchema,
+  NeuroContextIngestParams: NeuroContextIngestParamsSchema,
+  NeuroContextIngestResult: NeuroContextIngestResultSchema,
+  NeuroContextSnapshotParams: NeuroContextSnapshotParamsSchema,
+  NeuroContextSnapshotResult: NeuroContextSnapshotResultSchema,
   UpdateRunParams: UpdateRunParamsSchema,
   TickEvent: TickEventSchema,
   ShutdownEvent: ShutdownEventSchema,

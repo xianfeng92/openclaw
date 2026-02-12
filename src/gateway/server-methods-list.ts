@@ -85,6 +85,8 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  "neuro.context.ingest",
+  "neuro.context.snapshot",
 ];
 
 export function listGatewayMethods(): string[] {

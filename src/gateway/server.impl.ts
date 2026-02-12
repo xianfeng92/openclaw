@@ -44,6 +44,7 @@ import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js
 import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
+import { createNeuroContextRingBuffer } from "./neuro/context-ring-buffer.js";
 import { NodeRegistry } from "./node-registry.js";
 import { createChannelManager } from "./server-channels.js";
 import { createAgentEventHandler } from "./server-chat.js";
@@ -353,6 +354,7 @@ export async function startGatewayServer(
   });
   let bonjourStop: (() => Promise<void>) | null = null;
   const nodeRegistry = new NodeRegistry();
+  const neuroContextCache = createNeuroContextRingBuffer();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
   const nodeSubscriptions = createNodeSubscriptionManager();
   const nodeSendEvent = (opts: { nodeId: string; event: string; payloadJSON?: string | null }) => {
@@ -512,6 +514,7 @@ export async function startGatewayServer(
       chatAbortedRuns: chatRunState.abortedRuns,
       chatRunBuffers: chatRunState.buffers,
       chatDeltaSentAt: chatRunState.deltaSentAt,
+      neuroContextCache,
       addChatRun,
       removeChatRun,
       registerToolEventRecipient: toolEventRecipients.add,

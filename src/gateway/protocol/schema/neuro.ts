@@ -30,6 +30,15 @@ const FeedbackActionSchema = Type.Union([
   Type.Literal("ignore"),
 ]);
 
+const PerSourceSnapshotStatsSchema = Type.Object(
+  {
+    count: Type.Integer({ minimum: 0 }),
+    bytes: Type.Integer({ minimum: 0 }),
+    latestTs: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const ContextEventSchema = Type.Object(
   {
     version: Type.Literal("context.event.v1"),
@@ -80,6 +89,62 @@ export const SuggestionFeedbackSchema = Type.Object(
     action: FeedbackActionSchema,
     ts: Type.Integer({ minimum: 0 }),
     sessionKey: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroContextIngestParamsSchema = Type.Object(
+  {
+    events: Type.Array(ContextEventSchema, {
+      minItems: 1,
+      maxItems: 256,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroContextIngestResultSchema = Type.Object(
+  {
+    acceptedEvents: Type.Integer({ minimum: 0 }),
+    droppedEvents: Type.Integer({ minimum: 0 }),
+    cache: Type.Object(
+      {
+        sessions: Type.Integer({ minimum: 0 }),
+        totalEvents: Type.Integer({ minimum: 0 }),
+        totalBytes: Type.Integer({ minimum: 0 }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroContextSnapshotParamsSchema = Type.Object(
+  {
+    sessionKey: NonEmptyString,
+    includeEvents: Type.Optional(Type.Boolean()),
+    maxEvents: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroContextSnapshotResultSchema = Type.Object(
+  {
+    sessionKey: NonEmptyString,
+    totalBytes: Type.Integer({ minimum: 0 }),
+    totalEvents: Type.Integer({ minimum: 0 }),
+    returnedEvents: Type.Integer({ minimum: 0 }),
+    events: Type.Array(ContextEventSchema),
+    perSource: Type.Object(
+      {
+        clipboard: PerSourceSnapshotStatsSchema,
+        active_window: PerSourceSnapshotStatsSchema,
+        terminal: PerSourceSnapshotStatsSchema,
+        fs: PerSourceSnapshotStatsSchema,
+        editor: PerSourceSnapshotStatsSchema,
+      },
+      { additionalProperties: false },
+    ),
   },
   { additionalProperties: false },
 );

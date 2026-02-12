@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, globalShortcut } from "electron";
 import fs from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,6 +16,25 @@ let gatewayManager: GatewayManager | null = null;
 let chatWindowManager: ChatWindowManager | null = null;
 let settingsManager: SettingsManager | null = null;
 let hiddenWindow: BrowserWindow | null = null;
+const INVOKE_SHORTCUT = "Alt+Space";
+
+function registerInvokeHotkey(): void {
+  if (!chatWindowManager) {
+    return;
+  }
+  try {
+    const ok = globalShortcut.register(INVOKE_SHORTCUT, () => {
+      chatWindowManager?.showInvokeWindow();
+    });
+    if (!ok) {
+      console.warn(`[App] Failed to register invoke shortcut: ${INVOKE_SHORTCUT}`);
+      return;
+    }
+    console.log(`[App] Registered invoke shortcut: ${INVOKE_SHORTCUT}`);
+  } catch (err) {
+    console.warn(`[App] Error registering invoke shortcut ${INVOKE_SHORTCUT}:`, err);
+  }
+}
 
 function initAppPaths(): void {
   // Chromium can fail to migrate/create cache dirs (0x5 access denied), which breaks GPU cache and spams logs.
@@ -121,6 +140,7 @@ void app
 
   // Setup IPC handlers
   setupIpc(gatewayManager, chatWindowManager);
+  registerInvokeHotkey();
 
   console.log("[App] App setup complete, should stay running");
   })
@@ -131,6 +151,7 @@ void app
 
 app.on("before-quit", async (_event) => {
   console.log("[App] before-quit event");
+  globalShortcut.unregisterAll();
 
   // Cleanup
   if (gatewayManager) {

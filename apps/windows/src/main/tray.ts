@@ -155,6 +155,10 @@ function updateContextMenu(
       label: "Open Chat",
       click: () => chatWindowManager.showChatWindow(),
     },
+    {
+      label: "Quick Invoke (Alt+Space)",
+      click: () => chatWindowManager.showInvokeWindow(),
+    },
     { type: "separator" },
     {
       label: "Settings",

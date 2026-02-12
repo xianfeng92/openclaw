@@ -47,6 +47,53 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
+function extractAssistantTextFromMessage(message: unknown): string | null {
+  if (typeof message === "string") {
+    return message;
+  }
+  if (!message || typeof message !== "object") {
+    return null;
+  }
+  const record = message as Record<string, unknown>;
+  const content = record.content;
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return null;
+  }
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+    const text = (block as Record<string, unknown>).text;
+    if (typeof text === "string" && text.length > 0) {
+      parts.push(text);
+    }
+  }
+  return parts.length > 0 ? parts.join("") : null;
+}
+
+function mergeStreamingText(previous: string, incoming: string): string {
+  if (!previous) {
+    return incoming;
+  }
+  if (!incoming) {
+    return previous;
+  }
+  if (incoming.startsWith(previous)) {
+    return incoming;
+  }
+  if (previous.endsWith(incoming)) {
+    return previous;
+  }
+  if (previous.startsWith(incoming)) {
+    return previous;
+  }
+  return previous + incoming;
+}
+
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
     return;
@@ -212,9 +259,14 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   }
 
   if (payload.state === "delta") {
-    // Don't update chatStream - we'll load the final message from history
-    // Just set waiting state to show we're receiving a response
-    state.chatWaitingForResponse = true;
+    const nextText = extractAssistantTextFromMessage(payload.message);
+    if (typeof nextText === "string" && nextText.length > 0) {
+      state.chatStream = mergeStreamingText(state.chatStream ?? "", nextText);
+      state.chatWaitingForResponse = false;
+    } else {
+      // Keep waiting indicator when we have not received text yet.
+      state.chatWaitingForResponse = true;
+    }
   } else if (payload.state === "final") {
     state.chatStream = null;
     state.chatRunId = null;

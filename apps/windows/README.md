@@ -6,6 +6,7 @@ Electron-based desktop application for OpenClaw on Windows.
 
 - **System Tray** - Status indicator with context menu
 - **Quick Chat Window** - Opens the Web UI (http://127.0.0.1:19001)
+- **Invoke Shortcut** - `Alt+Space` summons the app via fast-path invoke shell
 - **Gateway Control** - Start, stop, restart the OpenClaw Gateway
 - **Status Monitoring** - Real-time gateway status updates
 
@@ -90,7 +91,6 @@ Output: `dist/installer/OpenClaw Setup X.X.X.exe`
 - [ ] Add proper icons (convert from macOS assets)
 - [ ] Add auto-start on boot option
 - [ ] Add native notifications
-- [ ] Add keyboard shortcut (Ctrl+Shift+O)
 - [ ] Add settings window
 - [ ] Add auto-update support
 - [ ] Add crash reporter

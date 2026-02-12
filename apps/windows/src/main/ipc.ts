@@ -73,6 +73,11 @@ export function setupIpc(
     chatWindowManager.toggleChatWindow();
   });
 
+  // Show invoke fast-path window
+  ipcMain.handle("window:invoke", (): void => {
+    chatWindowManager.showInvokeWindow();
+  });
+
   // Subscribe to gateway state changes
   ipcMain.on("gateway:subscribe", (event) => {
     const listener = (state: GatewayState) => {

@@ -50,11 +50,12 @@ Full setup guide: [docs.openclaw.ai/start/getting-started](https://docs.openclaw
 | Project Neuro / P0-003     | Redaction baseline（`block/mask/hash`）+ source filters + regression corpus       | 已完成 | 新增红线回归语料与测试，完成 ADR 0003：https://docs.openclaw.ai/prd/project-neuro-adr-0003-redaction-baseline-source-filters                                                         |
 | Project Neuro / P0-004     | Context capture v1（clipboard + active window + ring buffer bounds）              | 已完成 | 新增捕获服务、适配器与内存 ring buffer 边界控制，完成 ADR 0004：https://docs.openclaw.ai/prd/project-neuro-adr-0004-context-capture-v1-ring-buffer                                   |
 | Project Neuro / P0-005     | Gateway ingest endpoint + validation + per-session volatile snapshot cache        | 已完成 | 新增 `neuro.context.ingest`/`neuro.context.snapshot` RPC、协议校验与会话级快照查询，完成 ADR 0005：https://docs.openclaw.ai/prd/project-neuro-adr-0005-gateway-ingest-snapshot-cache |
+| Project Neuro / P0-006     | Invoke fast-path shell（Alt+Space）+ streaming bridge                             | 已完成 | Windows 端新增 `Alt+Space` 快捷唤起与快速壳层，UI 侧打通 chat delta 流式渲染，完成 ADR 0006：https://docs.openclaw.ai/prd/project-neuro-adr-0006-invoke-fast-path-streaming-bridge   |
 
 ### 总结
 
-- 已完成的 TODO 主要集中在两条线：`Desktop MVP Slim` 的安全与鉴权闭环，以及 `Project Neuro` 的 P0 基础能力（P0-001 到 P0-005）。
-- `Project Neuro` 的 P0 已推进到 `TODO-P0-005`，下一优先级为 `TODO-P0-006`：invoke fast-path shell (`Alt+Space`) + streaming bridge。
+- 已完成的 TODO 主要集中在两条线：`Desktop MVP Slim` 的安全与鉴权闭环，以及 `Project Neuro` 的 P0 基础能力（P0-001 到 P0-006）。
+- `Project Neuro` 的 P0 已推进到 `TODO-P0-006`，下一优先级为 `TODO-P0-007`：feature flags + kill switch scaffold。
 
 ---
 

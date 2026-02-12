@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 
 const WINDOW_WIDTH = 1200;
 const WINDOW_HEIGHT = 800;
+const INVOKE_BOOTSTRAP_DELAY_MS = 50;
 
 export class ChatWindowManager {
   private window: BrowserWindow | null = null;
@@ -141,6 +142,103 @@ export class ChatWindowManager {
 </html>`;
   }
 
+  private buildInvokeShellHtml(): string {
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenClaw - Invoke</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Inter", sans-serif;
+        background:
+          radial-gradient(circle at 20% 20%, rgba(74, 158, 255, 0.25), transparent 45%),
+          radial-gradient(circle at 80% 80%, rgba(74, 255, 177, 0.18), transparent 40%),
+          #0f1422;
+        color: #e8eefc;
+        display: grid;
+        place-items: center;
+      }
+      .shell {
+        width: min(760px, calc(100vw - 48px));
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(16, 23, 38, 0.92);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+      }
+      .shell-head {
+        padding: 14px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .shell-title {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .shell-shortcut {
+        font-size: 12px;
+        opacity: 0.75;
+      }
+      .shell-body {
+        padding: 18px;
+      }
+      .shell-input {
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 14px;
+        color: rgba(232, 238, 252, 0.92);
+        background: rgba(7, 11, 20, 0.75);
+      }
+      .shell-meta {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      .loader {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        border: 2px solid rgba(74, 158, 255, 0.35);
+        border-top-color: #4a9eff;
+        animation: spin 0.85s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell" role="status" aria-live="polite">
+      <header class="shell-head">
+        <div class="shell-title">OpenClaw Invoke</div>
+        <div class="shell-shortcut">Alt+Space</div>
+      </header>
+      <section class="shell-body">
+        <div class="shell-input">Ask anything...</div>
+        <div class="shell-meta">
+          <span class="loader" aria-hidden="true"></span>
+          <span>Preparing local AI context and streaming bridge...</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>`;
+  }
+
   private getWebUiUrl(): string {
     // Gateway serves the Control UI at `/` by default (unless gateway.controlUi.basePath is set).
     const { port } = this.gatewayManager.getState();
@@ -151,10 +249,21 @@ export class ChatWindowManager {
     return `data:text/html;charset=utf-8,${encodeURIComponent(this.buildGatewayErrorPageHtml())}`;
   }
 
+  private getInvokeShellDataUrl(): string {
+    return `data:text/html;charset=utf-8,${encodeURIComponent(this.buildInvokeShellHtml())}`;
+  }
+
   private loadFallbackPage(): void {
     const dataUrl = this.getFallbackDataUrl();
     this.window?.loadURL(dataUrl).catch((loadErr) => {
       console.error("Failed to load fallback error page:", loadErr);
+    });
+  }
+
+  private loadInvokeShellPage(): void {
+    const dataUrl = this.getInvokeShellDataUrl();
+    this.window?.loadURL(dataUrl).catch((loadErr) => {
+      console.error("Failed to load invoke shell page:", loadErr);
     });
   }
 
@@ -200,7 +309,36 @@ export class ChatWindowManager {
     });
   }
 
-  createWindow(): BrowserWindow {
+  private startGatewayAndLoadWebUi(): void {
+    const state = this.gatewayManager.getState();
+    if (state.status === "running") {
+      this.loadWebUiWithFallback();
+      return;
+    }
+    if (state.status === "starting") {
+      void this.waitForGatewayRunning().then((ok) => {
+        if (!ok || !this.window) {
+          return;
+        }
+        this.loadWebUiWithFallback();
+      });
+      return;
+    }
+
+    void this.gatewayManager
+      .start()
+      .then(() => {
+        if (!this.window) {
+          return;
+        }
+        this.loadWebUiWithFallback();
+      })
+      .catch((err) => {
+        console.error("Auto-start gateway failed:", err);
+      });
+  }
+
+  createWindow(options?: { invokeFastPath?: boolean }): BrowserWindow {
     if (this.window) {
       this.window.focus();
       return this.window;
@@ -223,31 +361,17 @@ export class ChatWindowManager {
       },
     });
 
-    const state = this.gatewayManager.getState();
-    if (state.status === "running") {
-      this.loadWebUiWithFallback();
-    } else if (state.status === "starting") {
-      // Gateway is already starting (e.g. from another trigger); wait for running before navigating.
-      this.loadFallbackPage();
-      void this.waitForGatewayRunning().then((ok) => {
-        if (!ok || !this.window) {
+    if (options?.invokeFastPath) {
+      // Fast-path invoke: render a lightweight shell immediately, then swap to Web UI.
+      this.loadInvokeShellPage();
+      setTimeout(() => {
+        if (!this.window) {
           return;
         }
-        this.loadWebUiWithFallback();
-      });
+        this.startGatewayAndLoadWebUi();
+      }, INVOKE_BOOTSTRAP_DELAY_MS);
     } else {
-      // Avoid an initial ERR_CONNECTION_REFUSED by showing fallback first when the gateway is not up yet.
-      this.loadFallbackPage();
-      void this.gatewayManager.start()
-        .then(() => {
-          if (!this.window) {
-            return;
-          }
-          this.loadWebUiWithFallback();
-        })
-        .catch((err) => {
-          console.error("Auto-start gateway failed:", err);
-        });
+      this.startGatewayAndLoadWebUi();
     }
 
     // Handle window closed
@@ -277,6 +401,20 @@ export class ChatWindowManager {
       return this.window;
     }
     return this.createWindow();
+  }
+
+  showInvokeWindow(): BrowserWindow {
+    if (this.window) {
+      if (this.window.isMinimized()) {
+        this.window.restore();
+      }
+      this.window.show();
+      this.window.focus();
+      // Ensure invoke always lands on the real chat UI even if we're currently on a bootstrap/fallback page.
+      this.startGatewayAndLoadWebUi();
+      return this.window;
+    }
+    return this.createWindow({ invokeFastPath: true });
   }
 
   hideChatWindow(): void {

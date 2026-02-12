@@ -93,6 +93,7 @@ export interface ElectronAPI {
     show(): Promise<void>;
     hide(): Promise<void>;
     toggle(): Promise<void>;
+    invoke(): Promise<void>;
   };
   saveSettings(data: SettingsData): Promise<{ success: boolean; error?: string }>;
 }
@@ -116,6 +117,7 @@ const api: ElectronAPI = {
     show: () => ipcRenderer.invoke("window:show"),
     hide: () => ipcRenderer.invoke("window:hide"),
     toggle: () => ipcRenderer.invoke("window:toggle"),
+    invoke: () => ipcRenderer.invoke("window:invoke"),
   },
   saveSettings: (data) => ipcRenderer.invoke("settings:save", data),
 };

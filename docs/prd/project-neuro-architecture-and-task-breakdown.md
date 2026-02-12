@@ -586,7 +586,7 @@ Use this as the execution-facing checklist. Priority is strict: P0 first, then P
 | -------- | ----------- | ---------------------------------------------------------------------------------------- | ------- | ----------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | P0       | TODO-P0-001 | Freeze architecture scope and Windows runtime baseline (Electron for this phase)         | AA, PO  | W1          | None                     | ADR approved and linked in planning board. Completed via [ADR 0001](/prd/project-neuro-adr-0001-scope-freeze-windows-baseline) |
 | P0       | TODO-P0-002 | Finalize `context.event.v1`, `suggestion.card.v1`, `suggestion.feedback.v1` contracts    | AA, GL  | W2          | TODO-P0-001              | Schema tests and sample payload fixtures merged. Completed via [ADR 0002](/prd/project-neuro-adr-0002-event-contracts-v1)      |
-| P0       | TODO-P0-003 | Implement redaction baseline (block/mask/hash), source filters, and regression corpus    | SE, GL  | W3          | TODO-P0-002              | Secret leakage test suite green                                                                                                |
+| P0       | TODO-P0-003 | Implement redaction baseline (block/mask/hash), source filters, and regression corpus    | SE, GL  | W3          | TODO-P0-002              | Secret leakage test suite green. Completed via [ADR 0003](/prd/project-neuro-adr-0003-redaction-baseline-source-filters)       |
 | P0       | TODO-P0-004 | Build context capture v1 (clipboard + active window + ring buffer bounds)                | ME, WE  | W3-W4       | TODO-P0-002, TODO-P0-003 | Memory cap and redaction assertions pass on macOS/Windows                                                                      |
 | P0       | TODO-P0-005 | Implement gateway ingest endpoint + validation + per-session volatile snapshot cache     | GL      | W5          | TODO-P0-004              | Snapshot query p95 < 50ms in staging                                                                                           |
 | P0       | TODO-P0-006 | Implement invoke fast-path shell (`Alt+Space`) and streaming bridge                      | ME, WE  | W6          | TODO-P0-005              | UI shell p95 < 100ms in dogfood                                                                                                |
@@ -618,5 +618,5 @@ Use this as the execution-facing checklist. Priority is strict: P0 first, then P
 
 - [x] TODO-P0-001 Freeze architecture scope and runtime baseline. See [ADR 0001](/prd/project-neuro-adr-0001-scope-freeze-windows-baseline).
 - [x] TODO-P0-002 Finalize and test event contracts. See [ADR 0002](/prd/project-neuro-adr-0002-event-contracts-v1).
-- [ ] TODO-P0-003 Deliver redaction baseline with regression corpus.
+- [x] TODO-P0-003 Deliver redaction baseline with regression corpus. See [ADR 0003](/prd/project-neuro-adr-0003-redaction-baseline-source-filters).
 - [ ] TODO-P0-004 Start context capture v1 on macOS and Windows.

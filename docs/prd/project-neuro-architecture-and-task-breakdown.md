@@ -590,8 +590,8 @@ Use this as the execution-facing checklist. Priority is strict: P0 first, then P
 | P0       | TODO-P0-004 | Build context capture v1 (clipboard + active window + ring buffer bounds)                | ME, WE  | W3-W4       | TODO-P0-002, TODO-P0-003 | Memory cap and redaction assertions pass on macOS/Windows. Completed via [ADR 0004](/prd/project-neuro-adr-0004-context-capture-v1-ring-buffer) |
 | P0       | TODO-P0-005 | Implement gateway ingest endpoint + validation + per-session volatile snapshot cache     | GL      | W5          | TODO-P0-004              | Snapshot query p95 < 50ms in staging. Completed via [ADR 0005](/prd/project-neuro-adr-0005-gateway-ingest-snapshot-cache).                      |
 | P0       | TODO-P0-006 | Implement invoke fast-path shell (`Alt+Space`) and streaming bridge                      | ME, WE  | W6          | TODO-P0-005              | UI shell p95 < 100ms in dogfood. Completed via [ADR 0006](/prd/project-neuro-adr-0006-invoke-fast-path-streaming-bridge).                       |
-| P0       | TODO-P0-007 | Add feature flags + kill switch scaffold for proactive cards and flow mode               | SRE, GL | W6          | TODO-P0-005              | Runtime toggle verified in staging                                                                                                              |
-| P0       | TODO-P0-008 | Add baseline observability (`ui_ready_ms`, `first_token_ms`, memory, redaction counters) | SRE, QA | W6          | TODO-P0-005              | Dashboards and alert thresholds available                                                                                                       |
+| P0       | TODO-P0-007 | Add feature flags + kill switch scaffold for proactive cards and flow mode               | SRE, GL | W6          | TODO-P0-005              | Runtime toggle verified in staging. Completed via [ADR 0007](/prd/project-neuro-adr-0007-feature-flags-kill-switch-scaffold).                   |
+| P0       | TODO-P0-008 | Add baseline observability (`ui_ready_ms`, `first_token_ms`, memory, redaction counters) | SRE, QA | W6          | TODO-P0-005              | Metrics baseline exposed in gateway and UI reporting path. Completed via [ADR 0008](/prd/project-neuro-adr-0008-observability-baseline).        |
 
 ## 11.2 P1 (Must deliver for Learning Loop MVP)
 
@@ -622,3 +622,5 @@ Use this as the execution-facing checklist. Priority is strict: P0 first, then P
 - [x] TODO-P0-004 Start context capture v1 on macOS and Windows. See [ADR 0004](/prd/project-neuro-adr-0004-context-capture-v1-ring-buffer).
 - [x] TODO-P0-005 Implement gateway ingest endpoint and volatile snapshot cache. See [ADR 0005](/prd/project-neuro-adr-0005-gateway-ingest-snapshot-cache).
 - [x] TODO-P0-006 Implement invoke fast-path shell and streaming bridge. See [ADR 0006](/prd/project-neuro-adr-0006-invoke-fast-path-streaming-bridge).
+- [x] TODO-P0-007 Add feature flags and kill switch scaffold. See [ADR 0007](/prd/project-neuro-adr-0007-feature-flags-kill-switch-scaffold).
+- [x] TODO-P0-008 Add baseline observability metrics and reporting. See [ADR 0008](/prd/project-neuro-adr-0008-observability-baseline).

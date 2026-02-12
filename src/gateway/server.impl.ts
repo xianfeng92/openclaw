@@ -45,6 +45,8 @@ import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { createNeuroContextRingBuffer } from "./neuro/context-ring-buffer.js";
+import { createNeuroFeatureFlags } from "./neuro/feature-flags.js";
+import { createNeuroMetrics } from "./neuro/metrics.js";
 import { NodeRegistry } from "./node-registry.js";
 import { createChannelManager } from "./server-channels.js";
 import { createAgentEventHandler } from "./server-chat.js";
@@ -355,6 +357,8 @@ export async function startGatewayServer(
   let bonjourStop: (() => Promise<void>) | null = null;
   const nodeRegistry = new NodeRegistry();
   const neuroContextCache = createNeuroContextRingBuffer();
+  const neuroFeatureFlags = createNeuroFeatureFlags();
+  const neuroMetrics = createNeuroMetrics();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
   const nodeSubscriptions = createNodeSubscriptionManager();
   const nodeSendEvent = (opts: { nodeId: string; event: string; payloadJSON?: string | null }) => {
@@ -452,6 +456,7 @@ export async function startGatewayServer(
       resolveSessionKeyForRun,
       clearAgentRunContext,
       toolEventRecipients,
+      neuroMetrics,
     }),
   );
 
@@ -515,6 +520,8 @@ export async function startGatewayServer(
       chatRunBuffers: chatRunState.buffers,
       chatDeltaSentAt: chatRunState.deltaSentAt,
       neuroContextCache,
+      neuroFeatureFlags,
+      neuroMetrics,
       addChatRun,
       removeChatRun,
       registerToolEventRecipient: toolEventRecipients.add,

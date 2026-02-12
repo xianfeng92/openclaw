@@ -6,6 +6,8 @@ import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { WizardSession } from "../../wizard/session.js";
 import type { ChatAbortControllerEntry } from "../chat-abort.js";
 import type { NeuroContextRingBuffer } from "../neuro/context-ring-buffer.js";
+import type { NeuroFeatureFlagsService } from "../neuro/feature-flags.js";
+import type { NeuroMetricsService } from "../neuro/metrics.js";
 import type { NodeRegistry } from "../node-registry.js";
 import type { ConnectParams, ErrorShape, RequestFrame } from "../protocol/index.js";
 import type { ChannelRuntimeSnapshot } from "../server-channels.js";
@@ -66,6 +68,8 @@ export type GatewayRequestContext = {
   chatRunBuffers: Map<string, string>;
   chatDeltaSentAt: Map<string, number>;
   neuroContextCache: NeuroContextRingBuffer;
+  neuroFeatureFlags: NeuroFeatureFlagsService;
+  neuroMetrics: NeuroMetricsService;
   addChatRun: (sessionId: string, entry: { sessionKey: string; clientRunId: string }) => void;
   removeChatRun: (
     sessionId: string,

@@ -117,7 +117,30 @@ function applySessionDefaults(host: GatewayHost, defaults?: SessionDefaultsSnaps
   }
 }
 
+function reportNeuroMetrics(host: GatewayHost, opts: { uiReadyMs: number }) {
+  const client = host.client;
+  if (!client || !Number.isFinite(opts.uiReadyMs) || opts.uiReadyMs < 0) {
+    return;
+  }
+
+  const perfMemory = (performance as unknown as { memory?: { usedJSHeapSize?: unknown } }).memory;
+  const usedHeap = perfMemory?.usedJSHeapSize;
+  const desktopMemoryMb =
+    typeof usedHeap === "number" && Number.isFinite(usedHeap) && usedHeap >= 0
+      ? usedHeap / (1024 * 1024)
+      : undefined;
+
+  void client.request("neuro.metrics.observe", {
+    uiReadyMs: opts.uiReadyMs,
+    ...(typeof desktopMemoryMb === "number" ? { desktopMemoryMb } : {}),
+  });
+}
+
 export function connectGateway(host: GatewayHost) {
+  const connectStartedAt =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
   host.lastError = null;
   host.hello = null;
   host.connected = false;
@@ -136,6 +159,11 @@ export function connectGateway(host: GatewayHost) {
       host.lastError = null;
       host.hello = hello;
       applySnapshot(host, hello);
+      const now =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+      reportNeuroMetrics(host, { uiReadyMs: now - connectStartedAt });
       // Reset orphaned chat run state from before disconnect.
       // Any in-flight run's final event was lost during the disconnect window.
       host.chatRunId = null;

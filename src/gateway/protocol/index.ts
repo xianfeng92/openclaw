@@ -118,6 +118,14 @@ import {
   NeuroContextIngestParamsSchema,
   type NeuroContextSnapshotParams,
   NeuroContextSnapshotParamsSchema,
+  type NeuroFlagsGetParams,
+  NeuroFlagsGetParamsSchema,
+  type NeuroFlagsSetParams,
+  NeuroFlagsSetParamsSchema,
+  type NeuroMetricsGetParams,
+  NeuroMetricsGetParamsSchema,
+  type NeuroMetricsObserveParams,
+  NeuroMetricsObserveParamsSchema,
   type NodeDescribeParams,
   NodeDescribeParamsSchema,
   type NodeEventParams,
@@ -353,6 +361,16 @@ export const validateNeuroContextIngestParams = ajv.compile<NeuroContextIngestPa
 export const validateNeuroContextSnapshotParams = ajv.compile<NeuroContextSnapshotParams>(
   NeuroContextSnapshotParamsSchema,
 );
+export const validateNeuroFlagsGetParams =
+  ajv.compile<NeuroFlagsGetParams>(NeuroFlagsGetParamsSchema);
+export const validateNeuroFlagsSetParams =
+  ajv.compile<NeuroFlagsSetParams>(NeuroFlagsSetParamsSchema);
+export const validateNeuroMetricsGetParams = ajv.compile<NeuroMetricsGetParams>(
+  NeuroMetricsGetParamsSchema,
+);
+export const validateNeuroMetricsObserveParams = ajv.compile<NeuroMetricsObserveParams>(
+  NeuroMetricsObserveParamsSchema,
+);
 export const validateUpdateRunParams = ajv.compile<UpdateRunParams>(UpdateRunParamsSchema);
 export const validateWebLoginStartParams =
   ajv.compile<WebLoginStartParams>(WebLoginStartParamsSchema);
@@ -475,6 +493,10 @@ export {
   ChatInjectParamsSchema,
   NeuroContextIngestParamsSchema,
   NeuroContextSnapshotParamsSchema,
+  NeuroFlagsGetParamsSchema,
+  NeuroFlagsSetParamsSchema,
+  NeuroMetricsGetParamsSchema,
+  NeuroMetricsObserveParamsSchema,
   UpdateRunParamsSchema,
   TickEventSchema,
   ShutdownEventSchema,
@@ -575,6 +597,10 @@ export type {
   LogsTailResult,
   NeuroContextIngestParams,
   NeuroContextSnapshotParams,
+  NeuroFlagsGetParams,
+  NeuroFlagsSetParams,
+  NeuroMetricsGetParams,
+  NeuroMetricsObserveParams,
   PollParams,
   UpdateRunParams,
   ChatInjectParams,

@@ -1,3 +1,4 @@
+import type { NeuroMetricsService } from "./neuro/metrics.js";
 import { normalizeVerboseLevel } from "../auto-reply/thinking.js";
 import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
@@ -215,6 +216,7 @@ export type AgentEventHandlerOptions = {
   resolveSessionKeyForRun: (runId: string) => string | undefined;
   clearAgentRunContext: (runId: string) => void;
   toolEventRecipients: ToolEventRecipientRegistry;
+  neuroMetrics?: Pick<NeuroMetricsService, "markFirstToken">;
 };
 
 export function createAgentEventHandler({
@@ -226,6 +228,7 @@ export function createAgentEventHandler({
   resolveSessionKeyForRun,
   clearAgentRunContext,
   toolEventRecipients,
+  neuroMetrics,
 }: AgentEventHandlerOptions) {
   const debugLog = (_msg: string) => {
     // Disabled: Comment out to enable debug logging
@@ -380,6 +383,7 @@ export function createAgentEventHandler({
     if (sessionKey) {
       nodeSendToSession(sessionKey, "agent", isToolEvent ? toolPayload : agentPayload);
       if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
+        neuroMetrics?.markFirstToken(clientRunId, Number.isFinite(evt.ts) ? evt.ts : Date.now());
         emitChatDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
       } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         if (chatLink) {

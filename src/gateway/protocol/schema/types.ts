@@ -95,6 +95,16 @@ import type {
   NeuroContextIngestResultSchema,
   NeuroContextSnapshotParamsSchema,
   NeuroContextSnapshotResultSchema,
+  NeuroFlagsGetParamsSchema,
+  NeuroFlagsGetResultSchema,
+  NeuroFlagsSetParamsSchema,
+  NeuroFlagsSetResultSchema,
+  NeuroMetricsGetParamsSchema,
+  NeuroMetricsGetResultSchema,
+  NeuroMetricsObserveParamsSchema,
+  NeuroMetricsObserveResultSchema,
+  NeuroMetricsSnapshotSchema,
+  NeuroFlagsSnapshotSchema,
   SuggestionCardSchema,
   SuggestionFeedbackSchema,
 } from "./neuro.js";
@@ -237,6 +247,16 @@ export type NeuroContextIngestParams = Static<typeof NeuroContextIngestParamsSch
 export type NeuroContextIngestResult = Static<typeof NeuroContextIngestResultSchema>;
 export type NeuroContextSnapshotParams = Static<typeof NeuroContextSnapshotParamsSchema>;
 export type NeuroContextSnapshotResult = Static<typeof NeuroContextSnapshotResultSchema>;
+export type NeuroFlagsSnapshot = Static<typeof NeuroFlagsSnapshotSchema>;
+export type NeuroFlagsGetParams = Static<typeof NeuroFlagsGetParamsSchema>;
+export type NeuroFlagsGetResult = Static<typeof NeuroFlagsGetResultSchema>;
+export type NeuroFlagsSetParams = Static<typeof NeuroFlagsSetParamsSchema>;
+export type NeuroFlagsSetResult = Static<typeof NeuroFlagsSetResultSchema>;
+export type NeuroMetricsSnapshot = Static<typeof NeuroMetricsSnapshotSchema>;
+export type NeuroMetricsGetParams = Static<typeof NeuroMetricsGetParamsSchema>;
+export type NeuroMetricsGetResult = Static<typeof NeuroMetricsGetResultSchema>;
+export type NeuroMetricsObserveParams = Static<typeof NeuroMetricsObserveParamsSchema>;
+export type NeuroMetricsObserveResult = Static<typeof NeuroMetricsObserveResultSchema>;
 export type SuggestionCard = Static<typeof SuggestionCardSchema>;
 export type SuggestionFeedback = Static<typeof SuggestionFeedbackSchema>;
 export type UpdateRunParams = Static<typeof UpdateRunParamsSchema>;

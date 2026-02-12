@@ -87,6 +87,10 @@ const BASE_METHODS = [
   "chat.send",
   "neuro.context.ingest",
   "neuro.context.snapshot",
+  "neuro.flags.get",
+  "neuro.flags.set",
+  "neuro.metrics.get",
+  "neuro.metrics.observe",
 ];
 
 export function listGatewayMethods(): string[] {
@@ -111,6 +115,7 @@ export const GATEWAY_EVENTS = [
   "device.pair.requested",
   "device.pair.resolved",
   "voicewake.changed",
+  "neuro.flags.changed",
   "exec.approval.requested",
   "exec.approval.resolved",
 ];

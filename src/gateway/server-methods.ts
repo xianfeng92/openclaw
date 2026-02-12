@@ -74,6 +74,8 @@ const READ_METHODS = new Set([
   "node.describe",
   "chat.history",
   "neuro.context.snapshot",
+  "neuro.flags.get",
+  "neuro.metrics.get",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -91,6 +93,8 @@ const WRITE_METHODS = new Set([
   "chat.abort",
   "browser.request",
   "neuro.context.ingest",
+  "neuro.flags.set",
+  "neuro.metrics.observe",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {

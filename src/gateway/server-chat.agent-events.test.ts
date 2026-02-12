@@ -7,6 +7,39 @@ import {
 } from "./server-chat.js";
 
 describe("agent event handler", () => {
+  it("marks first token latency on first assistant event", () => {
+    const markFirstToken = vi.fn();
+    const broadcast = vi.fn();
+    const broadcastToConnIds = vi.fn();
+    const nodeSendToSession = vi.fn();
+    const agentRunSeq = new Map<string, number>();
+    const chatRunState = createChatRunState();
+    const toolEventRecipients = createToolEventRecipientRegistry();
+    chatRunState.registry.add("run-metric-1", { sessionKey: "session-1", clientRunId: "client-1" });
+
+    const handler = createAgentEventHandler({
+      broadcast,
+      broadcastToConnIds,
+      nodeSendToSession,
+      agentRunSeq,
+      chatRunState,
+      resolveSessionKeyForRun: () => undefined,
+      clearAgentRunContext: vi.fn(),
+      toolEventRecipients,
+      neuroMetrics: { markFirstToken },
+    });
+
+    handler({
+      runId: "run-metric-1",
+      seq: 1,
+      stream: "assistant",
+      ts: 1_234,
+      data: { text: "hello" },
+    });
+
+    expect(markFirstToken).toHaveBeenCalledWith("client-1", 1_234);
+  });
+
   it("emits chat delta for assistant text-only events", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
     const broadcast = vi.fn();

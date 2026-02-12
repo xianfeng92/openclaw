@@ -5,6 +5,12 @@ import {
   NeuroContextIngestParamsSchema,
   NeuroContextSnapshotParamsSchema,
   NeuroContextSnapshotResultSchema,
+  NeuroFlagsGetParamsSchema,
+  NeuroFlagsGetResultSchema,
+  NeuroFlagsSetParamsSchema,
+  NeuroMetricsGetParamsSchema,
+  NeuroMetricsGetResultSchema,
+  NeuroMetricsObserveParamsSchema,
   SuggestionCardSchema,
   SuggestionFeedbackSchema,
 } from "./neuro.js";
@@ -187,5 +193,84 @@ describe("neuro schemas", () => {
       },
     };
     expect(validate(payload)).toBe(true);
+  });
+
+  it("validates neuro.flags.get params", () => {
+    const validate = ajv.compile(NeuroFlagsGetParamsSchema);
+    expect(validate({})).toBe(true);
+  });
+
+  it("validates neuro.flags.get result", () => {
+    const validate = ajv.compile(NeuroFlagsGetResultSchema);
+    expect(
+      validate({
+        version: 2,
+        updatedAtMs: 1_770_000_000_000,
+        configured: {
+          proactiveCards: true,
+          flowMode: true,
+          preferenceSync: false,
+          killSwitch: false,
+        },
+        effective: {
+          proactiveCards: true,
+          flowMode: true,
+          preferenceSync: false,
+          killSwitch: false,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects neuro.flags.set params with empty patch", () => {
+    const validate = ajv.compile(NeuroFlagsSetParamsSchema);
+    expect(validate({})).toBe(false);
+  });
+
+  it("validates neuro.flags.set params with patch", () => {
+    const validate = ajv.compile(NeuroFlagsSetParamsSchema);
+    expect(validate({ proactiveCards: true, killSwitch: false })).toBe(true);
+  });
+
+  it("validates neuro.metrics.get params", () => {
+    const validate = ajv.compile(NeuroMetricsGetParamsSchema);
+    expect(validate({})).toBe(true);
+  });
+
+  it("validates neuro.metrics.observe params", () => {
+    const validate = ajv.compile(NeuroMetricsObserveParamsSchema);
+    expect(validate({ uiReadyMs: 42, desktopMemoryMb: 120.5 })).toBe(true);
+  });
+
+  it("rejects neuro.metrics.observe params when payload is empty", () => {
+    const validate = ajv.compile(NeuroMetricsObserveParamsSchema);
+    expect(validate({})).toBe(false);
+  });
+
+  it("validates neuro.metrics.get result", () => {
+    const validate = ajv.compile(NeuroMetricsGetResultSchema);
+    expect(
+      validate({
+        ts: 1_770_000_000_000,
+        invoke: {
+          uiReadyMs: { count: 1, min: 50, max: 50, avg: 50, p50: 50, p95: 50 },
+          firstTokenMs: { count: 0, min: null, max: null, avg: null, p50: null, p95: null },
+        },
+        memory: {
+          gatewayMb: {
+            rss: 100.2,
+            heapUsed: 40.1,
+            heapTotal: 80.2,
+            external: 3.5,
+          },
+          desktopMb: 155.3,
+          desktopUpdatedAtMs: 1_770_000_000_000,
+        },
+        redaction: {
+          maskCount: 2,
+          blockCount: 1,
+        },
+      }),
+    ).toBe(true);
   });
 });

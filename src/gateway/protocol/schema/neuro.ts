@@ -148,3 +148,108 @@ export const NeuroContextSnapshotResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+const NeuroFeatureFlagsStateSchema = Type.Object(
+  {
+    proactiveCards: Type.Boolean(),
+    flowMode: Type.Boolean(),
+    preferenceSync: Type.Boolean(),
+    killSwitch: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroFlagsSnapshotSchema = Type.Object(
+  {
+    version: Type.Integer({ minimum: 1 }),
+    updatedAtMs: Type.Integer({ minimum: 0 }),
+    configured: NeuroFeatureFlagsStateSchema,
+    effective: NeuroFeatureFlagsStateSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroFlagsGetParamsSchema = Type.Object({}, { additionalProperties: false });
+
+export const NeuroFlagsGetResultSchema = NeuroFlagsSnapshotSchema;
+
+export const NeuroFlagsSetParamsSchema = Type.Object(
+  {
+    proactiveCards: Type.Optional(Type.Boolean()),
+    flowMode: Type.Optional(Type.Boolean()),
+    preferenceSync: Type.Optional(Type.Boolean()),
+    killSwitch: Type.Optional(Type.Boolean()),
+  },
+  {
+    additionalProperties: false,
+    minProperties: 1,
+  },
+);
+
+export const NeuroFlagsSetResultSchema = NeuroFlagsSnapshotSchema;
+
+const NeuroDistributionStatsSchema = Type.Object(
+  {
+    count: Type.Integer({ minimum: 0 }),
+    min: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+    max: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+    avg: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+    p50: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+    p95: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroMetricsSnapshotSchema = Type.Object(
+  {
+    ts: Type.Integer({ minimum: 0 }),
+    invoke: Type.Object(
+      {
+        uiReadyMs: NeuroDistributionStatsSchema,
+        firstTokenMs: NeuroDistributionStatsSchema,
+      },
+      { additionalProperties: false },
+    ),
+    memory: Type.Object(
+      {
+        gatewayMb: Type.Object(
+          {
+            rss: Type.Number({ minimum: 0 }),
+            heapUsed: Type.Number({ minimum: 0 }),
+            heapTotal: Type.Number({ minimum: 0 }),
+            external: Type.Number({ minimum: 0 }),
+          },
+          { additionalProperties: false },
+        ),
+        desktopMb: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+        desktopUpdatedAtMs: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+      },
+      { additionalProperties: false },
+    ),
+    redaction: Type.Object(
+      {
+        maskCount: Type.Integer({ minimum: 0 }),
+        blockCount: Type.Integer({ minimum: 0 }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const NeuroMetricsGetParamsSchema = Type.Object({}, { additionalProperties: false });
+
+export const NeuroMetricsGetResultSchema = NeuroMetricsSnapshotSchema;
+
+export const NeuroMetricsObserveParamsSchema = Type.Object(
+  {
+    uiReadyMs: Type.Optional(Type.Number({ minimum: 0 })),
+    desktopMemoryMb: Type.Optional(Type.Number({ minimum: 0 })),
+  },
+  {
+    additionalProperties: false,
+    minProperties: 1,
+  },
+);
+
+export const NeuroMetricsObserveResultSchema = NeuroMetricsSnapshotSchema;

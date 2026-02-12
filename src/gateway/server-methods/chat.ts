@@ -517,6 +517,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           disableBlockStreaming: true,
           onAgentRunStart: (runId) => {
             agentRunStarted = true;
+            context.neuroMetrics.markRunStarted(clientRunId, Date.now());
             const connId = typeof client?.connId === "string" ? client.connId : undefined;
             const wantsToolEvents = hasGatewayClientCap(
               client?.connect?.caps,
@@ -631,6 +632,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         })
         .finally(() => {
           context.chatAbortControllers.delete(clientRunId);
+          context.neuroMetrics.clearRun(clientRunId);
         });
     } catch (err) {
       const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));

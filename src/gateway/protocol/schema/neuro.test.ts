@@ -3,6 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   ContextEventSchema,
   NeuroContextIngestParamsSchema,
+  NeuroSuggestionActionParamsSchema,
+  NeuroSuggestionActionResultSchema,
+  NeuroBehaviorDeleteParamsSchema,
+  NeuroBehaviorDeleteResultSchema,
+  NeuroBehaviorExportParamsSchema,
+  NeuroBehaviorExportResultSchema,
+  NeuroBehaviorRetentionRunParamsSchema,
+  NeuroBehaviorRetentionRunResultSchema,
+  NeuroPredictPreviewParamsSchema,
+  NeuroPredictPreviewResultSchema,
+  NeuroSuggestionListParamsSchema,
+  NeuroSuggestionListResultSchema,
+  NeuroSuggestionUpsertParamsSchema,
+  NeuroSuggestionUpsertResultSchema,
   NeuroContextSnapshotParamsSchema,
   NeuroContextSnapshotResultSchema,
   NeuroFlagsGetParamsSchema,
@@ -114,6 +128,210 @@ describe("neuro schemas", () => {
       sessionKey: "agent:main:main",
     };
     expect(validate(payload)).toBe(false);
+  });
+
+  it("validates neuro.suggestion.upsert params/result", () => {
+    const validateParams = ajv.compile(NeuroSuggestionUpsertParamsSchema);
+    const validateResult = ajv.compile(NeuroSuggestionUpsertResultSchema);
+    const params = {
+      card: {
+        version: "suggestion.card.v1",
+        suggestionId: "sg-upsert-1",
+        sessionKey: "agent:main:main",
+        confidence: 0.81,
+        mode: "safe",
+        actions: ["apply", "dismiss", "undo", "explain"],
+        expiresAt: 1_770_000_111_000,
+      },
+    };
+    const result = {
+      sessionKey: "agent:main:main",
+      suggestionId: "sg-upsert-1",
+      inserted: true,
+      replaced: false,
+    };
+    expect(validateParams(params)).toBe(true);
+    expect(validateResult(result)).toBe(true);
+  });
+
+  it("validates neuro.suggestion.list params/result", () => {
+    const validateParams = ajv.compile(NeuroSuggestionListParamsSchema);
+    const validateResult = ajv.compile(NeuroSuggestionListResultSchema);
+    expect(validateParams({ sessionKey: "agent:main:main" })).toBe(true);
+    expect(
+      validateResult({
+        sessionKey: "agent:main:main",
+        total: 1,
+        cards: [
+          {
+            version: "suggestion.card.v1",
+            suggestionId: "sg-list-1",
+            sessionKey: "agent:main:main",
+            confidence: 0.7,
+            mode: "flow",
+            actions: ["apply", "undo"],
+            expiresAt: 1_770_000_222_000,
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("validates neuro.suggestion.action params/result", () => {
+    const validateParams = ajv.compile(NeuroSuggestionActionParamsSchema);
+    const validateResult = ajv.compile(NeuroSuggestionActionResultSchema);
+    expect(
+      validateParams({
+        sessionKey: "agent:main:main",
+        suggestionId: "sg-action-1",
+        action: "apply",
+        operation: "edit_file",
+        groupId: "group-1",
+        snapshots: [
+          {
+            kind: "file_write",
+            target: "README.md",
+            before: "a",
+            after: "b",
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    expect(
+      validateResult({
+        sessionKey: "agent:main:main",
+        suggestionId: "sg-action-1",
+        action: "apply",
+        status: "applied",
+        message: "Suggestion applied.",
+        undoUntilMs: 1_770_000_333_000,
+        journalId: "undo-1",
+        groupId: "group-1",
+        policy: {
+          allowed: true,
+          code: "ALLOW",
+          reason: "Action passes safe/flow policy checks.",
+        },
+        feedback: {
+          version: "suggestion.feedback.v1",
+          suggestionId: "sg-action-1",
+          action: "accept",
+          ts: 1_770_000_300_000,
+          sessionKey: "agent:main:main",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("validates neuro.behavior.export params/result", () => {
+    const validateParams = ajv.compile(NeuroBehaviorExportParamsSchema);
+    const validateResult = ajv.compile(NeuroBehaviorExportResultSchema);
+    expect(
+      validateParams({
+        sessionKey: "agent:main:main",
+        fromTs: 1_770_000_000_000,
+        toTs: 1_770_000_500_000,
+        limit: 100,
+        includePreferences: true,
+      }),
+    ).toBe(true);
+
+    expect(
+      validateResult({
+        exportedAtMs: 1_770_000_999_000,
+        events: [
+          {
+            id: "evt-1",
+            ts: 1_770_000_100_000,
+            sessionKey: "agent:main:main",
+            type: "feedback",
+            patternHash: "abcd",
+            suggestionId: "sg-1",
+            mode: null,
+            userAction: "accept",
+            confidence: null,
+            workspace: null,
+            filePath: null,
+            appName: null,
+            metadata: { status: "applied" },
+          },
+        ],
+        preferences: [
+          {
+            patternHash: "abcd",
+            preference: "suggest",
+            score: 0.5,
+            updatedAtMs: 1_770_000_100_000,
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("validates neuro.behavior.delete params/result", () => {
+    const validateParams = ajv.compile(NeuroBehaviorDeleteParamsSchema);
+    const validateResult = ajv.compile(NeuroBehaviorDeleteResultSchema);
+    expect(
+      validateParams({
+        sessionKey: "agent:main:main",
+        beforeTs: 1_770_000_200_000,
+        deletePreferences: true,
+      }),
+    ).toBe(true);
+    expect(
+      validateResult({
+        deletedEvents: 12,
+        deletedPreferences: 2,
+        remainingEvents: 3,
+        remainingPreferences: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("validates neuro.behavior.retention.run params/result", () => {
+    const validateParams = ajv.compile(NeuroBehaviorRetentionRunParamsSchema);
+    const validateResult = ajv.compile(NeuroBehaviorRetentionRunResultSchema);
+    expect(validateParams({ nowMs: 1_770_001_000_000, dryRun: true })).toBe(true);
+    expect(
+      validateResult({
+        cutoffTs: 1_769_000_000_000,
+        deletedEvents: 44,
+        remainingEvents: 9,
+        retentionDays: 30,
+        dryRun: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("validates neuro.predict.preview params/result", () => {
+    const validateParams = ajv.compile(NeuroPredictPreviewParamsSchema);
+    const validateResult = ajv.compile(NeuroPredictPreviewResultSchema);
+    expect(
+      validateParams({
+        sessionKey: "agent:main:main",
+        source: "terminal",
+        signal: "pnpm test",
+      }),
+    ).toBe(true);
+    expect(
+      validateResult({
+        sessionKey: "agent:main:main",
+        source: "terminal",
+        signal: "pnpm test",
+        normalizedSignal: "pnpm test",
+        patternKey: "terminal:pnpm test",
+        patternHash: "abcd",
+        action: "suggest",
+        suppressed: false,
+        confidence: 0.55,
+        similarCount: 3,
+        acceptRate: 0.66,
+        reasonCodes: ["SIMILAR_HISTORY"],
+        preference: "suggest",
+        lastEventTs: 1_770_000_000_000,
+      }),
+    ).toBe(true);
   });
 
   it("validates neuro.context.ingest params", () => {

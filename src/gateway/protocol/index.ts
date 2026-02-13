@@ -116,6 +116,20 @@ import {
   ModelsListParamsSchema,
   type NeuroContextIngestParams,
   NeuroContextIngestParamsSchema,
+  type NeuroSuggestionUpsertParams,
+  NeuroSuggestionUpsertParamsSchema,
+  type NeuroSuggestionListParams,
+  NeuroSuggestionListParamsSchema,
+  type NeuroSuggestionActionParams,
+  NeuroSuggestionActionParamsSchema,
+  type NeuroBehaviorExportParams,
+  NeuroBehaviorExportParamsSchema,
+  type NeuroBehaviorDeleteParams,
+  NeuroBehaviorDeleteParamsSchema,
+  type NeuroBehaviorRetentionRunParams,
+  NeuroBehaviorRetentionRunParamsSchema,
+  type NeuroPredictPreviewParams,
+  NeuroPredictPreviewParamsSchema,
   type NeuroContextSnapshotParams,
   NeuroContextSnapshotParamsSchema,
   type NeuroFlagsGetParams,
@@ -358,6 +372,27 @@ export const validateChatEvent = ajv.compile(ChatEventSchema);
 export const validateNeuroContextIngestParams = ajv.compile<NeuroContextIngestParams>(
   NeuroContextIngestParamsSchema,
 );
+export const validateNeuroSuggestionUpsertParams = ajv.compile<NeuroSuggestionUpsertParams>(
+  NeuroSuggestionUpsertParamsSchema,
+);
+export const validateNeuroSuggestionListParams = ajv.compile<NeuroSuggestionListParams>(
+  NeuroSuggestionListParamsSchema,
+);
+export const validateNeuroSuggestionActionParams = ajv.compile<NeuroSuggestionActionParams>(
+  NeuroSuggestionActionParamsSchema,
+);
+export const validateNeuroBehaviorExportParams = ajv.compile<NeuroBehaviorExportParams>(
+  NeuroBehaviorExportParamsSchema,
+);
+export const validateNeuroBehaviorDeleteParams = ajv.compile<NeuroBehaviorDeleteParams>(
+  NeuroBehaviorDeleteParamsSchema,
+);
+export const validateNeuroBehaviorRetentionRunParams = ajv.compile<NeuroBehaviorRetentionRunParams>(
+  NeuroBehaviorRetentionRunParamsSchema,
+);
+export const validateNeuroPredictPreviewParams = ajv.compile<NeuroPredictPreviewParams>(
+  NeuroPredictPreviewParamsSchema,
+);
 export const validateNeuroContextSnapshotParams = ajv.compile<NeuroContextSnapshotParams>(
   NeuroContextSnapshotParamsSchema,
 );
@@ -492,6 +527,13 @@ export {
   ChatSendParamsSchema,
   ChatInjectParamsSchema,
   NeuroContextIngestParamsSchema,
+  NeuroSuggestionUpsertParamsSchema,
+  NeuroSuggestionListParamsSchema,
+  NeuroSuggestionActionParamsSchema,
+  NeuroBehaviorExportParamsSchema,
+  NeuroBehaviorDeleteParamsSchema,
+  NeuroBehaviorRetentionRunParamsSchema,
+  NeuroPredictPreviewParamsSchema,
   NeuroContextSnapshotParamsSchema,
   NeuroFlagsGetParamsSchema,
   NeuroFlagsSetParamsSchema,
@@ -596,6 +638,13 @@ export type {
   LogsTailParams,
   LogsTailResult,
   NeuroContextIngestParams,
+  NeuroSuggestionUpsertParams,
+  NeuroSuggestionListParams,
+  NeuroSuggestionActionParams,
+  NeuroBehaviorExportParams,
+  NeuroBehaviorDeleteParams,
+  NeuroBehaviorRetentionRunParams,
+  NeuroPredictPreviewParams,
   NeuroContextSnapshotParams,
   NeuroFlagsGetParams,
   NeuroFlagsSetParams,

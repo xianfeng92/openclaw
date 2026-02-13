@@ -93,6 +93,20 @@ import type {
   ContextEventSchema,
   NeuroContextIngestParamsSchema,
   NeuroContextIngestResultSchema,
+  NeuroSuggestionUpsertParamsSchema,
+  NeuroSuggestionUpsertResultSchema,
+  NeuroSuggestionListParamsSchema,
+  NeuroSuggestionListResultSchema,
+  NeuroSuggestionActionParamsSchema,
+  NeuroSuggestionActionResultSchema,
+  NeuroBehaviorExportParamsSchema,
+  NeuroBehaviorExportResultSchema,
+  NeuroBehaviorDeleteParamsSchema,
+  NeuroBehaviorDeleteResultSchema,
+  NeuroBehaviorRetentionRunParamsSchema,
+  NeuroBehaviorRetentionRunResultSchema,
+  NeuroPredictPreviewParamsSchema,
+  NeuroPredictPreviewResultSchema,
   NeuroContextSnapshotParamsSchema,
   NeuroContextSnapshotResultSchema,
   NeuroFlagsGetParamsSchema,
@@ -245,6 +259,20 @@ export type ChatEvent = Static<typeof ChatEventSchema>;
 export type ContextEvent = Static<typeof ContextEventSchema>;
 export type NeuroContextIngestParams = Static<typeof NeuroContextIngestParamsSchema>;
 export type NeuroContextIngestResult = Static<typeof NeuroContextIngestResultSchema>;
+export type NeuroSuggestionUpsertParams = Static<typeof NeuroSuggestionUpsertParamsSchema>;
+export type NeuroSuggestionUpsertResult = Static<typeof NeuroSuggestionUpsertResultSchema>;
+export type NeuroSuggestionListParams = Static<typeof NeuroSuggestionListParamsSchema>;
+export type NeuroSuggestionListResult = Static<typeof NeuroSuggestionListResultSchema>;
+export type NeuroSuggestionActionParams = Static<typeof NeuroSuggestionActionParamsSchema>;
+export type NeuroSuggestionActionResult = Static<typeof NeuroSuggestionActionResultSchema>;
+export type NeuroBehaviorExportParams = Static<typeof NeuroBehaviorExportParamsSchema>;
+export type NeuroBehaviorExportResult = Static<typeof NeuroBehaviorExportResultSchema>;
+export type NeuroBehaviorDeleteParams = Static<typeof NeuroBehaviorDeleteParamsSchema>;
+export type NeuroBehaviorDeleteResult = Static<typeof NeuroBehaviorDeleteResultSchema>;
+export type NeuroBehaviorRetentionRunParams = Static<typeof NeuroBehaviorRetentionRunParamsSchema>;
+export type NeuroBehaviorRetentionRunResult = Static<typeof NeuroBehaviorRetentionRunResultSchema>;
+export type NeuroPredictPreviewParams = Static<typeof NeuroPredictPreviewParamsSchema>;
+export type NeuroPredictPreviewResult = Static<typeof NeuroPredictPreviewResultSchema>;
 export type NeuroContextSnapshotParams = Static<typeof NeuroContextSnapshotParamsSchema>;
 export type NeuroContextSnapshotResult = Static<typeof NeuroContextSnapshotResultSchema>;
 export type NeuroFlagsSnapshot = Static<typeof NeuroFlagsSnapshotSchema>;

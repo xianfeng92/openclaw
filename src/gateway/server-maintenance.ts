@@ -25,6 +25,8 @@ export function startGatewayMaintenanceTimers(params: {
   getHealthVersion: () => number;
   refreshGatewayHealthSnapshot: (opts?: { probe?: boolean }) => Promise<HealthSummary>;
   logHealth: { error: (msg: string) => void };
+  logGateway?: { error: (msg: string) => void };
+  runNeuroRetention?: () => void;
   dedupe: Map<string, DedupeEntry>;
   chatAbortControllers: Map<string, ChatAbortControllerEntry>;
   chatRunState: { abortedRuns: Map<string, number> };
@@ -41,6 +43,7 @@ export function startGatewayMaintenanceTimers(params: {
   tickInterval: ReturnType<typeof setInterval>;
   healthInterval: ReturnType<typeof setInterval>;
   dedupeCleanup: ReturnType<typeof setInterval>;
+  neuroRetentionInterval: ReturnType<typeof setInterval> | null;
 } {
   setBroadcastHealthUpdate((snap: HealthSummary) => {
     params.broadcast("health", snap, {
@@ -125,5 +128,15 @@ export function startGatewayMaintenanceTimers(params: {
     }
   }, 60_000);
 
-  return { tickInterval, healthInterval, dedupeCleanup };
+  const neuroRetentionInterval = params.runNeuroRetention
+    ? setInterval(() => {
+        try {
+          params.runNeuroRetention?.();
+        } catch (err) {
+          params.logGateway?.error?.(`neuro retention run failed: ${formatError(err)}`);
+        }
+      }, 60 * 60_000)
+    : null;
+
+  return { tickInterval, healthInterval, dedupeCleanup, neuroRetentionInterval };
 }

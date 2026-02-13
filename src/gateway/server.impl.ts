@@ -44,9 +44,14 @@ import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js
 import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
+import { createNeuroBehavioralStore } from "./neuro/behavioral-store.js";
 import { createNeuroContextRingBuffer } from "./neuro/context-ring-buffer.js";
 import { createNeuroFeatureFlags } from "./neuro/feature-flags.js";
 import { createNeuroMetrics } from "./neuro/metrics.js";
+import { createNeuroPolicyEngine } from "./neuro/policy-engine.js";
+import { createNeuroPredictionEngine } from "./neuro/prediction-engine.js";
+import { createNeuroSuggestionCards } from "./neuro/suggestion-cards.js";
+import { createNeuroUndoJournal } from "./neuro/undo-journal.js";
 import { NodeRegistry } from "./node-registry.js";
 import { createChannelManager } from "./server-channels.js";
 import { createAgentEventHandler } from "./server-chat.js";
@@ -357,6 +362,13 @@ export async function startGatewayServer(
   let bonjourStop: (() => Promise<void>) | null = null;
   const nodeRegistry = new NodeRegistry();
   const neuroContextCache = createNeuroContextRingBuffer();
+  const neuroBehavioralStore = createNeuroBehavioralStore();
+  const neuroSuggestionCards = createNeuroSuggestionCards();
+  const neuroUndoJournal = createNeuroUndoJournal();
+  const neuroPolicyEngine = createNeuroPolicyEngine();
+  const neuroPredictionEngine = createNeuroPredictionEngine({
+    behavioralStore: neuroBehavioralStore,
+  });
   const neuroFeatureFlags = createNeuroFeatureFlags();
   const neuroMetrics = createNeuroMetrics();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -429,22 +441,27 @@ export async function startGatewayServer(
     }, skillsRefreshDelayMs);
   });
 
-  const { tickInterval, healthInterval, dedupeCleanup } = startGatewayMaintenanceTimers({
-    broadcast,
-    nodeSendToAllSubscribed,
-    getPresenceVersion,
-    getHealthVersion,
-    refreshGatewayHealthSnapshot,
-    logHealth,
-    dedupe,
-    chatAbortControllers,
-    chatRunState,
-    chatRunBuffers,
-    chatDeltaSentAt,
-    removeChatRun,
-    agentRunSeq,
-    nodeSendToSession,
-  });
+  const { tickInterval, healthInterval, dedupeCleanup, neuroRetentionInterval } =
+    startGatewayMaintenanceTimers({
+      broadcast,
+      nodeSendToAllSubscribed,
+      getPresenceVersion,
+      getHealthVersion,
+      refreshGatewayHealthSnapshot,
+      logHealth,
+      logGateway: log,
+      runNeuroRetention: () => {
+        neuroBehavioralStore.pruneExpiredEvents();
+      },
+      dedupe,
+      chatAbortControllers,
+      chatRunState,
+      chatRunBuffers,
+      chatDeltaSentAt,
+      removeChatRun,
+      agentRunSeq,
+      nodeSendToSession,
+    });
 
   const agentUnsub = onAgentEvent(
     createAgentEventHandler({
@@ -520,6 +537,11 @@ export async function startGatewayServer(
       chatRunBuffers: chatRunState.buffers,
       chatDeltaSentAt: chatRunState.deltaSentAt,
       neuroContextCache,
+      neuroBehavioralStore,
+      neuroSuggestionCards,
+      neuroUndoJournal,
+      neuroPolicyEngine,
+      neuroPredictionEngine,
       neuroFeatureFlags,
       neuroMetrics,
       addChatRun,
@@ -621,6 +643,8 @@ export async function startGatewayServer(
     tickInterval,
     healthInterval,
     dedupeCleanup,
+    neuroRetentionInterval,
+    neuroBehavioralStore,
     agentUnsub,
     heartbeatUnsub,
     chatRunState,

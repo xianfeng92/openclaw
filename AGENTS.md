@@ -208,3 +208,27 @@
 - Make `pnpm check` green by running the full chain repeatedly (`tsgo` -> `lint` -> `format`), not by fixing each gate in isolation.
 - Keep generated and operator-owned docs out of formatting gates (e.g. `docs/zh-CN/**`, PRDs that must not be touched) to avoid churn and accidental edits.
 - When TypeScript errors are on `unknown`/`Error` surfaces, prefer explicit safe stringification and structured error details over `String(x)` and implicit coercions.
+
+### Project Neuro P1-001 (2026-02-12)
+
+- Keep card-action APIs explicitly versioned and schema-validated (`neuro.suggestion.*`) so desktop/web clients can evolve without drift.
+- Treat provider/offline paths as first-class outcomes in action handlers (structured fallback payloads), not generic request failures.
+- Add action-loop integration coverage (upsert -> list -> apply/explain/undo/dismiss) before wiring richer UI surfaces, so behavior remains stable during later UX iterations.
+
+### Project Neuro P1-002/P1-003 (2026-02-12)
+
+- One-click undo should be backed by a dedicated journal service, not only transient UI state; keep explicit expiry windows and status transitions (`applied`/`undone`/`expired`).
+- Grouped snapshots (`groupId`) should be first-class in the undo model so later multi-file/multi-step rollback stays deterministic.
+- Policy checks should run before provider fallback in apply paths: deny-list and mode gates are security controls, not transport errors.
+
+### Project Neuro P1-004/P1-005 (2026-02-12)
+
+- Treat behavioral persistence as first-class gateway infra: keep schema versioning explicit (`neuro_schema_migrations`) and validate write/read behavior with dedicated tests.
+- Feedback ingestion should never block user-facing action loops; failures in behavioral writes must degrade to warn-level logs, not action failures.
+- Retention must run both proactively (scheduled job) and operationally (manual endpoint trigger) so privacy controls are enforceable and verifiable.
+
+### Project Neuro P1-006/P2-001 (2026-02-12)
+
+- Reliability tests should include transport-layer faults (e.g., broadcast failures) and confirm handlers still return valid responses instead of propagating infra exceptions.
+- Provider fallback classification needs both offline/network and generic provider-failure paths covered to avoid regressions in user-facing recovery UX.
+- Prediction heuristics are safer to start with deterministic rules (signal normalization + pattern stats + suppression window) before adding model-based scoring.

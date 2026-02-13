@@ -74,6 +74,9 @@ const READ_METHODS = new Set([
   "node.describe",
   "chat.history",
   "neuro.context.snapshot",
+  "neuro.suggestion.list",
+  "neuro.behavior.export",
+  "neuro.predict.preview",
   "neuro.flags.get",
   "neuro.metrics.get",
 ]);
@@ -93,6 +96,10 @@ const WRITE_METHODS = new Set([
   "chat.abort",
   "browser.request",
   "neuro.context.ingest",
+  "neuro.suggestion.upsert",
+  "neuro.suggestion.action",
+  "neuro.behavior.delete",
+  "neuro.behavior.retention.run",
   "neuro.flags.set",
   "neuro.metrics.observe",
 ]);

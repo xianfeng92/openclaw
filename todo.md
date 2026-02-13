@@ -20,6 +20,75 @@ Operationalization:
 - Decide desktop gateway auth UX (token/device token) without weakening security.
 - Keep `cli_model` as a long-term supported capability (not a temporary hack).
 
+## Project Neuro / TODO-P1-001 (W7)
+
+TODO:
+
+- [x] Add gateway RPC action loop for suggestion cards:
+  - `neuro.suggestion.upsert`
+  - `neuro.suggestion.list`
+  - `neuro.suggestion.action` (`apply` / `dismiss` / `explain` / `undo`)
+- [x] Add in-memory suggestion card service with undo window tracking.
+- [x] Add provider/offline fallback classification for apply/explain actions.
+- [x] Broadcast suggestion lifecycle events:
+  - `neuro.suggestion.card`
+  - `neuro.suggestion.feedback`
+- [x] Add integration coverage for upsert/list/action loop + fallback cases.
+
+## Project Neuro / TODO-P1-002 (W8)
+
+TODO:
+
+- [x] Add undo journal service for suggestion apply actions.
+- [x] Add grouped action snapshot support (`groupId` + per-action snapshots).
+- [x] Wire one-click undo (`neuro.suggestion.action` with `undo`) to undo journal entries.
+- [x] Add coverage for undo window behavior and grouped snapshot retrieval.
+
+## Project Neuro / TODO-P1-003 (W9)
+
+TODO:
+
+- [x] Add safe/flow policy engine for apply path decisions.
+- [x] Add hard deny list enforcement for explicitly blocked operations.
+- [x] Integrate policy decision payloads into `neuro.suggestion.action` responses.
+- [x] Add regression coverage for flow-mode disabled and hard-deny policy blocks.
+
+## Project Neuro / TODO-P1-004 (W10)
+
+TODO:
+
+- [x] Implement `behavioral.db` schema + migration bootstrap (`behavior_events`, `pattern_preferences`, `sync_watermarks`).
+- [x] Persist suggestion/feedback write path from neuro handlers to behavioral store.
+- [x] Add migration + write/read validation coverage.
+
+## Project Neuro / TODO-P1-005 (W11)
+
+TODO:
+
+- [x] Implement retention pruning for behavioral events.
+- [x] Add behavioral data control-plane endpoints:
+  - `neuro.behavior.export`
+  - `neuro.behavior.delete`
+  - `neuro.behavior.retention.run`
+- [x] Add regression coverage for retention/export/delete flows.
+
+## Project Neuro / TODO-P1-006 (W11)
+
+TODO:
+
+- [x] Add reliability tests for provider failures (network + non-network fallback classification).
+- [x] Add ws-disconnect resilience coverage (broadcast failure should not fail handlers).
+- [x] Add burst-ingest reliability coverage for high-volume `neuro.context.ingest`.
+
+## Project Neuro / TODO-P2-001 (W12)
+
+TODO:
+
+- [x] Build heuristic prediction engine v1 with trigger rules (min signal, reason codes).
+- [x] Add similarity lookup using behavioral history (`patternHash` stats + accept rate).
+- [x] Add suppression controls (recent duplicate signal suppression window).
+- [x] Expose prediction preview endpoint (`neuro.predict.preview`) and schema validation.
+
 ## Current State (Snapshot: 2026-02-09)
 
 - Work is on `desktop-mvp-slim`, rebased onto current `origin/main` (no longer behind).

@@ -44,6 +44,12 @@ describe("ssrf pinning", () => {
     await expect(resolvePinnedHostname("example.com", lookup)).rejects.toThrow(/private|internal/i);
   });
 
+  it("blocks unsupported short-form IPv4 literals before DNS lookup", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    await expect(resolvePinnedHostname("8.8.2056", lookup)).rejects.toThrow(/private|internal/i);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it("falls back for non-matching hostnames", async () => {
     const fallback = vi.fn((host: string, options?: unknown, callback?: unknown) => {
       const cb = typeof options === "function" ? options : (callback as () => void);

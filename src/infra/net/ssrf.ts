@@ -40,16 +40,77 @@ function normalizeHostnameSet(values?: string[]): Set<string> {
   return new Set(values.map((value) => normalizeHostname(value)).filter(Boolean));
 }
 
+function parseStrictIpv4Octet(part: string): number | null {
+  if (!/^[0-9]+$/.test(part)) {
+    return null;
+  }
+  const value = Number.parseInt(part, 10);
+  if (Number.isNaN(value) || value < 0 || value > 255) {
+    return null;
+  }
+  // Accept canonical dotted-decimal only (no leading zeroes / alternate radices).
+  if (part !== String(value)) {
+    return null;
+  }
+  return value;
+}
+
 function parseIpv4(address: string): number[] | null {
   const parts = address.split(".");
   if (parts.length !== 4) {
     return null;
   }
-  const numbers = parts.map((part) => Number.parseInt(part, 10));
-  if (numbers.some((value) => Number.isNaN(value) || value < 0 || value > 255)) {
-    return null;
+  for (const part of parts) {
+    if (parseStrictIpv4Octet(part) === null) {
+      return null;
+    }
   }
-  return numbers;
+  return parts.map((part) => Number.parseInt(part, 10));
+}
+
+function classifyIpv4Part(part: string): "decimal" | "hex" | "invalid-hex" | "non-numeric" {
+  if (/^0x[0-9a-f]+$/i.test(part)) {
+    return "hex";
+  }
+  if (/^0x/i.test(part)) {
+    return "invalid-hex";
+  }
+  if (/^[0-9]+$/.test(part)) {
+    return "decimal";
+  }
+  return "non-numeric";
+}
+
+function isUnsupportedLegacyIpv4Literal(address: string): boolean {
+  const parts = address.split(".");
+  if (parts.length === 0 || parts.length > 4) {
+    return false;
+  }
+  if (parts.some((part) => part.length === 0)) {
+    return true;
+  }
+
+  const partKinds = parts.map(classifyIpv4Part);
+  if (partKinds.some((kind) => kind === "non-numeric")) {
+    return false;
+  }
+  if (partKinds.some((kind) => kind === "invalid-hex")) {
+    return true;
+  }
+
+  if (parts.length !== 4) {
+    return true;
+  }
+  for (const part of parts) {
+    if (/^0x/i.test(part)) {
+      return true;
+    }
+    const value = Number.parseInt(part, 10);
+    if (Number.isNaN(value) || value > 255 || part !== String(value)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function parseIpv4FromMappedIpv6(mapped: string): number[] | null {
@@ -134,10 +195,14 @@ export function isPrivateIpAddress(address: string): boolean {
   }
 
   const ipv4 = parseIpv4(normalized);
-  if (!ipv4) {
-    return false;
+  if (ipv4) {
+    return isPrivateIpv4(ipv4);
   }
-  return isPrivateIpv4(ipv4);
+  // Fail closed for legacy/non-canonical IPv4 literals before DNS lookup.
+  if (isUnsupportedLegacyIpv4Literal(normalized)) {
+    return true;
+  }
+  return false;
 }
 
 export function isBlockedHostname(hostname: string): boolean {

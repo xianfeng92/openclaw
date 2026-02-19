@@ -29,6 +29,30 @@ export type GatewayRuntimeConfig = {
   canvasHostEnabled: boolean;
 };
 
+function assertHooksTokenSeparateFromGatewayAuth(params: {
+  cfg: ReturnType<typeof loadConfig>;
+  auth: ResolvedGatewayAuth;
+}): void {
+  if (params.cfg.hooks?.enabled !== true) {
+    return;
+  }
+  const hooksToken =
+    typeof params.cfg.hooks?.token === "string" ? params.cfg.hooks.token.trim() : "";
+  if (!hooksToken) {
+    return;
+  }
+  const gatewayToken =
+    params.auth.mode === "token" && typeof params.auth.token === "string"
+      ? params.auth.token.trim()
+      : "";
+  if (!gatewayToken || hooksToken !== gatewayToken) {
+    return;
+  }
+  throw new Error(
+    "Invalid config: hooks.token must not match gateway auth token. Set a distinct hooks.token for hook ingress.",
+  );
+}
+
 export async function resolveGatewayRuntimeConfig(params: {
   cfg: ReturnType<typeof loadConfig>;
   port: number;
@@ -86,6 +110,7 @@ export async function resolveGatewayRuntimeConfig(params: {
     process.env.OPENCLAW_SKIP_CANVAS_HOST !== "1" && params.cfg.canvasHost?.enabled !== false;
 
   assertGatewayAuthConfigured(resolvedAuth);
+  assertHooksTokenSeparateFromGatewayAuth({ cfg: params.cfg, auth: resolvedAuth });
   if (tailscaleMode === "funnel" && authMode !== "password") {
     throw new Error(
       "tailscale funnel requires gateway auth mode=password (set gateway.auth.password or OPENCLAW_GATEWAY_PASSWORD)",

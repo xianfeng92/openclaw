@@ -332,7 +332,7 @@ describe("gateway server auth/connect", () => {
     });
   });
 
-  test("allows control ui without device identity when insecure auth is enabled", async () => {
+  test("rejects control ui without device identity even when insecure auth is enabled", async () => {
     testState.gatewayControlUi = { allowInsecureAuth: true };
     const { server, ws, prevToken } = await startServerWithClient("secret");
     const res = await connectReq(ws, {
@@ -345,7 +345,8 @@ describe("gateway server auth/connect", () => {
         mode: GATEWAY_CLIENT_MODES.WEBCHAT,
       },
     });
-    expect(res.ok).toBe(true);
+    expect(res.ok).toBe(false);
+    expect(res.error?.message ?? "").toContain("secure context");
     ws.close();
     await server.close();
     if (prevToken === undefined) {
@@ -355,7 +356,32 @@ describe("gateway server auth/connect", () => {
     }
   });
 
-  test("allows control ui with device identity when insecure auth is enabled", async () => {
+  test("rejects control ui password-only auth when insecure auth is enabled", async () => {
+    testState.gatewayControlUi = { allowInsecureAuth: true };
+    testState.gatewayAuth = { mode: "password", password: "secret" };
+    const port = await getFreePort();
+    const server = await startGatewayServer(port);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, {
+      headers: { origin: `http://127.0.0.1:${port}` },
+    });
+    await new Promise<void>((resolve) => ws.once("open", resolve));
+    const res = await connectReq(ws, {
+      password: "secret",
+      device: null,
+      client: {
+        id: GATEWAY_CLIENT_NAMES.CONTROL_UI,
+        version: "1.0.0",
+        platform: "web",
+        mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+      },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error?.message ?? "").toContain("secure context");
+    ws.close();
+    await server.close();
+  });
+
+  test("does not bypass pairing for control ui device identity when insecure auth is enabled", async () => {
     testState.gatewayControlUi = { allowInsecureAuth: true };
     testState.gatewayAuth = { mode: "token", token: "secret" };
     const { writeConfigFile } = await import("../config/config.js");
@@ -367,57 +393,66 @@ describe("gateway server auth/connect", () => {
     } as any);
     const prevToken = process.env.OPENCLAW_GATEWAY_TOKEN;
     process.env.OPENCLAW_GATEWAY_TOKEN = "secret";
-    const port = await getFreePort();
-    const server = await startGatewayServer(port);
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`, {
-      headers: { "x-forwarded-for": "203.0.113.10" },
-    });
-    const challengePromise = onceMessage<{ payload?: unknown }>(
-      ws,
-      (o) => o.type === "event" && o.event === "connect.challenge",
-    );
-    await new Promise<void>((resolve) => ws.once("open", resolve));
-    const challenge = await challengePromise;
-    const nonce = (challenge.payload as { nonce?: unknown } | undefined)?.nonce;
-    expect(typeof nonce).toBe("string");
-    const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
-      await import("../infra/device-identity.js");
-    const identity = loadOrCreateDeviceIdentity();
-    const signedAtMs = Date.now();
-    const payload = buildDeviceAuthPayload({
-      deviceId: identity.deviceId,
-      clientId: GATEWAY_CLIENT_NAMES.CONTROL_UI,
-      clientMode: GATEWAY_CLIENT_MODES.WEBCHAT,
-      role: "operator",
-      scopes: [],
-      signedAtMs,
-      token: "secret",
-      nonce: String(nonce),
-    });
-    const device = {
-      id: identity.deviceId,
-      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
-      signature: signDevicePayload(identity.privateKeyPem, payload),
-      signedAt: signedAtMs,
-      nonce: String(nonce),
-    };
-    const res = await connectReq(ws, {
-      token: "secret",
-      device,
-      client: {
-        id: GATEWAY_CLIENT_NAMES.CONTROL_UI,
-        version: "1.0.0",
-        platform: "web",
-        mode: GATEWAY_CLIENT_MODES.WEBCHAT,
-      },
-    });
-    expect(res.ok).toBe(true);
-    ws.close();
-    await server.close();
-    if (prevToken === undefined) {
-      delete process.env.OPENCLAW_GATEWAY_TOKEN;
-    } else {
-      process.env.OPENCLAW_GATEWAY_TOKEN = prevToken;
+    try {
+      const port = await getFreePort();
+      const server = await startGatewayServer(port);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`, {
+        headers: {
+          origin: "https://localhost",
+          "x-forwarded-for": "203.0.113.10",
+        },
+      });
+      const challengePromise = onceMessage<{ payload?: unknown }>(
+        ws,
+        (o) => o.type === "event" && o.event === "connect.challenge",
+      );
+      await new Promise<void>((resolve) => ws.once("open", resolve));
+      const challenge = await challengePromise;
+      const nonce = (challenge.payload as { nonce?: unknown } | undefined)?.nonce;
+      expect(typeof nonce).toBe("string");
+
+      const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
+        await import("../infra/device-identity.js");
+      const identity = loadOrCreateDeviceIdentity();
+      const signedAtMs = Date.now();
+      const payload = buildDeviceAuthPayload({
+        deviceId: identity.deviceId,
+        clientId: GATEWAY_CLIENT_NAMES.CONTROL_UI,
+        clientMode: GATEWAY_CLIENT_MODES.WEBCHAT,
+        role: "operator",
+        scopes: [],
+        signedAtMs,
+        token: "secret",
+        nonce: String(nonce),
+      });
+      const device = {
+        id: identity.deviceId,
+        publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
+        signature: signDevicePayload(identity.privateKeyPem, payload),
+        signedAt: signedAtMs,
+        nonce: String(nonce),
+      };
+
+      const res = await connectReq(ws, {
+        token: "secret",
+        device,
+        client: {
+          id: GATEWAY_CLIENT_NAMES.CONTROL_UI,
+          version: "1.0.0",
+          platform: "web",
+          mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+        },
+      });
+      expect(res.ok).toBe(false);
+      expect(res.error?.message ?? "").toContain("pairing required");
+      ws.close();
+      await server.close();
+    } finally {
+      if (prevToken === undefined) {
+        delete process.env.OPENCLAW_GATEWAY_TOKEN;
+      } else {
+        process.env.OPENCLAW_GATEWAY_TOKEN = prevToken;
+      }
     }
   });
 

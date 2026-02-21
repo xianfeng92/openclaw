@@ -50,6 +50,14 @@ describe("ssrf pinning", () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
+  it("blocks special-use IPv4 literals before DNS lookup", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    await expect(resolvePinnedHostname("198.18.0.1", lookup)).rejects.toThrow(
+      /private|internal|special-use/i,
+    );
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it("falls back for non-matching hostnames", async () => {
     const fallback = vi.fn((host: string, options?: unknown, callback?: unknown) => {
       const cb = typeof options === "function" ? options : (callback as () => void);

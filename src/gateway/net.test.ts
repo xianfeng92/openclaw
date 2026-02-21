@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { resolveGatewayListenHosts } from "./net.js";
+import { resolveGatewayClientIp, resolveGatewayListenHosts } from "./net.js";
+
+describe("resolveGatewayClientIp", () => {
+  it("does not trust left-most X-Forwarded-For entries", () => {
+    const ip = resolveGatewayClientIp({
+      remoteAddr: "127.0.0.1",
+      forwardedFor: "198.51.100.99, 10.0.0.9, 127.0.0.1",
+      trustedProxies: ["127.0.0.1"],
+    });
+    expect(ip).toBe("127.0.0.1");
+  });
+
+  it("fails closed when trusted proxy headers are missing", () => {
+    const ip = resolveGatewayClientIp({
+      remoteAddr: "127.0.0.1",
+      trustedProxies: ["127.0.0.1"],
+    });
+    expect(ip).toBeUndefined();
+  });
+});
 
 describe("resolveGatewayListenHosts", () => {
   it("returns the input host when not loopback", async () => {

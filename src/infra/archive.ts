@@ -1,7 +1,15 @@
-import JSZip from "jszip";
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import JSZip from "jszip";
 import * as tar from "tar";
+import {
+  resolveArchiveOutputPath,
+  stripArchivePath,
+  validateArchiveEntryPath,
+} from "./archive-path.js";
 
 export type ArchiveKind = "tar" | "zip";
 
@@ -10,7 +18,42 @@ export type ArchiveLogger = {
   warn?: (message: string) => void;
 };
 
+export type ArchiveExtractLimits = {
+  /**
+   * Max archive file bytes (compressed). Primarily protects zip extraction
+   * because we currently read the whole archive into memory for parsing.
+   */
+  maxArchiveBytes?: number;
+  /** Max number of extracted entries (files + dirs). */
+  maxEntries?: number;
+  /** Max extracted bytes (sum of all files). */
+  maxExtractedBytes?: number;
+  /** Max extracted bytes for a single file entry. */
+  maxEntryBytes?: number;
+};
+
+/** @internal */
+export const DEFAULT_MAX_ARCHIVE_BYTES_ZIP = 256 * 1024 * 1024;
+/** @internal */
+export const DEFAULT_MAX_ENTRIES = 50_000;
+/** @internal */
+export const DEFAULT_MAX_EXTRACTED_BYTES = 512 * 1024 * 1024;
+/** @internal */
+export const DEFAULT_MAX_ENTRY_BYTES = 256 * 1024 * 1024;
+
+const ERROR_ARCHIVE_SIZE_EXCEEDS_LIMIT = "archive size exceeds limit";
+const ERROR_ARCHIVE_ENTRY_COUNT_EXCEEDS_LIMIT = "archive entry count exceeds limit";
+const ERROR_ARCHIVE_ENTRY_EXTRACTED_SIZE_EXCEEDS_LIMIT =
+  "archive entry extracted size exceeds limit";
+const ERROR_ARCHIVE_EXTRACTED_SIZE_EXCEEDS_LIMIT = "archive extracted size exceeds limit";
+const ERROR_ARCHIVE_ENTRY_TRAVERSES_SYMLINK = "archive entry traverses symlink in destination";
+
 const TAR_SUFFIXES = [".tgz", ".tar.gz", ".tar"];
+const OPEN_WRITE_FLAGS =
+  fsConstants.O_WRONLY |
+  fsConstants.O_CREAT |
+  fsConstants.O_TRUNC |
+  (process.platform !== "win32" && "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0);
 
 export function resolveArchiveKind(filePath: string): ArchiveKind | null {
   const lower = filePath.toLowerCase();
@@ -69,54 +112,403 @@ export async function withTimeout<T>(
   }
 }
 
-async function extractZip(params: { archivePath: string; destDir: string }): Promise<void> {
+type ResolvedArchiveExtractLimits = Required<ArchiveExtractLimits>;
+
+function clampLimit(value: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const v = Math.floor(value);
+  return v > 0 ? v : undefined;
+}
+
+function resolveExtractLimits(limits?: ArchiveExtractLimits): ResolvedArchiveExtractLimits {
+  // Defaults: defensive, but should not break normal installs.
+  return {
+    maxArchiveBytes: clampLimit(limits?.maxArchiveBytes) ?? DEFAULT_MAX_ARCHIVE_BYTES_ZIP,
+    maxEntries: clampLimit(limits?.maxEntries) ?? DEFAULT_MAX_ENTRIES,
+    maxExtractedBytes: clampLimit(limits?.maxExtractedBytes) ?? DEFAULT_MAX_EXTRACTED_BYTES,
+    maxEntryBytes: clampLimit(limits?.maxEntryBytes) ?? DEFAULT_MAX_ENTRY_BYTES,
+  };
+}
+
+function assertArchiveEntryCountWithinLimit(
+  entryCount: number,
+  limits: ResolvedArchiveExtractLimits,
+) {
+  if (entryCount > limits.maxEntries) {
+    throw new Error(ERROR_ARCHIVE_ENTRY_COUNT_EXCEEDS_LIMIT);
+  }
+}
+
+function createByteBudgetTracker(limits: ResolvedArchiveExtractLimits): {
+  startEntry: () => void;
+  addBytes: (bytes: number) => void;
+  addEntrySize: (size: number) => void;
+} {
+  let entryBytes = 0;
+  let extractedBytes = 0;
+
+  const addBytes = (bytes: number) => {
+    const b = Math.max(0, Math.floor(bytes));
+    if (b === 0) {
+      return;
+    }
+    entryBytes += b;
+    if (entryBytes > limits.maxEntryBytes) {
+      throw new Error(ERROR_ARCHIVE_ENTRY_EXTRACTED_SIZE_EXCEEDS_LIMIT);
+    }
+    extractedBytes += b;
+    if (extractedBytes > limits.maxExtractedBytes) {
+      throw new Error(ERROR_ARCHIVE_EXTRACTED_SIZE_EXCEEDS_LIMIT);
+    }
+  };
+
+  return {
+    startEntry() {
+      entryBytes = 0;
+    },
+    addBytes,
+    addEntrySize(size: number) {
+      const s = Math.max(0, Math.floor(size));
+      if (s > limits.maxEntryBytes) {
+        throw new Error(ERROR_ARCHIVE_ENTRY_EXTRACTED_SIZE_EXCEEDS_LIMIT);
+      }
+      // Note: tar budgets are based on the header-declared size.
+      addBytes(s);
+    },
+  };
+}
+
+function createExtractBudgetTransform(params: {
+  onChunkBytes: (bytes: number) => void;
+}): Transform {
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      try {
+        const buf = chunk instanceof Buffer ? chunk : Buffer.from(chunk as Uint8Array);
+        params.onChunkBytes(buf.byteLength);
+        callback(null, buf);
+      } catch (err) {
+        callback(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+  });
+}
+
+function isNodeError(value: unknown): value is NodeJS.ErrnoException {
+  return Boolean(
+    value && typeof value === "object" && "code" in (value as Record<string, unknown>),
+  );
+}
+
+function isNotFoundError(value: unknown): boolean {
+  return isNodeError(value) && (value.code === "ENOENT" || value.code === "ENOTDIR");
+}
+
+function isSymlinkOpenError(value: unknown): boolean {
+  return (
+    isNodeError(value) &&
+    (value.code === "ELOOP" || value.code === "EINVAL" || value.code === "ENOTSUP")
+  );
+}
+
+function symlinkTraversalError(originalPath: string): Error {
+  return new Error(`${ERROR_ARCHIVE_ENTRY_TRAVERSES_SYMLINK}: ${originalPath}`);
+}
+
+async function assertDestinationDirReady(destDir: string): Promise<string> {
+  const stat = await fs.lstat(destDir);
+  if (stat.isSymbolicLink()) {
+    throw new Error("archive destination is a symlink");
+  }
+  if (!stat.isDirectory()) {
+    throw new Error("archive destination is not a directory");
+  }
+  return await fs.realpath(destDir);
+}
+
+function pathInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+async function assertNoSymlinkTraversal(params: {
+  rootDir: string;
+  relPath: string;
+  originalPath: string;
+}): Promise<void> {
+  const parts = params.relPath.split("/").filter(Boolean);
+  let current = path.resolve(params.rootDir);
+  for (const part of parts) {
+    current = path.join(current, part);
+    let stat: Awaited<ReturnType<typeof fs.lstat>>;
+    try {
+      stat = await fs.lstat(current);
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        continue;
+      }
+      throw err;
+    }
+    if (stat.isSymbolicLink()) {
+      throw symlinkTraversalError(params.originalPath);
+    }
+  }
+}
+
+async function assertResolvedInsideDestination(params: {
+  destinationRealDir: string;
+  targetPath: string;
+  originalPath: string;
+}): Promise<void> {
+  let resolved: string;
+  try {
+    resolved = await fs.realpath(params.targetPath);
+  } catch (err) {
+    if (isNotFoundError(err)) {
+      return;
+    }
+    throw err;
+  }
+  if (!pathInside(params.destinationRealDir, resolved)) {
+    throw symlinkTraversalError(params.originalPath);
+  }
+}
+
+async function openZipOutputFile(outPath: string, originalPath: string) {
+  try {
+    return await fs.open(outPath, OPEN_WRITE_FLAGS, 0o666);
+  } catch (err) {
+    if (isSymlinkOpenError(err)) {
+      throw symlinkTraversalError(originalPath);
+    }
+    throw err;
+  }
+}
+
+async function cleanupPartialRegularFile(filePath: string): Promise<void> {
+  let stat: Awaited<ReturnType<typeof fs.lstat>>;
+  try {
+    stat = await fs.lstat(filePath);
+  } catch (err) {
+    if (isNotFoundError(err)) {
+      return;
+    }
+    throw err;
+  }
+  if (stat.isFile()) {
+    await fs.unlink(filePath).catch(() => undefined);
+  }
+}
+
+type ZipEntry = {
+  name: string;
+  dir: boolean;
+  unixPermissions?: number;
+  nodeStream?: () => NodeJS.ReadableStream;
+  async: (type: "nodebuffer") => Promise<Buffer>;
+};
+
+async function readZipEntryStream(entry: ZipEntry): Promise<NodeJS.ReadableStream> {
+  if (typeof entry.nodeStream === "function") {
+    return entry.nodeStream();
+  }
+  // Old JSZip: fall back to buffering, but still extract via a stream.
+  const buf = await entry.async("nodebuffer");
+  return Readable.from(buf);
+}
+
+async function extractZip(params: {
+  archivePath: string;
+  destDir: string;
+  stripComponents?: number;
+  limits?: ArchiveExtractLimits;
+}): Promise<void> {
+  const limits = resolveExtractLimits(params.limits);
+  const destinationRealDir = await assertDestinationDirReady(params.destDir);
+  const stat = await fs.stat(params.archivePath);
+  if (stat.size > limits.maxArchiveBytes) {
+    throw new Error(ERROR_ARCHIVE_SIZE_EXCEEDS_LIMIT);
+  }
+
   const buffer = await fs.readFile(params.archivePath);
   const zip = await JSZip.loadAsync(buffer);
-  const entries = Object.values(zip.files);
+  const entries = Object.values(zip.files) as ZipEntry[];
+  const strip = Math.max(0, Math.floor(params.stripComponents ?? 0));
+
+  assertArchiveEntryCountWithinLimit(entries.length, limits);
+
+  const budget = createByteBudgetTracker(limits);
 
   for (const entry of entries) {
-    const entryPath = entry.name.replaceAll("\\", "/");
-    if (!entryPath || entryPath.endsWith("/")) {
-      const dirPath = path.resolve(params.destDir, entryPath);
-      if (!dirPath.startsWith(params.destDir)) {
-        throw new Error(`zip entry escapes destination: ${entry.name}`);
-      }
-      await fs.mkdir(dirPath, { recursive: true });
+    validateArchiveEntryPath(entry.name);
+
+    const relPath = stripArchivePath(entry.name, strip);
+    if (!relPath) {
+      continue;
+    }
+    validateArchiveEntryPath(relPath);
+
+    const outPath = resolveArchiveOutputPath({
+      rootDir: params.destDir,
+      relPath,
+      originalPath: entry.name,
+    });
+    await assertNoSymlinkTraversal({
+      rootDir: params.destDir,
+      relPath,
+      originalPath: entry.name,
+    });
+    if (entry.dir) {
+      await fs.mkdir(outPath, { recursive: true });
+      await assertResolvedInsideDestination({
+        destinationRealDir,
+        targetPath: outPath,
+        originalPath: entry.name,
+      });
       continue;
     }
 
-    const outPath = path.resolve(params.destDir, entryPath);
-    if (!outPath.startsWith(params.destDir)) {
-      throw new Error(`zip entry escapes destination: ${entry.name}`);
-    }
     await fs.mkdir(path.dirname(outPath), { recursive: true });
-    const data = await entry.async("nodebuffer");
-    await fs.writeFile(outPath, data);
+    await assertResolvedInsideDestination({
+      destinationRealDir,
+      targetPath: path.dirname(outPath),
+      originalPath: entry.name,
+    });
+    const handle = await openZipOutputFile(outPath, entry.name);
+    budget.startEntry();
+    const readable = await readZipEntryStream(entry);
+    const writable = handle.createWriteStream();
+
+    try {
+      await pipeline(
+        readable,
+        createExtractBudgetTransform({ onChunkBytes: budget.addBytes }),
+        writable,
+      );
+    } catch (err) {
+      await cleanupPartialRegularFile(outPath).catch(() => undefined);
+      throw err;
+    }
+
+    // Best-effort permission restore for zip entries created on unix.
+    if (typeof entry.unixPermissions === "number") {
+      const mode = entry.unixPermissions & 0o777;
+      if (mode !== 0) {
+        await fs.chmod(outPath, mode).catch(() => undefined);
+      }
+    }
   }
+}
+
+type TarEntryInfo = { path: string; type: string; size: number };
+
+function readTarEntryInfo(entry: unknown): TarEntryInfo {
+  const p =
+    typeof entry === "object" && entry !== null && "path" in entry
+      ? String((entry as { path: unknown }).path)
+      : "";
+  const t =
+    typeof entry === "object" && entry !== null && "type" in entry
+      ? String((entry as { type: unknown }).type)
+      : "";
+  const s =
+    typeof entry === "object" &&
+    entry !== null &&
+    "size" in entry &&
+    typeof (entry as { size?: unknown }).size === "number" &&
+    Number.isFinite((entry as { size: number }).size)
+      ? Math.max(0, Math.floor((entry as { size: number }).size))
+      : 0;
+  return { path: p, type: t, size: s };
 }
 
 export async function extractArchive(params: {
   archivePath: string;
   destDir: string;
   timeoutMs: number;
+  kind?: ArchiveKind;
+  stripComponents?: number;
+  tarGzip?: boolean;
+  limits?: ArchiveExtractLimits;
   logger?: ArchiveLogger;
 }): Promise<void> {
-  const kind = resolveArchiveKind(params.archivePath);
+  const kind = params.kind ?? resolveArchiveKind(params.archivePath);
   if (!kind) {
     throw new Error(`unsupported archive: ${params.archivePath}`);
   }
 
   const label = kind === "zip" ? "extract zip" : "extract tar";
   if (kind === "tar") {
+    const strip = Math.max(0, Math.floor(params.stripComponents ?? 0));
+    const limits = resolveExtractLimits(params.limits);
+    let entryCount = 0;
+    const budget = createByteBudgetTracker(limits);
     await withTimeout(
-      tar.x({ file: params.archivePath, cwd: params.destDir }),
+      tar.x({
+        file: params.archivePath,
+        cwd: params.destDir,
+        strip,
+        gzip: params.tarGzip,
+        preservePaths: false,
+        strict: true,
+        onReadEntry(entry) {
+          const info = readTarEntryInfo(entry);
+
+          try {
+            validateArchiveEntryPath(info.path);
+
+            const relPath = stripArchivePath(info.path, strip);
+            if (!relPath) {
+              return;
+            }
+            validateArchiveEntryPath(relPath);
+            resolveArchiveOutputPath({
+              rootDir: params.destDir,
+              relPath,
+              originalPath: info.path,
+            });
+
+            if (
+              info.type === "SymbolicLink" ||
+              info.type === "Link" ||
+              info.type === "BlockDevice" ||
+              info.type === "CharacterDevice" ||
+              info.type === "FIFO" ||
+              info.type === "Socket"
+            ) {
+              throw new Error(`tar entry is a link: ${info.path}`);
+            }
+
+            entryCount += 1;
+            assertArchiveEntryCountWithinLimit(entryCount, limits);
+            budget.addEntrySize(info.size);
+          } catch (err) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            // Node's EventEmitter calls listeners with `this` bound to the
+            // emitter (tar.Unpack), which exposes Parser.abort().
+            const emitter = this as unknown as { abort?: (error: Error) => void };
+            emitter.abort?.(error);
+          }
+        },
+      }),
       params.timeoutMs,
       label,
     );
     return;
   }
 
-  await withTimeout(extractZip(params), params.timeoutMs, label);
+  await withTimeout(
+    extractZip({
+      archivePath: params.archivePath,
+      destDir: params.destDir,
+      stripComponents: params.stripComponents,
+      limits: params.limits,
+    }),
+    params.timeoutMs,
+    label,
+  );
 }
 
 export async function fileExists(filePath: string): Promise<boolean> {

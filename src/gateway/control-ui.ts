@@ -12,6 +12,7 @@ import {
 } from "./control-ui-shared.js";
 
 const ROOT_PREFIX = "/";
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 export type ControlUiRequestOptions = {
   basePath?: string;
@@ -133,16 +134,26 @@ export function handleControlUiAvatarRequest(
     return true;
   }
 
-  if (req.method === "HEAD") {
-    res.statusCode = 200;
-    res.setHeader("Content-Type", contentTypeForExt(path.extname(resolved.filePath).toLowerCase()));
-    res.setHeader("Cache-Control", "no-cache");
-    res.end();
+  const safeAvatar = resolveSafeAvatarFile(resolved.filePath);
+  if (!safeAvatar) {
+    respondNotFound(res);
     return true;
   }
 
-  serveFile(res, resolved.filePath);
-  return true;
+  try {
+    if (req.method === "HEAD") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", contentTypeForExt(path.extname(safeAvatar.path).toLowerCase()));
+      res.setHeader("Cache-Control", "no-cache");
+      res.end();
+      return true;
+    }
+
+    serveResolvedFile(res, safeAvatar.path, fs.readFileSync(safeAvatar.fd));
+    return true;
+  } finally {
+    fs.closeSync(safeAvatar.fd);
+  }
 }
 
 function respondNotFound(res: ServerResponse) {
@@ -151,13 +162,21 @@ function respondNotFound(res: ServerResponse) {
   res.end("Not Found");
 }
 
-function serveFile(res: ServerResponse, filePath: string) {
+function setStaticFileHeaders(res: ServerResponse, filePath: string) {
   const ext = path.extname(filePath).toLowerCase();
   res.setHeader("Content-Type", contentTypeForExt(ext));
   // Static UI should never be cached aggressively while iterating; allow the
   // browser to revalidate.
   res.setHeader("Cache-Control", "no-cache");
-  res.end(fs.readFileSync(filePath));
+}
+
+function serveResolvedFile(res: ServerResponse, filePath: string, body: Buffer) {
+  setStaticFileHeaders(res, filePath);
+  res.end(body);
+}
+
+function serveFile(res: ServerResponse, filePath: string) {
+  serveResolvedFile(res, filePath, fs.readFileSync(filePath));
 }
 
 interface ControlUiInjectionOpts {
@@ -227,6 +246,49 @@ function serveIndexHtml(res: ServerResponse, indexPath: string, opts: ServeIndex
       assistantAvatar: avatarValue,
     }),
   );
+}
+
+function areSameFileIdentity(preOpen: fs.Stats, opened: fs.Stats): boolean {
+  return preOpen.dev === opened.dev && preOpen.ino === opened.ino;
+}
+
+function resolveSafeAvatarFile(filePath: string): { path: string; fd: number } | null {
+  let fd: number | null = null;
+  try {
+    const candidateStat = fs.lstatSync(filePath);
+    if (candidateStat.isSymbolicLink()) {
+      return null;
+    }
+
+    const fileReal = fs.realpathSync(filePath);
+    const preOpenStat = fs.lstatSync(fileReal);
+    if (!preOpenStat.isFile() || preOpenStat.size > AVATAR_MAX_BYTES) {
+      return null;
+    }
+
+    const openFlags =
+      fs.constants.O_RDONLY |
+      (typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0);
+    fd = fs.openSync(fileReal, openFlags);
+    const openedStat = fs.fstatSync(fd);
+    if (
+      !openedStat.isFile() ||
+      openedStat.size > AVATAR_MAX_BYTES ||
+      !areSameFileIdentity(preOpenStat, openedStat)
+    ) {
+      return null;
+    }
+
+    const safeFile = { path: fileReal, fd };
+    fd = null;
+    return safeFile;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      fs.closeSync(fd);
+    }
+  }
 }
 
 function isSafeRelativePath(relPath: string) {

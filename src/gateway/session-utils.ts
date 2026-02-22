@@ -79,6 +79,23 @@ function resolveAvatarMime(filePath: string): string {
   return AVATAR_MIME_BY_EXT[ext] ?? "application/octet-stream";
 }
 
+function tryResolveExistingPath(value: string): string | null {
+  try {
+    return fs.realpathSync(value);
+  } catch {
+    return null;
+  }
+}
+
+function isPathWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function areSameFileIdentity(preOpen: fs.Stats, opened: fs.Stats): boolean {
+  return preOpen.dev === opened.dev && preOpen.ino === opened.ino;
+}
+
 function isWorkspaceRelativePath(value: string): boolean {
   if (!value) {
     return false;
@@ -111,22 +128,42 @@ function resolveIdentityAvatarUrl(
     return undefined;
   }
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-  const workspaceRoot = path.resolve(workspaceDir);
-  const resolved = path.resolve(workspaceRoot, trimmed);
-  const relative = path.relative(workspaceRoot, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  const workspaceRoot = tryResolveExistingPath(workspaceDir) ?? path.resolve(workspaceDir);
+  const resolvedCandidate = path.resolve(workspaceRoot, trimmed);
+  if (!isPathWithinRoot(workspaceRoot, resolvedCandidate)) {
     return undefined;
   }
+  let fd: number | null = null;
   try {
-    const stat = fs.statSync(resolved);
-    if (!stat.isFile() || stat.size > AVATAR_MAX_BYTES) {
+    const resolvedReal = fs.realpathSync(resolvedCandidate);
+    if (!isPathWithinRoot(workspaceRoot, resolvedReal)) {
       return undefined;
     }
-    const buffer = fs.readFileSync(resolved);
-    const mime = resolveAvatarMime(resolved);
+    const preOpenStat = fs.lstatSync(resolvedReal);
+    if (!preOpenStat.isFile() || preOpenStat.size > AVATAR_MAX_BYTES) {
+      return undefined;
+    }
+    const openFlags =
+      fs.constants.O_RDONLY |
+      (typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0);
+    fd = fs.openSync(resolvedReal, openFlags);
+    const openedStat = fs.fstatSync(fd);
+    if (
+      !openedStat.isFile() ||
+      openedStat.size > AVATAR_MAX_BYTES ||
+      !areSameFileIdentity(preOpenStat, openedStat)
+    ) {
+      return undefined;
+    }
+    const buffer = fs.readFileSync(fd);
+    const mime = resolveAvatarMime(resolvedCandidate);
     return `data:${mime};base64,${buffer.toString("base64")}`;
   } catch {
     return undefined;
+  } finally {
+    if (fd !== null) {
+      fs.closeSync(fd);
+    }
   }
 }
 

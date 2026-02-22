@@ -39,8 +39,11 @@ describe("ssrf pinning", () => {
     );
   });
 
-  it("rejects private DNS results", async () => {
-    const lookup = vi.fn(async () => [{ address: "10.0.0.8", family: 4 }]);
+  it.each([
+    { name: "RFC1918 private address", address: "10.0.0.8" },
+    { name: "RFC2544 benchmarking range", address: "198.18.0.1" },
+  ])("rejects blocked DNS results: $name", async ({ address }) => {
+    const lookup = vi.fn(async () => [{ address, family: 4 }]);
     await expect(resolvePinnedHostname("example.com", lookup)).rejects.toThrow(/private|internal/i);
   });
 

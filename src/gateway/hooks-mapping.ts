@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { HookMessageChannel } from "./hooks.js";
@@ -99,7 +100,10 @@ type HookTransformFn = (
   ctx: HookMappingContext,
 ) => HookTransformResult | Promise<HookTransformResult>;
 
-export function resolveHookMappings(hooks?: HooksConfig): HookMappingResolved[] {
+export function resolveHookMappings(
+  hooks?: HooksConfig,
+  opts?: { configDir?: string },
+): HookMappingResolved[] {
   const presets = hooks?.presets ?? [];
   const gmailAllowUnsafe = hooks?.gmail?.allowUnsafeExternalContent;
   const mappings: HookMappingConfig[] = [];
@@ -126,7 +130,7 @@ export function resolveHookMappings(hooks?: HooksConfig): HookMappingResolved[] 
     return [];
   }
 
-  const configDir = path.dirname(CONFIG_PATH);
+  const configDir = path.resolve(opts?.configDir ?? path.dirname(CONFIG_PATH));
   const transformsDir = hooks?.transformsDir
     ? resolvePath(configDir, hooks.transformsDir)
     : configDir;
@@ -184,7 +188,7 @@ function normalizeHookMapping(
   const wakeMode = mapping.wakeMode ?? "now";
   const transform = mapping.transform
     ? {
-        modulePath: resolvePath(transformsDir, mapping.transform.module),
+        modulePath: resolveContainedPath(transformsDir, mapping.transform.module, "Hook transform"),
         exportName: mapping.transform.export?.trim() || undefined,
       }
     : undefined;
@@ -334,12 +338,63 @@ function resolveTransformFn(mod: Record<string, unknown>, exportName?: string): 
 
 function resolvePath(baseDir: string, target: string): string {
   if (!target) {
-    return baseDir;
+    return path.resolve(baseDir);
   }
-  if (path.isAbsolute(target)) {
-    return target;
+  return path.isAbsolute(target) ? path.resolve(target) : path.resolve(baseDir, target);
+}
+
+function escapesBase(baseDir: string, candidate: string): boolean {
+  const relative = path.relative(baseDir, candidate);
+  return relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+}
+
+function safeRealpathSync(candidate: string): string | null {
+  try {
+    const nativeRealpath = fs.realpathSync.native as ((path: string) => string) | undefined;
+    return nativeRealpath ? nativeRealpath(candidate) : fs.realpathSync(candidate);
+  } catch {
+    return null;
   }
-  return path.join(baseDir, target);
+}
+
+function resolveExistingAncestor(candidate: string): string | null {
+  let current = path.resolve(candidate);
+  while (true) {
+    if (fs.existsSync(current)) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+
+function resolveContainedPath(baseDir: string, target: string, label: string): string {
+  const base = path.resolve(baseDir);
+  const trimmed = target?.trim();
+  if (!trimmed) {
+    throw new Error(`${label} module path is required`);
+  }
+  const resolved = resolvePath(base, trimmed);
+  if (escapesBase(base, resolved)) {
+    throw new Error(`${label} module path must be within ${base}: ${target}`);
+  }
+
+  // Block symlink escapes for existing path segments while preserving current
+  // behavior for not-yet-created files.
+  const baseRealpath = safeRealpathSync(base);
+  const existingAncestor = resolveExistingAncestor(resolved);
+  const existingAncestorRealpath = existingAncestor ? safeRealpathSync(existingAncestor) : null;
+  if (
+    baseRealpath &&
+    existingAncestorRealpath &&
+    escapesBase(baseRealpath, existingAncestorRealpath)
+  ) {
+    throw new Error(`${label} module path must be within ${base}: ${target}`);
+  }
+  return resolved;
 }
 
 function normalizeMatchPath(raw?: string): string | undefined {

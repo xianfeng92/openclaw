@@ -86,6 +86,15 @@ const DEFAULT_AUTO_ALLOW_SKILLS = false;
 const DEFAULT_SOCKET = "~/.openclaw/exec-approvals.sock";
 const DEFAULT_FILE = "~/.openclaw/exec-approvals.json";
 export const DEFAULT_SAFE_BINS = ["jq", "grep", "cut", "sort", "uniq", "head", "tail", "tr", "wc"];
+const DEFAULT_SAFE_BIN_TRUSTED_DIRS = [
+  "/bin",
+  "/usr/bin",
+  "/usr/local/bin",
+  "/opt/homebrew/bin",
+  "/opt/local/bin",
+  "/snap/bin",
+  "/run/current-system/sw/bin",
+];
 
 function hashExecApprovalsRaw(raw: string | null): string {
   return crypto
@@ -1820,6 +1829,40 @@ export function normalizeSafeBins(entries?: string[]): Set<string> {
   return new Set(normalized);
 }
 
+function normalizeSafeBinTrustedPath(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+export function normalizeSafeBinTrustedDirs(entries?: readonly string[] | null): Set<string> {
+  if (!Array.isArray(entries)) {
+    return new Set();
+  }
+  const normalized = entries
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => normalizeSafeBinTrustedPath(entry));
+  return new Set(normalized);
+}
+
+export function getTrustedSafeBinDirs(extraDirs?: readonly string[] | null): Set<string> {
+  const trusted = normalizeSafeBinTrustedDirs(DEFAULT_SAFE_BIN_TRUSTED_DIRS);
+  const extras = normalizeSafeBinTrustedDirs(extraDirs);
+  for (const entry of extras) {
+    trusted.add(entry);
+  }
+  return trusted;
+}
+
+export function isTrustedSafeBinPath(params: {
+  resolvedPath: string;
+  trustedSafeBinDirs?: ReadonlySet<string>;
+}): boolean {
+  const trusted = params.trustedSafeBinDirs ?? getTrustedSafeBinDirs();
+  const resolvedDir = normalizeSafeBinTrustedPath(path.dirname(params.resolvedPath));
+  return trusted.has(resolvedDir);
+}
+
 export function resolveSafeBins(entries?: string[] | null): Set<string> {
   if (entries === undefined) {
     return normalizeSafeBins(DEFAULT_SAFE_BINS);
@@ -1831,6 +1874,7 @@ export function isSafeBinUsage(params: {
   argv: string[];
   resolution: CommandResolution | null;
   safeBins: Set<string>;
+  trustedSafeBinDirs?: ReadonlySet<string>;
   cwd?: string;
   fileExists?: (filePath: string) => boolean;
 }): boolean {
@@ -1849,6 +1893,14 @@ export function isSafeBinUsage(params: {
     return false;
   }
   if (!resolution?.resolvedPath) {
+    return false;
+  }
+  if (
+    !isTrustedSafeBinPath({
+      resolvedPath: resolution.resolvedPath,
+      trustedSafeBinDirs: params.trustedSafeBinDirs,
+    })
+  ) {
     return false;
   }
   const cwd = params.cwd ?? process.cwd();
@@ -1935,6 +1987,7 @@ function evaluateSegments(
   params: {
     allowlist: ExecAllowlistEntry[];
     safeBins: Set<string>;
+    trustedSafeBinDirs?: ReadonlySet<string>;
     cwd?: string;
     skillBins?: Set<string>;
     autoAllowSkills?: boolean;
@@ -1957,6 +2010,7 @@ function evaluateSegments(
       argv: segment.argv,
       resolution: segment.resolution,
       safeBins: params.safeBins,
+      trustedSafeBinDirs: params.trustedSafeBinDirs,
       cwd: params.cwd,
     });
     const skillAllow =
@@ -1973,6 +2027,7 @@ export function evaluateExecAllowlist(params: {
   analysis: ExecCommandAnalysis;
   allowlist: ExecAllowlistEntry[];
   safeBins: Set<string>;
+  trustedSafeBinDirs?: ReadonlySet<string>;
   cwd?: string;
   skillBins?: Set<string>;
   autoAllowSkills?: boolean;
@@ -1988,6 +2043,7 @@ export function evaluateExecAllowlist(params: {
       const result = evaluateSegments(chainSegments, {
         allowlist: params.allowlist,
         safeBins: params.safeBins,
+        trustedSafeBinDirs: params.trustedSafeBinDirs,
         cwd: params.cwd,
         skillBins: params.skillBins,
         autoAllowSkills: params.autoAllowSkills,
@@ -2004,6 +2060,7 @@ export function evaluateExecAllowlist(params: {
   const result = evaluateSegments(params.analysis.segments, {
     allowlist: params.allowlist,
     safeBins: params.safeBins,
+    trustedSafeBinDirs: params.trustedSafeBinDirs,
     cwd: params.cwd,
     skillBins: params.skillBins,
     autoAllowSkills: params.autoAllowSkills,
@@ -2138,6 +2195,7 @@ export function evaluateShellAllowlist(params: {
   command: string;
   allowlist: ExecAllowlistEntry[];
   safeBins: Set<string>;
+  trustedSafeBinDirs?: ReadonlySet<string>;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   skillBins?: Set<string>;
@@ -2172,6 +2230,7 @@ export function evaluateShellAllowlist(params: {
       analysis,
       allowlist: params.allowlist,
       safeBins: params.safeBins,
+      trustedSafeBinDirs: params.trustedSafeBinDirs,
       cwd: params.cwd,
       skillBins: params.skillBins,
       autoAllowSkills: params.autoAllowSkills,
@@ -2203,6 +2262,7 @@ export function evaluateShellAllowlist(params: {
       analysis,
       allowlist: params.allowlist,
       safeBins: params.safeBins,
+      trustedSafeBinDirs: params.trustedSafeBinDirs,
       cwd: params.cwd,
       skillBins: params.skillBins,
       autoAllowSkills: params.autoAllowSkills,

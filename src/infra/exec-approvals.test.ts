@@ -12,6 +12,7 @@ import {
   matchAllowlist,
   maxAsk,
   minSecurity,
+  getTrustedSafeBinDirs,
   normalizeExecApprovals,
   normalizeSafeBins,
   requiresExecApproval,
@@ -334,6 +335,7 @@ describe("exec approvals safe bins", () => {
       argv: segment.argv,
       resolution: segment.resolution,
       safeBins: normalizeSafeBins(["jq"]),
+      trustedSafeBinDirs: getTrustedSafeBinDirs([binDir]),
       cwd: dir,
     });
     expect(ok).toBe(true);
@@ -360,9 +362,33 @@ describe("exec approvals safe bins", () => {
       argv: segment.argv,
       resolution: segment.resolution,
       safeBins: normalizeSafeBins(["jq"]),
+      trustedSafeBinDirs: getTrustedSafeBinDirs([binDir]),
       cwd: dir,
     });
     expect(ok).toBe(false);
+  });
+
+  it("does not auto-trust PATH-shadowed safe bins without explicit trusted dirs", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const tmp = makeTempDir();
+    const fakeDir = path.join(tmp, "fake-bin");
+    fs.mkdirSync(fakeDir, { recursive: true });
+    const fakeHead = path.join(fakeDir, "head");
+    fs.writeFileSync(fakeHead, "#!/bin/sh\nexit 0\n");
+    fs.chmodSync(fakeHead, 0o755);
+
+    const result = evaluateShellAllowlist({
+      command: "head -n 1",
+      allowlist: [],
+      safeBins: normalizeSafeBins(["head"]),
+      env: makePathEnv(fakeDir),
+      cwd: tmp,
+    });
+    expect(result.analysisOk).toBe(true);
+    expect(result.allowlistSatisfied).toBe(false);
+    expect(result.segments[0]?.resolution?.resolvedPath).toBe(fakeHead);
   });
 
   it("blocks denied sort long-option abbreviations in safe-bin mode", () => {

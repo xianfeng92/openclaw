@@ -60,4 +60,47 @@ describe("config io paths", () => {
       expect(io.loadConfig().gateway?.port).toBe(20002);
     });
   });
+
+  it("normalizes safe-bin trusted dirs at config load time", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".openclaw");
+      await fs.mkdir(configDir, { recursive: true });
+      const configPath = path.join(configDir, "openclaw.json");
+      await fs.writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            tools: {
+              exec: {
+                safeBinTrustedDirs: [" /custom/bin ", "", "/custom/bin", "/agent/bin"],
+              },
+            },
+            agents: {
+              list: [
+                {
+                  id: "ops",
+                  tools: {
+                    exec: {
+                      safeBinTrustedDirs: [" /ops/bin ", "/ops/bin"],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+      const io = createConfigIO({
+        env: {} as NodeJS.ProcessEnv,
+        homedir: () => home,
+      });
+      expect(io.configPath).toBe(configPath);
+      const cfg = io.loadConfig();
+      expect(cfg.tools?.exec?.safeBinTrustedDirs).toEqual(["/custom/bin", "/agent/bin"]);
+      expect(cfg.agents?.list?.[0]?.tools?.exec?.safeBinTrustedDirs).toEqual(["/ops/bin"]);
+    });
+  });
 });

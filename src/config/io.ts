@@ -189,6 +189,30 @@ function normalizeDeps(overrides: ConfigIoDeps = {}): Required<ConfigIoDeps> {
   };
 }
 
+function normalizeExecSafeBinTrustedDirsInConfig(cfg: OpenClawConfig): void {
+  const normalizeTrustedDirs = (entries?: readonly string[]) => {
+    if (!Array.isArray(entries)) {
+      return undefined;
+    }
+    const normalized = entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+    return normalized.length > 0 ? Array.from(new Set(normalized)) : undefined;
+  };
+
+  const normalizeExec = (exec: unknown) => {
+    if (!exec || typeof exec !== "object" || Array.isArray(exec)) {
+      return;
+    }
+    const typedExec = exec as { safeBinTrustedDirs?: string[] };
+    typedExec.safeBinTrustedDirs = normalizeTrustedDirs(typedExec.safeBinTrustedDirs);
+  };
+
+  normalizeExec(cfg.tools?.exec);
+  const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];
+  for (const agent of agents) {
+    normalizeExec(agent?.tools?.exec);
+  }
+}
+
 export function parseConfigJson5(
   raw: string,
   json5: { parse: (value: string) => unknown } = JSON5,
@@ -283,6 +307,7 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         ),
       );
       normalizeConfigPaths(cfg);
+      normalizeExecSafeBinTrustedDirsInConfig(cfg);
 
       const duplicates = findDuplicateAgentDirs(cfg, {
         env: deps.env,

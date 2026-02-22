@@ -11,6 +11,7 @@ import {
   type ExecApprovalsFile,
   addAllowlistEntry,
   evaluateShellAllowlist,
+  getTrustedSafeBinDirs,
   maxAsk,
   minSecurity,
   requiresExecApproval,
@@ -174,6 +175,7 @@ export type ExecToolDefaults = {
   node?: string;
   pathPrepend?: string[];
   safeBins?: string[];
+  safeBinTrustedDirs?: string[];
   agentId?: string;
   backgroundMs?: number;
   timeoutSec?: number;
@@ -876,6 +878,7 @@ export function createExecTool(
       : 1800;
   const defaultPathPrepend = normalizePathPrepend(defaults?.pathPrepend);
   const safeBins = resolveSafeBins(defaults?.safeBins);
+  const trustedSafeBinDirs = getTrustedSafeBinDirs(defaults?.safeBinTrustedDirs);
   const notifyOnExit = defaults?.notifyOnExit !== false;
   const notifySessionKey = defaults?.sessionKey?.trim() || undefined;
   const approvalRunningNoticeMs = resolveApprovalRunningNoticeMs(defaults?.approvalRunningNoticeMs);
@@ -1354,6 +1357,7 @@ export function createExecTool(
           command: params.command,
           allowlist: approvals.allowlist,
           safeBins,
+          trustedSafeBinDirs,
           cwd: workdir,
           env,
           platform: process.platform,

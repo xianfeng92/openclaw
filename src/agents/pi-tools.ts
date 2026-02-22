@@ -113,6 +113,7 @@ function resolveExecConfig(cfg: OpenClawConfig | undefined) {
     node: globalExec?.node,
     pathPrepend: globalExec?.pathPrepend,
     safeBins: globalExec?.safeBins,
+    safeBinTrustedDirs: globalExec?.safeBinTrustedDirs,
     backgroundMs: globalExec?.backgroundMs,
     timeoutSec: globalExec?.timeoutSec,
     approvalRunningNoticeMs: globalExec?.approvalRunningNoticeMs,
@@ -321,6 +322,7 @@ export function createOpenClawCodingTools(options?: {
             "node",
           ]
         : execConfig.safeBins),
+    safeBinTrustedDirs: options?.exec?.safeBinTrustedDirs ?? execConfig.safeBinTrustedDirs,
     agentId,
     cwd: options?.workspaceDir,
     allowBackground,

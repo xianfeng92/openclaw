@@ -1,6 +1,9 @@
+import os from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
+  getShellPathFromLoginShell,
   loadShellEnvFallback,
+  resetShellPathCacheForTests,
   resolveShellEnvFallbackTimeoutMs,
   shouldEnableShellEnvFallback,
 } from "./shell-env.js";
@@ -70,5 +73,71 @@ describe("shell env fallback", () => {
     expect(env.OPENAI_API_KEY).toBe("from-parent");
     expect(env.DISCORD_BOT_TOKEN).toBe("discord");
     expect(exec2).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes startup-related env vars before shell fallback exec", () => {
+    const env: NodeJS.ProcessEnv = {
+      SHELL: "/bin/bash",
+      HOME: "/tmp/evil-home",
+      ZDOTDIR: "/tmp/evil-zdotdir",
+      BASH_ENV: "/tmp/evil-bash-env",
+      ENV: "/tmp/evil-env-file",
+      PS4: "$(touch /tmp/pwned)",
+    };
+    let receivedEnv: NodeJS.ProcessEnv | undefined;
+    const exec = vi.fn((_shell: string, _args: string[], options: { env: NodeJS.ProcessEnv }) => {
+      receivedEnv = options.env;
+      return Buffer.from("OPENAI_API_KEY=from-shell\0");
+    });
+
+    const res = loadShellEnvFallback({
+      enabled: true,
+      env,
+      expectedKeys: ["OPENAI_API_KEY"],
+      exec: exec as unknown as Parameters<typeof loadShellEnvFallback>[0]["exec"],
+    });
+
+    expect(res.ok).toBe(true);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(receivedEnv).toBeDefined();
+    expect(receivedEnv?.BASH_ENV).toBeUndefined();
+    expect(receivedEnv?.ENV).toBeUndefined();
+    expect(receivedEnv?.PS4).toBeUndefined();
+    expect(receivedEnv?.ZDOTDIR).toBeUndefined();
+    expect(receivedEnv?.SHELL).toBeUndefined();
+    expect(receivedEnv?.HOME).toBe(os.homedir());
+  });
+
+  it("sanitizes startup-related env vars before login-shell PATH probe", () => {
+    resetShellPathCacheForTests();
+    const env: NodeJS.ProcessEnv = {
+      SHELL: "/bin/bash",
+      HOME: "/tmp/evil-home",
+      ZDOTDIR: "/tmp/evil-zdotdir",
+      BASH_ENV: "/tmp/evil-bash-env",
+      ENV: "/tmp/evil-env-file",
+      PS4: "$(touch /tmp/pwned)",
+    };
+    let receivedEnv: NodeJS.ProcessEnv | undefined;
+    const exec = vi.fn((_shell: string, _args: string[], options: { env: NodeJS.ProcessEnv }) => {
+      receivedEnv = options.env;
+      return Buffer.from("PATH=/usr/local/bin:/usr/bin\0HOME=/tmp\0");
+    });
+
+    const result = getShellPathFromLoginShell({
+      env,
+      exec: exec as unknown as Parameters<typeof getShellPathFromLoginShell>[0]["exec"],
+      platform: "linux",
+    });
+
+    expect(result).toBe("/usr/local/bin:/usr/bin");
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(receivedEnv).toBeDefined();
+    expect(receivedEnv?.BASH_ENV).toBeUndefined();
+    expect(receivedEnv?.ENV).toBeUndefined();
+    expect(receivedEnv?.PS4).toBeUndefined();
+    expect(receivedEnv?.ZDOTDIR).toBeUndefined();
+    expect(receivedEnv?.SHELL).toBeUndefined();
+    expect(receivedEnv?.HOME).toBe(os.homedir());
   });
 });

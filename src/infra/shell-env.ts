@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import os from "node:os";
 import { isTruthyEnvValue } from "./env.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -9,6 +10,25 @@ let cachedShellPath: string | null | undefined;
 function resolveShell(env: NodeJS.ProcessEnv): string {
   const shell = env.SHELL?.trim();
   return shell && shell.length > 0 ? shell : "/bin/sh";
+}
+
+function resolveShellExecEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const execEnv: NodeJS.ProcessEnv = { ...env };
+
+  delete execEnv.BASH_ENV;
+  delete execEnv.ENV;
+  delete execEnv.PS4;
+  delete execEnv.SHELL;
+  delete execEnv.ZDOTDIR;
+
+  const home = os.homedir().trim();
+  if (home) {
+    execEnv.HOME = home;
+  } else {
+    delete execEnv.HOME;
+  }
+
+  return execEnv;
 }
 
 function parseShellEnv(stdout: Buffer): Map<string, string> {
@@ -67,6 +87,7 @@ export function loadShellEnvFallback(opts: ShellEnvFallbackOptions): ShellEnvFal
       : DEFAULT_TIMEOUT_MS;
 
   const shell = resolveShell(opts.env);
+  const execEnv = resolveShellExecEnv(opts.env);
 
   let stdout: Buffer;
   try {
@@ -74,7 +95,7 @@ export function loadShellEnvFallback(opts: ShellEnvFallbackOptions): ShellEnvFal
       encoding: "buffer",
       timeout: timeoutMs,
       maxBuffer: DEFAULT_MAX_BUFFER_BYTES,
-      env: opts.env,
+      env: execEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (err) {
@@ -127,11 +148,13 @@ export function getShellPathFromLoginShell(opts: {
   env: NodeJS.ProcessEnv;
   timeoutMs?: number;
   exec?: typeof execFileSync;
+  platform?: NodeJS.Platform;
 }): string | null {
   if (cachedShellPath !== undefined) {
     return cachedShellPath;
   }
-  if (process.platform === "win32") {
+  const platform = opts.platform ?? process.platform;
+  if (platform === "win32") {
     cachedShellPath = null;
     return cachedShellPath;
   }
@@ -142,6 +165,7 @@ export function getShellPathFromLoginShell(opts: {
       ? Math.max(0, opts.timeoutMs)
       : DEFAULT_TIMEOUT_MS;
   const shell = resolveShell(opts.env);
+  const execEnv = resolveShellExecEnv(opts.env);
 
   let stdout: Buffer;
   try {
@@ -149,7 +173,7 @@ export function getShellPathFromLoginShell(opts: {
       encoding: "buffer",
       timeout: timeoutMs,
       maxBuffer: DEFAULT_MAX_BUFFER_BYTES,
-      env: opts.env,
+      env: execEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch {

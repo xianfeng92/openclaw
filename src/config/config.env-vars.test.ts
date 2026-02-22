@@ -75,4 +75,52 @@ describe("config env vars", () => {
       });
     });
   });
+
+  it("blocks dangerous startup env vars from config env", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".openclaw");
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, "openclaw.json"),
+        JSON.stringify(
+          {
+            env: {
+              vars: {
+                BASH_ENV: "/tmp/pwn.sh",
+                ENV: "/tmp/evil-env",
+                SHELL: "/tmp/evil-shell",
+                HOME: "/tmp/evil-home",
+                ZDOTDIR: "/tmp/evil-zdotdir",
+                OPENROUTER_API_KEY: "config-key",
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      await withEnvOverride(
+        {
+          BASH_ENV: undefined,
+          ENV: undefined,
+          SHELL: undefined,
+          HOME: undefined,
+          ZDOTDIR: undefined,
+          OPENROUTER_API_KEY: undefined,
+        },
+        async () => {
+          const { loadConfig } = await import("./config.js");
+          loadConfig();
+          expect(process.env.BASH_ENV).toBeUndefined();
+          expect(process.env.ENV).toBeUndefined();
+          expect(process.env.SHELL).toBeUndefined();
+          expect(process.env.HOME).toBeUndefined();
+          expect(process.env.ZDOTDIR).toBeUndefined();
+          expect(process.env.OPENROUTER_API_KEY).toBe("config-key");
+        },
+      );
+    });
+  });
 });

@@ -59,6 +59,7 @@ describe("exec approval handlers", () => {
       broadcast: (event: string, payload: unknown) => {
         broadcasts.push({ event, payload });
       },
+      hasExecApprovalClients: () => true,
     };
 
     const requestPromise = handlers["exec.approval.request"]({
@@ -132,6 +133,7 @@ describe("exec approval handlers", () => {
           isWebchatConnect: noop,
         });
       },
+      hasExecApprovalClients: () => true,
     };
 
     await handlers["exec.approval.request"]({
@@ -168,6 +170,7 @@ describe("exec approval handlers", () => {
       broadcast: (event: string, payload: unknown) => {
         broadcasts.push({ event, payload });
       },
+      hasExecApprovalClients: () => true,
     };
 
     const requestPromise = handlers["exec.approval.request"]({
@@ -221,6 +224,7 @@ describe("exec approval handlers", () => {
       broadcast: (event: string, payload: unknown) => {
         broadcasts.push({ event, payload });
       },
+      hasExecApprovalClients: () => true,
     };
 
     const requestPromise = handlers["exec.approval.request"]({
@@ -272,5 +276,53 @@ describe("exec approval handlers", () => {
     });
 
     await requestPromise;
+  });
+
+  it("expires immediately when no approver clients and no forwarding targets", async () => {
+    vi.useFakeTimers();
+    try {
+      const manager = new ExecApprovalManager();
+      const forwarder = {
+        handleRequested: vi.fn(async () => false),
+        handleResolved: vi.fn(async () => {}),
+        stop: vi.fn(),
+      };
+      const handlers = createExecApprovalHandlers(manager, { forwarder });
+      const respond = vi.fn();
+      const context = {
+        broadcast: (_event: string, _payload: unknown) => {},
+        hasExecApprovalClients: () => false,
+      };
+      const expireSpy = vi.spyOn(manager, "expire");
+
+      const requestPromise = handlers["exec.approval.request"]({
+        params: {
+          command: "echo ok",
+          timeoutMs: 60_000,
+        },
+        respond,
+        context: context as unknown as Parameters<
+          (typeof handlers)["exec.approval.request"]
+        >[0]["context"],
+        client: null,
+        req: { id: "req-1", type: "req", method: "exec.approval.request" },
+        isWebchatConnect: noop,
+      });
+
+      for (let idx = 0; idx < 20; idx += 1) {
+        await Promise.resolve();
+      }
+      expect(forwarder.handleRequested).toHaveBeenCalledTimes(1);
+      expect(expireSpy).toHaveBeenCalledTimes(1);
+      await vi.runOnlyPendingTimersAsync();
+      await requestPromise;
+      expect(respond).toHaveBeenCalledWith(
+        true,
+        expect.objectContaining({ decision: null }),
+        undefined,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

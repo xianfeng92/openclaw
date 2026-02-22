@@ -54,8 +54,7 @@ export class ExecApprovalManager {
   ): Promise<ExecApprovalDecision | null> {
     return await new Promise<ExecApprovalDecision | null>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(record.id);
-        resolve(null);
+        this.expire(record.id);
       }, timeoutMs);
       this.pending.set(record.id, { record, resolve, reject, timer });
     });
@@ -72,6 +71,20 @@ export class ExecApprovalManager {
     pending.record.resolvedBy = resolvedBy ?? null;
     this.pending.delete(recordId);
     pending.resolve(decision);
+    return true;
+  }
+
+  expire(recordId: string, resolvedBy?: string | null): boolean {
+    const pending = this.pending.get(recordId);
+    if (!pending) {
+      return false;
+    }
+    clearTimeout(pending.timer);
+    pending.record.resolvedAtMs = Date.now();
+    pending.record.decision = undefined;
+    pending.record.resolvedBy = resolvedBy ?? null;
+    this.pending.delete(recordId);
+    pending.resolve(null);
     return true;
   }
 

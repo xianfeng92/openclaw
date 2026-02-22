@@ -279,7 +279,7 @@ describe("Agent-specific tool filtering", () => {
             "*": {
               tools: { allow: ["read"] },
               toolsBySender: {
-                alice: { allow: ["read", "exec"] },
+                "id:alice": { allow: ["read", "exec"] },
               },
             },
           },
@@ -317,7 +317,7 @@ describe("Agent-specific tool filtering", () => {
           groups: {
             "*": {
               toolsBySender: {
-                admin: { allow: ["read", "exec"] },
+                "id:admin": { allow: ["read", "exec"] },
               },
             },
             locked: {

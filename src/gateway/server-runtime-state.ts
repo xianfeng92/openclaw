@@ -36,6 +36,7 @@ export async function createGatewayRuntimeState(params: {
   openAiChatCompletionsEnabled: boolean;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
+  strictTransportSecurityHeader?: string;
   resolvedAuth: ResolvedGatewayAuth;
   gatewayTls?: GatewayTlsRuntime;
   hooksConfig: () => HooksConfigResolved | null;
@@ -136,6 +137,7 @@ export async function createGatewayRuntimeState(params: {
       openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
       openResponsesEnabled: params.openResponsesEnabled,
       openResponsesConfig: params.openResponsesConfig,
+      strictTransportSecurityHeader: params.strictTransportSecurityHeader,
       handleHooksRequest,
       handlePluginRequest,
       resolvedAuth: params.resolvedAuth,

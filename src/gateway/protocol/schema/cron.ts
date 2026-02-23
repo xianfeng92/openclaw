@@ -1,6 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import { NonEmptyString } from "./primitives.js";
 
+const CronRunLogJobIdSchema = Type.String({
+  minLength: 1,
+  // Prevent path traversal via separators in cron.runs id/jobId.
+  pattern: "^[^/\\\\]+$",
+});
 export const CronScheduleSchema = Type.Union([
   Type.Object(
     {
@@ -225,14 +230,14 @@ export const CronRunParamsSchema = Type.Union([
 export const CronRunsParamsSchema = Type.Union([
   Type.Object(
     {
-      id: NonEmptyString,
+      id: CronRunLogJobIdSchema,
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5000 })),
     },
     { additionalProperties: false },
   ),
   Type.Object(
     {
-      jobId: NonEmptyString,
+      jobId: CronRunLogJobIdSchema,
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5000 })),
     },
     { additionalProperties: false },

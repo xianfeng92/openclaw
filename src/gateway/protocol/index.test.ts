@@ -1,6 +1,6 @@
 import type { ErrorObject } from "ajv";
 import { describe, expect, it } from "vitest";
-import { formatValidationErrors } from "./index.js";
+import { formatValidationErrors, validateCronRunsParams } from "./index.js";
 
 const makeError = (overrides: Partial<ErrorObject>): ErrorObject => ({
   keyword: "type",
@@ -60,5 +60,14 @@ describe("formatValidationErrors", () => {
     expect(formatValidationErrors([err, err])).toBe(
       "at /auth: must have required property 'token'",
     );
+  });
+});
+
+describe("cron validators", () => {
+  it("rejects cron.runs path traversal ids", () => {
+    expect(validateCronRunsParams({ id: "../job-1" })).toBe(false);
+    expect(validateCronRunsParams({ id: "nested/job-1" })).toBe(false);
+    expect(validateCronRunsParams({ jobId: "..\\job-2" })).toBe(false);
+    expect(validateCronRunsParams({ jobId: "nested\\job-2" })).toBe(false);
   });
 });

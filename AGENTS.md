@@ -209,6 +209,18 @@
 - Keep generated and operator-owned docs out of formatting gates (e.g. `docs/zh-CN/**`, PRDs that must not be touched) to avoid churn and accidental edits.
 - When TypeScript errors are on `unknown`/`Error` surfaces, prefer explicit safe stringification and structured error details over `String(x)` and implicit coercions.
 
+### Phase 3 (2026-02-23)
+
+- Keep desktop auth "tokenless feel" by seeding auth from app-private storage via local preload bridge only; never pass token/password in URL query params or process args.
+- Make token rotation a first-class operation (rotate token -> restart gateway -> reload desktop chat) so recovery stays deterministic and auditable.
+- Scope local auth seeding to loopback origins and the active gateway port to avoid leaking desktop credentials into unrelated origins.
+
+### Phase 4 (2026-02-23)
+
+- Desktop MVP slim gating should be runtime-configurable (env-driven) instead of hardcoded constants so behavior can be toggled without code edits.
+- In slim mode, hide plugin/channel-facing CLI surfaces together with gateway plugin-side disablement to avoid half-enabled operator paths.
+- Keep minimal toolset opt-in and support both `OPENCLAW_*` and `CLAWDBOT_*` env prefixes for migration-safe behavior.
+
 ### Project Neuro P1-001 (2026-02-12)
 
 - Keep card-action APIs explicitly versioned and schema-validated (`neuro.suggestion.*`) so desktop/web clients can evolve without drift.

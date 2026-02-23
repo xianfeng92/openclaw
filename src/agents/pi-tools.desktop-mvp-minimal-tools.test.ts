@@ -19,11 +19,18 @@ afterEach(async () => {
       await fs.rm(dir, { recursive: true, force: true });
     }),
   );
+  delete process.env.CLAWDBOT_DESKTOP_MVP_MINIMAL_TOOLSET;
 });
 
 describe("desktop MVP minimal toolset", () => {
   it("exposes only fs_read and bash_exec", () => {
     const tools = createOpenClawCodingTools({ desktopMvpMinimalToolset: true });
+    expect(tools.map((tool) => tool.name)).toEqual(["fs_read", "bash_exec"]);
+  });
+
+  it("accepts legacy env flag for minimal tools", () => {
+    process.env.CLAWDBOT_DESKTOP_MVP_MINIMAL_TOOLSET = "1";
+    const tools = createOpenClawCodingTools();
     expect(tools.map((tool) => tool.name)).toEqual(["fs_read", "bash_exec"]);
   });
 

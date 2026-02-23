@@ -70,7 +70,10 @@ function resolveDesktopMvpMinimalToolset(options?: {
   if (typeof options?.desktopMvpMinimalToolset === "boolean") {
     return options.desktopMvpMinimalToolset;
   }
-  return isTruthyEnv(process.env.OPENCLAW_DESKTOP_MVP_MINIMAL_TOOLSET);
+  return (
+    isTruthyEnv(process.env.OPENCLAW_DESKTOP_MVP_MINIMAL_TOOLSET) ||
+    isTruthyEnv(process.env.CLAWDBOT_DESKTOP_MVP_MINIMAL_TOOLSET)
+  );
 }
 
 function isApplyPatchAllowedForModel(params: {

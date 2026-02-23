@@ -79,7 +79,9 @@ describe("archive utils", () => {
     ).rejects.toThrow(/(escapes destination|absolute)/i);
   });
 
-  it("rejects zip entries that traverse pre-existing destination symlinks", async () => {
+  it.runIf(process.platform !== "win32")(
+    "rejects zip entries that traverse pre-existing destination symlinks",
+    async () => {
     const workDir = await makeTempDir();
     const archivePath = path.join(workDir, "bundle.zip");
     const extractDir = path.join(workDir, "extract");
@@ -103,7 +105,8 @@ describe("archive utils", () => {
       .then(() => true)
       .catch(() => false);
     expect(outsideExists).toBe(false);
-  });
+    },
+  );
 
   it("extracts tar archives", async () => {
     const workDir = await makeTempDir();

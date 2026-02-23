@@ -99,6 +99,12 @@ export function createSessionsSpawnTool(opts?: {
         to: opts?.agentTo,
         threadId: opts?.agentThreadId,
       });
+      const cfg = loadConfig();
+      const cfgSubagentTimeout =
+        typeof cfg?.agents?.defaults?.subagents?.runTimeoutSeconds === "number" &&
+        Number.isFinite(cfg.agents.defaults.subagents.runTimeoutSeconds)
+          ? Math.max(0, Math.floor(cfg.agents.defaults.subagents.runTimeoutSeconds))
+          : 0;
       const runTimeoutSeconds = (() => {
         const explicit =
           typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
@@ -111,12 +117,11 @@ export function createSessionsSpawnTool(opts?: {
           typeof params.timeoutSeconds === "number" && Number.isFinite(params.timeoutSeconds)
             ? Math.max(0, Math.floor(params.timeoutSeconds))
             : undefined;
-        return legacy ?? 0;
+        return legacy ?? cfgSubagentTimeout;
       })();
       let modelWarning: string | undefined;
       let modelApplied = false;
 
-      const cfg = loadConfig();
       const { mainKey, alias } = resolveMainSessionAlias(cfg);
       const requesterSessionKey = opts?.agentSessionKey;
       if (typeof requesterSessionKey === "string" && isSubagentSessionKey(requesterSessionKey)) {

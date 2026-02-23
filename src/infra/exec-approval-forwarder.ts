@@ -5,6 +5,7 @@ import type {
 } from "../config/types.approvals.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeAccountId, parseAgentSessionKey } from "../routing/session-key.js";
+import { compileSafeRegex } from "../security/safe-regex.js";
 import { isDeliverableMessageChannel, normalizeMessageChannel } from "../utils/message-channel.js";
 import type {
   ExecApprovalDecision,
@@ -13,7 +14,6 @@ import type {
 } from "./exec-approvals.js";
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
-import { compileSafeRegex } from "../security/safe-regex.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
 import { resolveSessionDeliveryTarget } from "./outbound/targets.js";
 
@@ -54,7 +54,7 @@ function normalizeMode(mode?: ExecApprovalForwardingConfig["mode"]) {
 function matchSessionFilter(sessionKey: string, patterns: string[]): boolean {
   return patterns.some((pattern) => {
     if (sessionKey.includes(pattern)) {
-      return sessionKey.includes(pattern);
+      return true;
     }
     const regex = compileSafeRegex(pattern);
     return regex ? regex.test(sessionKey) : false;

@@ -235,7 +235,7 @@ export class DiscordExecApprovalHandler {
       }
       const matches = config.sessionFilter.some((p) => {
         if (session.includes(p)) {
-          return session.includes(p);
+          return true;
         }
         const regex = compileSafeRegex(p);
         return regex ? regex.test(session) : false;

@@ -19,6 +19,7 @@ import {
   resolveExecApprovals,
   resolveExecApprovalsFromFile,
 } from "../infra/exec-approvals.js";
+import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
 import { buildNodeShellCommand } from "../infra/node-shell.js";
 import {
@@ -1141,12 +1142,20 @@ export function createExecTool(
             // Fall back to requiring approval if node approvals cannot be fetched.
           }
         }
-        const requiresAsk = requiresExecApproval({
-          ask: hostAsk,
-          security: hostSecurity,
-          analysisOk,
-          allowlistSatisfied,
-        });
+        const obfuscation = detectCommandObfuscation(params.command);
+        if (obfuscation.detected) {
+          logInfo(
+            `exec: obfuscation detected (node=${nodeQuery ?? "default"}): ${obfuscation.reasons.join(", ")}`,
+          );
+          warnings.push(`⚠️ Obfuscated command detected: ${obfuscation.reasons.join("; ")}`);
+        }
+        const requiresAsk =
+          requiresExecApproval({
+            ask: hostAsk,
+            security: hostSecurity,
+            analysisOk,
+            allowlistSatisfied,
+          }) || obfuscation.detected;
         const commandText = params.command;
         const invokeTimeoutMs = Math.max(
           10_000,
@@ -1222,7 +1231,9 @@ export function createExecTool(
             if (decision === "deny") {
               deniedReason = "user-denied";
             } else if (!decision) {
-              if (askFallback === "full") {
+              if (obfuscation.detected) {
+                deniedReason = "approval-timeout (obfuscation-detected)";
+              } else if (askFallback === "full") {
                 approvedByAsk = true;
                 approvalDecision = "allow-once";
               } else if (askFallback === "allowlist") {
@@ -1348,12 +1359,18 @@ export function createExecTool(
         const analysisOk = allowlistEval.analysisOk;
         const allowlistSatisfied =
           hostSecurity === "allowlist" && analysisOk ? allowlistEval.allowlistSatisfied : false;
-        const requiresAsk = requiresExecApproval({
-          ask: hostAsk,
-          security: hostSecurity,
-          analysisOk,
-          allowlistSatisfied,
-        });
+        const obfuscation = detectCommandObfuscation(params.command);
+        if (obfuscation.detected) {
+          logInfo(`exec: obfuscation detected (gateway): ${obfuscation.reasons.join(", ")}`);
+          warnings.push(`⚠️ Obfuscated command detected: ${obfuscation.reasons.join("; ")}`);
+        }
+        const requiresAsk =
+          requiresExecApproval({
+            ask: hostAsk,
+            security: hostSecurity,
+            analysisOk,
+            allowlistSatisfied,
+          }) || obfuscation.detected;
 
         if (requiresAsk) {
           const approvalId = crypto.randomUUID();
@@ -1405,7 +1422,9 @@ export function createExecTool(
             if (decision === "deny") {
               deniedReason = "user-denied";
             } else if (!decision) {
-              if (askFallback === "full") {
+              if (obfuscation.detected) {
+                deniedReason = "approval-timeout (obfuscation-detected)";
+              } else if (askFallback === "full") {
                 approvedByAsk = true;
               } else if (askFallback === "allowlist") {
                 if (!analysisOk || !allowlistSatisfied) {

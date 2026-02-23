@@ -1,65 +1,58 @@
-# 🦞 OpenClaw — Personal AI Assistant
+# OpenClaw - Personal AI Assistant
 
-> **EXFOLIATE! EXFOLIATE!**
+> EXFOLIATE! EXFOLIATE!
 
 [CI](https://github.com/openclaw/openclaw/actions/workflows/ci.yml?branch=main)
 · [Releases](https://github.com/openclaw/openclaw/releases)
 · [Discord](https://discord.gg/clawd)
 · [Docs](https://docs.openclaw.ai)
-· [中文文档](docs/zh-CN)
 · [Getting Started](https://docs.openclaw.ai/start/getting-started)
+· [Chinese Docs](https://docs.openclaw.ai/zh-CN)
 
-A personal AI assistant you run on your own devices. Works on WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Teams, Matrix, and more.
+OpenClaw is a personal AI assistant you run on your own devices.
+One Gateway can serve multiple channels (WhatsApp, Telegram, Discord, Slack, Google Chat, Signal, iMessage/WebChat), with additional channels available via plugins.
 
-**Requirements:** Node.js ≥22
-
----
+**Requirements:** Node.js 22+ (package baseline: `>=22.12.0`)
 
 ## Quick Start
 
 ```bash
-# Install
+# Install (npm)
 npm install -g openclaw@latest
 
-# Onboarding wizard (recommended)
-openclaw onboard
+# Recommended first-run setup
+openclaw onboard --install-daemon
 
-# Start gateway
-openclaw gateway
+# Check gateway
+openclaw gateway status
 
-# Talk to the assistant
-openclaw agent --message "Hello"
+# Open dashboard (Control UI)
+openclaw dashboard
 ```
 
-Full setup guide: [docs.openclaw.ai/start/getting-started](https://docs.openclaw.ai/start/getting-started)
+Alternative installers:
 
----
+- macOS/Linux: `curl -fsSL https://openclaw.ai/install.sh | bash`
+- Windows (PowerShell): `iwr -useb https://openclaw.ai/install.ps1 | iex`
 
-## 需求实现（已完成 TODO）
+## Current Project Status (Snapshot: 2026-02-23)
 
-| 需求分组                   | 已完成 TODO                                                                       | 状态   | 主要结果                                                                                                                                                                                                   |
-| -------------------------- | --------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop MVP Slim / Phase 0 | 分支与基线治理（专用分支、同步主线、定义绿线）                                    | 已完成 | 使用 `desktop-mvp-slim` 作为执行分支，并建立 `pnpm check/build/ui:build/test` 绿线。                                                                                                                       |
-| Desktop MVP Slim / Phase 1 | 安全加固（auth bypass、`cli_model`、`fs_read`、日志泄露）                         | 已完成 | 修复本地直连鉴权风险，收敛工具执行风险，补齐边界校验并移除敏感日志片段。                                                                                                                                   |
-| Desktop MVP Slim / Phase 2 | 类型与规范门禁修复                                                                | 已完成 | 修复类型与状态字段问题，`pnpm check` 通过。                                                                                                                                                                |
-| Desktop MVP Slim / Phase 3 | Windows 桌面鉴权 UX（token store、gateway spawn、preload 注入、token 轮换）       | 已完成 | 在保持鉴权开启的前提下实现“无感鉴权”，并支持托盘一键轮换 token。                                                                                                                                           |
-| Desktop MVP Slim / Phase 3 | macOS Dashboard 令牌安全（移除 query token/password，改为 tokenless auth bridge） | 已完成 | 停止通过 URL query 传递密钥，改用无 query 的桥接式鉴权。                                                                                                                                                   |
-| Desktop MVP Slim / Phase 3 | 桌面鉴权文档补充                                                                  | 已完成 | 新增 Desktop Auth 恢复与运维说明，覆盖 token 生命周期与故障恢复。                                                                                                                                          |
-| Project Neuro / P0-001     | 架构范围与 Windows 技术基线冻结                                                   | 已完成 | 通过 ADR 0001 固化范围和基线：https://docs.openclaw.ai/prd/project-neuro-adr-0001-scope-freeze-windows-baseline                                                                                            |
-| Project Neuro / P0-002     | 事件契约定稿（`context.event.v1`/`suggestion.card.v1`/`suggestion.feedback.v1`）  | 已完成 | 完成 schema、类型导出、验证测试与 ADR 0002：https://docs.openclaw.ai/prd/project-neuro-adr-0002-event-contracts-v1                                                                                         |
-| Project Neuro / P0-003     | Redaction baseline（`block/mask/hash`）+ source filters + regression corpus       | 已完成 | 新增红线回归语料与测试，完成 ADR 0003：https://docs.openclaw.ai/prd/project-neuro-adr-0003-redaction-baseline-source-filters                                                                               |
-| Project Neuro / P0-004     | Context capture v1（clipboard + active window + ring buffer bounds）              | 已完成 | 新增捕获服务、适配器与内存 ring buffer 边界控制，完成 ADR 0004：https://docs.openclaw.ai/prd/project-neuro-adr-0004-context-capture-v1-ring-buffer                                                         |
-| Project Neuro / P0-005     | Gateway ingest endpoint + validation + per-session volatile snapshot cache        | 已完成 | 新增 `neuro.context.ingest`/`neuro.context.snapshot` RPC、协议校验与会话级快照查询，完成 ADR 0005：https://docs.openclaw.ai/prd/project-neuro-adr-0005-gateway-ingest-snapshot-cache                       |
-| Project Neuro / P0-006     | Invoke fast-path shell（Alt+Space）+ streaming bridge                             | 已完成 | Windows 端新增 `Alt+Space` 快捷唤起与快速壳层，UI 侧打通 chat delta 流式渲染，完成 ADR 0006：https://docs.openclaw.ai/prd/project-neuro-adr-0006-invoke-fast-path-streaming-bridge                         |
-| Project Neuro / P0-007     | Feature flags + kill switch scaffold                                              | 已完成 | 新增 `neuro.flags.get`/`neuro.flags.set` 与 `neuro.flags.changed` 事件，落地 kill switch 有效态收敛，完成 ADR 0007：https://docs.openclaw.ai/prd/project-neuro-adr-0007-feature-flags-kill-switch-scaffold |
-| Project Neuro / P0-008     | Observability baseline（ui_ready_ms/first_token_ms/memory/redaction counters）    | 已完成 | 新增 `neuro.metrics.get`/`neuro.metrics.observe`、首 token 延迟统计、UI 就绪与内存上报、redaction 计数，完成 ADR 0008：https://docs.openclaw.ai/prd/project-neuro-adr-0008-observability-baseline          |
+| Workstream               | Status                                    | Notes                                                                                                                                                   |
+| ------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop MVP Slim         | Phase 0-4 complete                        | Completed branch hygiene, security hardening, desktop auth UX, and slim-mode scope alignment.                                                           |
+| Slim mode strategy       | Locked                                    | `OPENCLAW_DESKTOP_MVP_SLIM` / `CLAWDBOT_DESKTOP_MVP_SLIM` drive runtime slim gating; plugin ecosystem is disabled in slim mode (architecture retained). |
+| Minimal toolset strategy | Locked                                    | Opt-in only (`desktopMvpMinimalToolset` or env flag); not default-on.                                                                                   |
+| Project Neuro            | P0 complete, P1 complete, P2-001 complete | Event contracts, privacy baseline, context ingest/snapshot, action loop, undo/policy/retention/reliability, and heuristic preview are shipped.          |
+| Next focus               | In progress                               | Phase 5 wrap-up (design doc in `.codex/knowledge/` after merge completion).                                                                             |
 
-### 总结
+## Key Features
 
-- 已完成的 TODO 主要集中在两条线：`Desktop MVP Slim` 的安全与鉴权闭环，以及 `Project Neuro` 的 P0 基础能力（P0-001 到 P0-006）。
-- `Project Neuro` 的 P0（`TODO-P0-001` 到 `TODO-P0-008`）已完成，下一优先级为 `TODO-P1-001`：卡片动作闭环与离线/故障回退 UX。
-
----
+- Single gateway, multi-channel routing
+- WebSocket-based control plane (CLI, desktop apps, web UI)
+- Multi-agent sessions and workspace isolation
+- Tooling and automation support (`exec`, browser/canvas, cron, nodes, approvals)
+- Plugin architecture for extra channels and integrations
+- Desktop apps (macOS, Windows) and mobile node support
 
 ## Development
 
@@ -68,37 +61,27 @@ git clone https://github.com/openclaw/openclaw.git
 cd openclaw
 pnpm install
 pnpm build
-pnpm openclaw onboard
+pnpm check
+pnpm test
 ```
 
-See [Development Guide](https://docs.openclaw.ai/development) for details.
+Run in development:
 
-### Windows
-
-For Windows-specific setup and desktop app development, see [platform/windows](platform/windows).
-
----
+```bash
+pnpm dev
+```
 
 ## Documentation
 
-- **[Getting Started](https://docs.openclaw.ai/start/getting-started)** — Installation, onboarding, first message
-- **[Channels](https://docs.openclaw.ai/channels)** — WhatsApp, Telegram, Slack, Discord, etc.
-- **[Concepts](https://docs.openclaw.ai/concepts)** — Architecture, sessions, models
-- **[中文文档](docs/zh-CN)** — 中文概念文档和综合报告
-- **[Windows 平台](platform/windows)** — Windows 一键启动脚本和桌面应用
-- **[Troubleshooting](https://docs.openclaw.ai/troubleshooting)** — Common issues and solutions
-- **[Development](https://docs.openclaw.ai/development)** — Contributing, building, debugging
-
-## Key Features
-
-- **Single Gateway, Multi-Channel** — One daemon manages all messaging platform connections
-- **WebSocket Architecture** — Control plane clients connect via WebSocket (macOS app, Windows app, CLI, Web UI)
-- **Multi-Agent Routing** — Support multiple isolated agent instances with independent workspaces
-- **Plugin System** — Extend functionality with plugins (Mattermost, custom tools)
-- **Desktop Apps** — Native macOS and Windows applications with system tray support
-- **Mobile Nodes** — iOS and Android nodes with Canvas interface support
-
----
+- [Getting Started](https://docs.openclaw.ai/start/getting-started)
+- [Channels](https://docs.openclaw.ai/channels)
+- [Control UI](https://docs.openclaw.ai/web/control-ui)
+- [Dashboard](https://docs.openclaw.ai/web/dashboard)
+- [Gateway Configuration](https://docs.openclaw.ai/gateway/configuration)
+- [Windows Platform](https://docs.openclaw.ai/platforms/windows)
+- [Development](https://docs.openclaw.ai/development)
+- [Troubleshooting](https://docs.openclaw.ai/troubleshooting)
+- [Chinese Docs](https://docs.openclaw.ai/zh-CN)
 
 ## License
 

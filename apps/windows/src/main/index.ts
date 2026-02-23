@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut } from "electron";
+import { app, BrowserWindow, globalShortcut, powerMonitor } from "electron";
 import fs from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,24 +16,99 @@ let gatewayManager: GatewayManager | null = null;
 let chatWindowManager: ChatWindowManager | null = null;
 let settingsManager: SettingsManager | null = null;
 let hiddenWindow: BrowserWindow | null = null;
-const INVOKE_SHORTCUT = "Alt+Space";
+const PRIMARY_INVOKE_SHORTCUT = "Alt+Space";
+const FALLBACK_INVOKE_SHORTCUT = "Alt+Shift+Space";
+const INVOKE_SHORTCUT_RETRY_MS = 15_000;
+const INVOKE_SHORTCUTS = [PRIMARY_INVOKE_SHORTCUT, FALLBACK_INVOKE_SHORTCUT] as const;
+let registeredInvokeShortcuts = new Set<string>();
+let invokeHotkeyRetryTimer: ReturnType<typeof setInterval> | null = null;
 
-function registerInvokeHotkey(): void {
+function unregisterInvokeHotkeys(): void {
+  for (const shortcut of registeredInvokeShortcuts) {
+    try {
+      globalShortcut.unregister(shortcut);
+    } catch (err) {
+      console.warn(`[App] Failed to unregister invoke shortcut ${shortcut}:`, err);
+    }
+  }
+  registeredInvokeShortcuts.clear();
+}
+
+function clearInvokeHotkeyRetry(): void {
+  if (invokeHotkeyRetryTimer == null) {
+    return;
+  }
+  clearInterval(invokeHotkeyRetryTimer);
+  invokeHotkeyRetryTimer = null;
+}
+
+function scheduleInvokeHotkeyRetry(): void {
+  if (invokeHotkeyRetryTimer != null) {
+    return;
+  }
+  invokeHotkeyRetryTimer = setInterval(() => {
+    ensureInvokeHotkeysRegistered("retry");
+  }, INVOKE_SHORTCUT_RETRY_MS);
+  console.warn(
+    `[App] Invoke hotkey registration incomplete; retrying every ${INVOKE_SHORTCUT_RETRY_MS}ms`,
+  );
+}
+
+function registerInvokeHotkeys(): void {
   if (!chatWindowManager) {
     return;
   }
-  try {
-    const ok = globalShortcut.register(INVOKE_SHORTCUT, () => {
-      chatWindowManager?.showInvokeWindow();
-    });
-    if (!ok) {
-      console.warn(`[App] Failed to register invoke shortcut: ${INVOKE_SHORTCUT}`);
-      return;
+
+  unregisterInvokeHotkeys();
+
+  for (const shortcut of INVOKE_SHORTCUTS) {
+    try {
+      const ok = globalShortcut.register(shortcut, () => {
+        chatWindowManager?.showInvokeWindow();
+      });
+      if (!ok) {
+        console.warn(`[App] Failed to register invoke shortcut: ${shortcut}`);
+        continue;
+      }
+      registeredInvokeShortcuts.add(shortcut);
+      console.log(`[App] Registered invoke shortcut: ${shortcut}`);
+    } catch (err) {
+      console.warn(`[App] Error registering invoke shortcut ${shortcut}:`, err);
     }
-    console.log(`[App] Registered invoke shortcut: ${INVOKE_SHORTCUT}`);
-  } catch (err) {
-    console.warn(`[App] Error registering invoke shortcut ${INVOKE_SHORTCUT}:`, err);
   }
+
+  if (registeredInvokeShortcuts.has(PRIMARY_INVOKE_SHORTCUT)) {
+    clearInvokeHotkeyRetry();
+    return;
+  }
+
+  if (registeredInvokeShortcuts.has(FALLBACK_INVOKE_SHORTCUT)) {
+    console.warn(
+      `[App] Primary invoke shortcut unavailable; using fallback: ${FALLBACK_INVOKE_SHORTCUT}`,
+    );
+  }
+  scheduleInvokeHotkeyRetry();
+}
+
+function ensureInvokeHotkeysRegistered(reason: string): void {
+  if (!chatWindowManager) {
+    return;
+  }
+
+  const hasPrimary = globalShortcut.isRegistered(PRIMARY_INVOKE_SHORTCUT);
+  if (hasPrimary) {
+    registeredInvokeShortcuts.add(PRIMARY_INVOKE_SHORTCUT);
+    clearInvokeHotkeyRetry();
+    return;
+  }
+
+  const hasAnyRegistered = Array.from(INVOKE_SHORTCUTS).some((shortcut) =>
+    globalShortcut.isRegistered(shortcut),
+  );
+  if (!hasAnyRegistered || !registeredInvokeShortcuts.has(FALLBACK_INVOKE_SHORTCUT)) {
+    console.log(`[App] Re-registering invoke shortcuts (${reason})`);
+  }
+  registerInvokeHotkeys();
 }
 
 function initAppPaths(): void {
@@ -140,7 +215,10 @@ void app
 
   // Setup IPC handlers
   setupIpc(gatewayManager, chatWindowManager);
-  registerInvokeHotkey();
+  registerInvokeHotkeys();
+
+  app.on("browser-window-focus", () => ensureInvokeHotkeysRegistered("browser-window-focus"));
+  powerMonitor.on("resume", () => ensureInvokeHotkeysRegistered("power-resume"));
 
   console.log("[App] App setup complete, should stay running");
   })
@@ -151,6 +229,8 @@ void app
 
 app.on("before-quit", async (_event) => {
   console.log("[App] before-quit event");
+  clearInvokeHotkeyRetry();
+  unregisterInvokeHotkeys();
   globalShortcut.unregisterAll();
 
   // Cleanup

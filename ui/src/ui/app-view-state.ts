@@ -1,6 +1,7 @@
 import type { EventLogEntry } from "./app-events.ts";
 import type { CompactionStatus } from "./app-tool-stream.ts";
 import type { ChatModelId } from "./app.ts";
+import type { NeuroFlagsSnapshot, NeuroMetricsSnapshot } from "./controllers/debug.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
@@ -204,6 +205,10 @@ export type AppViewState = {
   debugHealth: HealthSnapshot | null;
   debugModels: unknown[];
   debugHeartbeat: unknown;
+  debugNeuroFlags: NeuroFlagsSnapshot | null;
+  debugNeuroMetrics: NeuroMetricsSnapshot | null;
+  debugNeuroSaving: boolean;
+  debugNeuroError: string | null;
   debugCallMethod: string;
   debugCallParams: string;
   debugCallResult: string | null;

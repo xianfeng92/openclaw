@@ -25,7 +25,7 @@ import {
   removeCronJob,
   addCronJob,
 } from "./controllers/cron.ts";
-import { loadDebug, callDebugMethod } from "./controllers/debug.ts";
+import { loadDebug, callDebugMethod, setNeuroFlag } from "./controllers/debug.ts";
 import {
   approveDevicePairing,
   loadDevices,
@@ -1185,11 +1185,16 @@ export function renderApp(state: AppViewState) {
                 health: state.debugHealth,
                 models: state.debugModels,
                 heartbeat: state.debugHeartbeat,
+                neuroFlags: state.debugNeuroFlags,
+                neuroMetrics: state.debugNeuroMetrics,
+                neuroSaving: state.debugNeuroSaving,
+                neuroError: state.debugNeuroError,
                 eventLog: state.eventLog,
                 callMethod: state.debugCallMethod,
                 callParams: state.debugCallParams,
                 callResult: state.debugCallResult,
                 callError: state.debugCallError,
+                onToggleFlag: (key, enabled) => setNeuroFlag(state, key, enabled),
                 onCallMethodChange: (next) => (state.debugCallMethod = next),
                 onCallParamsChange: (next) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),

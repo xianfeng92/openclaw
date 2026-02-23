@@ -431,9 +431,12 @@ export function attachGatewayWsMessageHandler(params: {
               trustedProxies,
             })
           : null;
+        // Trusted-proxy auth is semantically shared auth: the trusted proxy
+        // vouches for identity, so operator clients can skip device identity.
         const sharedAuthOk =
-          sharedAuthResult?.ok === true &&
-          (sharedAuthResult.method === "token" || sharedAuthResult.method === "password");
+          (sharedAuthResult?.ok === true &&
+            (sharedAuthResult.method === "token" || sharedAuthResult.method === "password")) ||
+          (authResult.ok && authResult.method === "trusted-proxy");
         const rejectUnauthorized = () => {
           setHandshakeState("failed");
           logWsControl.warn(

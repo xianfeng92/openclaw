@@ -250,23 +250,60 @@ function resolveChannelGroups(
   return accountGroups ?? channelConfig.groups;
 }
 
+type GroupPolicyMode = "open" | "allowlist" | "disabled";
+
+function resolveGroupPolicyMode(
+  cfg: OpenClawConfig,
+  channel: GroupPolicyChannel,
+  accountId?: string | null,
+): GroupPolicyMode {
+  const normalizedAccountId = normalizeAccountId(accountId);
+  const channelConfig = cfg.channels?.[channel] as
+    | {
+        groupPolicy?: GroupPolicyMode;
+        accounts?: Record<string, { groupPolicy?: GroupPolicyMode }>;
+      }
+    | undefined;
+  if (!channelConfig) {
+    return "open";
+  }
+  const accountPolicy =
+    channelConfig.accounts?.[normalizedAccountId]?.groupPolicy ??
+    channelConfig.accounts?.[
+      Object.keys(channelConfig.accounts ?? {}).find(
+        (key) => key.toLowerCase() === normalizedAccountId.toLowerCase(),
+      ) ?? ""
+    ]?.groupPolicy;
+  return accountPolicy ?? channelConfig.groupPolicy ?? "open";
+}
+
 export function resolveChannelGroupPolicy(params: {
   cfg: OpenClawConfig;
   channel: GroupPolicyChannel;
   groupId?: string | null;
   accountId?: string | null;
+  /** When true, sender-level filtering (groupAllowFrom) is configured upstream. */
+  hasGroupAllowFrom?: boolean;
 }): ChannelGroupPolicy {
   const { cfg, channel } = params;
+  const groupPolicy = resolveGroupPolicyMode(cfg, channel, params.accountId);
   const groups = resolveChannelGroups(cfg, channel, params.accountId);
   const allowlistEnabled = Boolean(groups && Object.keys(groups).length > 0);
   const normalizedId = params.groupId?.trim();
   const groupConfig = normalizedId && groups ? groups[normalizedId] : undefined;
   const defaultConfig = groups?.["*"];
   const allowAll = allowlistEnabled && Boolean(groups && Object.hasOwn(groups, "*"));
+  const hasGroups = allowlistEnabled;
+  // When groupPolicy is allowlist with sender filters but no explicit groups,
+  // allow group admission and defer enforcement to sender-level filtering.
+  const senderFilterBypass =
+    groupPolicy === "allowlist" && !hasGroups && Boolean(params.hasGroupAllowFrom);
   const allowed =
-    !allowlistEnabled ||
-    allowAll ||
-    (normalizedId ? Boolean(groups && Object.hasOwn(groups, normalizedId)) : false);
+    groupPolicy === "disabled"
+      ? false
+      : !allowlistEnabled
+        ? groupPolicy !== "allowlist" || senderFilterBypass
+        : allowAll || Boolean(groupConfig) || senderFilterBypass;
   return {
     allowlistEnabled,
     allowed,

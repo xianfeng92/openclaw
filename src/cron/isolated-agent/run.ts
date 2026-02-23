@@ -469,6 +469,23 @@ export async function runCronIsolatedAgentTurn(params: {
         ? [{ text: synthesizedText }]
         : [];
   const deliveryBestEffort = resolveCronDeliveryBestEffort(params.job);
+  const hasErrorPayload = payloads.some((payload) => payload?.isError === true);
+  const lastErrorPayloadText = [...payloads]
+    .toReversed()
+    .find((payload) => payload?.isError === true && Boolean(payload?.text?.trim()))
+    ?.text?.trim();
+  const embeddedRunError = hasErrorPayload
+    ? (lastErrorPayloadText ?? "cron isolated run returned an error payload")
+    : undefined;
+  const resolveRunOutcome = () =>
+    withRunSession({
+      status: hasErrorPayload ? "error" : "ok",
+      ...(hasErrorPayload
+        ? { error: embeddedRunError ?? "cron isolated run returned an error payload" }
+        : {}),
+      summary,
+      outputText,
+    });
 
   // Skip delivery for heartbeat-only responses (HEARTBEAT_OK with no real content).
   const ackMaxChars = resolveHeartbeatAckMaxChars(agentCfg);
@@ -495,7 +512,7 @@ export async function runCronIsolatedAgentTurn(params: {
         });
       }
       logWarn(`[cron:${params.job.id}] ${resolvedDelivery.error.message}`);
-      return withRunSession({ status: "ok", summary, outputText });
+      return resolveRunOutcome();
     }
     if (!resolvedDelivery.to) {
       const message = "cron delivery target is missing";
@@ -508,7 +525,7 @@ export async function runCronIsolatedAgentTurn(params: {
         });
       }
       logWarn(`[cron:${params.job.id}] ${message}`);
-      return withRunSession({ status: "ok", summary, outputText });
+      return resolveRunOutcome();
     }
     try {
       await deliverOutboundPayloads({
@@ -528,5 +545,5 @@ export async function runCronIsolatedAgentTurn(params: {
     }
   }
 
-  return withRunSession({ status: "ok", summary, outputText });
+  return resolveRunOutcome();
 }

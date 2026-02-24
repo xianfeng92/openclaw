@@ -20,6 +20,7 @@ import { logWarn } from "../logger.js";
 import { isTestDefaultMemorySlotDisabled } from "../plugins/config-state.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
 import { isSubagentSessionKey } from "../routing/session-key.js";
+import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "../security/dangerous-tools.js";
 import { normalizeMessageChannel } from "../utils/message-channel.js";
 import { authorizeGatewayConnect, type ResolvedGatewayAuth } from "./auth.js";
 import {
@@ -33,6 +34,11 @@ import { getBearerToken, getHeader } from "./http-utils.js";
 
 const DEFAULT_BODY_BYTES = 2 * 1024 * 1024;
 const MEMORY_TOOL_NAMES = new Set(["memory_search", "memory_get"]);
+const DEFAULT_GATEWAY_HTTP_TOOL_DENY_SET = new Set(
+  DEFAULT_GATEWAY_HTTP_TOOL_DENY.map((name) => normalizeToolName(name)).filter(
+    (name): name is string => Boolean(name),
+  ),
+);
 
 type ToolsInvokeBody = {
   tool?: unknown;
@@ -47,6 +53,20 @@ function resolveSessionKeyFromBody(body: ToolsInvokeBody): string | undefined {
     return body.sessionKey.trim();
   }
   return undefined;
+}
+
+function resolveGatewayHttpToolAllowlist(cfg: ReturnType<typeof loadConfig>): Set<string> {
+  const gatewayTools = (cfg as unknown as { gateway?: { tools?: { allow?: unknown } } }).gateway
+    ?.tools;
+  const allowRaw = gatewayTools?.allow;
+  if (!Array.isArray(allowRaw)) {
+    return new Set<string>();
+  }
+  const allow = allowRaw
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => normalizeToolName(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  return new Set<string>(allow);
 }
 
 function resolveMemoryToolDisableReasons(cfg: ReturnType<typeof loadConfig>): string[] {
@@ -136,6 +156,19 @@ export async function handleToolsInvokeHttpRequest(
   const toolName = typeof body.tool === "string" ? body.tool.trim() : "";
   if (!toolName) {
     sendInvalidRequest(res, "tools.invoke requires body.tool");
+    return true;
+  }
+  const normalizedToolName = normalizeToolName(toolName);
+  const gatewayHttpAllowlist = resolveGatewayHttpToolAllowlist(cfg);
+  if (
+    normalizedToolName &&
+    DEFAULT_GATEWAY_HTTP_TOOL_DENY_SET.has(normalizedToolName) &&
+    !gatewayHttpAllowlist.has(normalizedToolName)
+  ) {
+    sendJson(res, 404, {
+      ok: false,
+      error: { type: "not_found", message: `Tool not available: ${toolName}` },
+    });
     return true;
   }
 

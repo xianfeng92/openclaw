@@ -1982,6 +1982,10 @@ export type ExecAllowlistEvaluation = {
   allowlistMatches: ExecAllowlistEntry[];
 };
 
+function isPathScopedExecutableToken(token: string): boolean {
+  return token.includes("/") || token.includes("\\");
+}
+
 function evaluateSegments(
   segments: ExecCommandSegment[],
   params: {
@@ -2013,10 +2017,19 @@ function evaluateSegments(
       trustedSafeBinDirs: params.trustedSafeBinDirs,
       cwd: params.cwd,
     });
-    const skillAllow =
-      allowSkills && segment.resolution?.executableName
-        ? params.skillBins?.has(segment.resolution.executableName)
-        : false;
+    const rawExecutable = segment.resolution?.rawExecutable?.trim() ?? "";
+    const executableName = segment.resolution?.executableName;
+    const usesExplicitPath = isPathScopedExecutableToken(rawExecutable);
+    let skillAllow = false;
+    if (
+      allowSkills &&
+      segment.resolution?.resolvedPath &&
+      rawExecutable.length > 0 &&
+      !usesExplicitPath &&
+      executableName
+    ) {
+      skillAllow = Boolean(params.skillBins?.has(executableName));
+    }
     return Boolean(match || safe || skillAllow);
   });
 

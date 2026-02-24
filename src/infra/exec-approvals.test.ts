@@ -539,6 +539,57 @@ describe("exec approvals allowlist evaluation", () => {
     });
     expect(result.allowlistSatisfied).toBe(true);
   });
+
+  it("does not satisfy auto-allow skills for explicit relative paths", () => {
+    const analysis = {
+      ok: true,
+      segments: [
+        {
+          raw: "./skill-bin",
+          argv: ["./skill-bin", "--help"],
+          resolution: {
+            rawExecutable: "./skill-bin",
+            resolvedPath: "/tmp/skill-bin",
+            executableName: "skill-bin",
+          },
+        },
+      ],
+    };
+    const result = evaluateExecAllowlist({
+      analysis,
+      allowlist: [],
+      safeBins: new Set(),
+      skillBins: new Set(["skill-bin"]),
+      autoAllowSkills: true,
+      cwd: "/tmp",
+    });
+    expect(result.allowlistSatisfied).toBe(false);
+  });
+
+  it("does not satisfy auto-allow skills when command resolution is missing", () => {
+    const analysis = {
+      ok: true,
+      segments: [
+        {
+          raw: "skill-bin --help",
+          argv: ["skill-bin", "--help"],
+          resolution: {
+            rawExecutable: "skill-bin",
+            executableName: "skill-bin",
+          },
+        },
+      ],
+    };
+    const result = evaluateExecAllowlist({
+      analysis,
+      allowlist: [],
+      safeBins: new Set(),
+      skillBins: new Set(["skill-bin"]),
+      autoAllowSkills: true,
+      cwd: "/tmp",
+    });
+    expect(result.allowlistSatisfied).toBe(false);
+  });
 });
 
 describe("exec approvals policy helpers", () => {

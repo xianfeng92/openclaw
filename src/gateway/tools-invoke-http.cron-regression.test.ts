@@ -15,7 +15,7 @@ vi.mock("../config/sessions.js", () => ({
 }));
 
 vi.mock("./auth.js", () => ({
-  authorizeHttpGatewayConnect: async () => ({ ok: true }),
+  authorizeGatewayConnect: async () => ({ ok: true }),
 }));
 
 vi.mock("../logger.js", () => ({
@@ -57,13 +57,18 @@ beforeAll(async () => {
   server = createServer((req, res) => {
     void handleToolsInvokeHttpRequest(req, res, {
       auth: { mode: "token", token: TEST_GATEWAY_TOKEN, allowTailscale: false },
-    }).then((handled) => {
-      if (handled) {
-        return;
-      }
-      res.statusCode = 404;
-      res.end("not found");
-    });
+    })
+      .then((handled) => {
+        if (handled) {
+          return;
+        }
+        res.statusCode = 404;
+        res.end("not found");
+      })
+      .catch((err) => {
+        res.statusCode = 500;
+        res.end(String(err));
+      });
   });
   await new Promise<void>((resolve, reject) => {
     server?.once("error", reject);

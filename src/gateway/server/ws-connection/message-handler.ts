@@ -431,12 +431,12 @@ export function attachGatewayWsMessageHandler(params: {
               trustedProxies,
             })
           : null;
-        // Trusted-proxy auth is semantically shared auth: the trusted proxy
-        // vouches for identity, so operator clients can skip device identity.
+        // Tailscale-authenticated proxy requests are semantically shared auth:
+        // identity is already vouched by the trusted proxy path.
         const sharedAuthOk =
           (sharedAuthResult?.ok === true &&
             (sharedAuthResult.method === "token" || sharedAuthResult.method === "password")) ||
-          (authResult.ok && authResult.method === "trusted-proxy");
+          (authResult.ok && authResult.method === "tailscale");
         const rejectUnauthorized = () => {
           setHandshakeState("failed");
           logWsControl.warn(

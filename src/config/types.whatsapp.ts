@@ -23,6 +23,8 @@ export type WhatsAppConfig = {
   markdown?: MarkdownConfig;
   /** Allow channel-initiated config writes (default: true). */
   configWrites?: boolean;
+  /** If false, do not start WhatsApp providers for this channel. */
+  enabled?: boolean;
   /** Send read receipts for incoming messages (default true). */
   sendReadReceipts?: boolean;
   /**

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { validateConfigObject } from "./config.js";
 import { applyPluginAutoEnable } from "./plugin-auto-enable.js";
 
 describe("applyPluginAutoEnable", () => {
@@ -14,6 +15,23 @@ describe("applyPluginAutoEnable", () => {
     expect(result.config.plugins?.entries?.slack?.enabled).toBe(true);
     expect(result.config.plugins?.allow).toEqual(["telegram", "slack"]);
     expect(result.changes.join("\n")).toContain("Slack configured, not enabled yet.");
+  });
+
+  it("keeps auto-enabled WhatsApp config schema-valid", () => {
+    const result = applyPluginAutoEnable({
+      config: {
+        channels: {
+          whatsapp: {
+            allowFrom: ["+15555550123"],
+          },
+        },
+      },
+      env: {},
+    });
+
+    expect(result.config.plugins?.entries?.whatsapp?.enabled).toBe(true);
+    const validated = validateConfigObject(result.config);
+    expect(validated.ok).toBe(true);
   });
 
   it("respects explicit disable", () => {

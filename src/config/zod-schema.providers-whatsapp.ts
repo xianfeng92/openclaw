@@ -82,6 +82,7 @@ export const WhatsAppConfigSchema = z
     capabilities: z.array(z.string()).optional(),
     markdown: MarkdownConfigSchema,
     configWrites: z.boolean().optional(),
+    enabled: z.boolean().optional(),
     sendReadReceipts: z.boolean().optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
     messagePrefix: z.string().optional(),

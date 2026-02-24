@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { OpenClawConfig } from "../../config/config.js";
-import { resolveWhatsAppOutboundTarget } from "../../whatsapp/resolve-outbound-target.js";
+import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../whatsapp/normalize.js";
 import { sendReactionWhatsApp } from "../../web/outbound.js";
 import { createActionGate, jsonResult, readReactionParams, readStringParam } from "./common.js";
 
@@ -30,19 +30,29 @@ export async function handleWhatsAppAction(
     const whatsappCfg = cfg.channels?.whatsapp;
     const accountCfg = accountId ? whatsappCfg?.accounts?.[accountId] : undefined;
     const allowFrom = accountCfg?.allowFrom ?? whatsappCfg?.allowFrom;
-    const resolution = resolveWhatsAppOutboundTarget({
-      to: chatJid,
-      allowFrom: allowFrom ?? [],
-      mode: "implicit",
-    });
-    if (!resolution.ok) {
+    const normalizedChatJid = normalizeWhatsAppTarget(chatJid);
+    if (!normalizedChatJid) {
       throw new Error(
         `WhatsApp reaction blocked: chatJid "${chatJid}" is not in the configured allowFrom list.`,
       );
     }
+    if (!isWhatsAppGroupJid(normalizedChatJid)) {
+      const allowListRaw = (allowFrom ?? []).map((entry) => String(entry).trim()).filter(Boolean);
+      const hasWildcard = allowListRaw.includes("*");
+      const allowList = allowListRaw
+        .filter((entry) => entry !== "*")
+        .map((entry) => normalizeWhatsAppTarget(entry))
+        .filter((entry): entry is string => Boolean(entry));
+
+      if (!hasWildcard && allowList.length > 0 && !allowList.includes(normalizedChatJid)) {
+        throw new Error(
+          `WhatsApp reaction blocked: chatJid "${chatJid}" is not in the configured allowFrom list.`,
+        );
+      }
+    }
 
     const resolvedEmoji = remove ? "" : emoji;
-    await sendReactionWhatsApp(resolution.to, messageId, resolvedEmoji, {
+    await sendReactionWhatsApp(chatJid, messageId, resolvedEmoji, {
       verbose: false,
       fromMe,
       participant: participant ?? undefined,

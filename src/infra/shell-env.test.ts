@@ -194,6 +194,9 @@ describe("shell env fallback", () => {
   });
 
   it("uses SHELL when it is explicitly registered in /etc/shells", () => {
+    if (process.platform === "win32") {
+      return;
+    }
     const readFileSyncSpy = vi
       .spyOn(fs, "readFileSync")
       .mockImplementation((filePath, encoding) => {

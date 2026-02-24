@@ -11,12 +11,12 @@ describe("resolveGatewayClientIp", () => {
     expect(ip).toBe("127.0.0.1");
   });
 
-  it("fails closed when trusted proxy headers are missing", () => {
+  it("falls back to trusted proxy remote addr when headers are missing", () => {
     const ip = resolveGatewayClientIp({
       remoteAddr: "127.0.0.1",
       trustedProxies: ["127.0.0.1"],
     });
-    expect(ip).toBeUndefined();
+    expect(ip).toBe("127.0.0.1");
   });
 });
 

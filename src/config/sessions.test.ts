@@ -16,6 +16,20 @@ import {
   updateSessionStoreEntry,
 } from "./sessions.js";
 
+function withStateDir(stateDir: string, run: () => void): void {
+  const prev = process.env.OPENCLAW_STATE_DIR;
+  process.env.OPENCLAW_STATE_DIR = stateDir;
+  try {
+    run();
+  } finally {
+    if (prev === undefined) {
+      delete process.env.OPENCLAW_STATE_DIR;
+    } else {
+      process.env.OPENCLAW_STATE_DIR = prev;
+    }
+  }
+}
+
 describe("sessions", () => {
   it("returns normalized per-sender key", () => {
     expect(deriveSessionKey("per-sender", { From: "whatsapp:+1555" })).toBe("+1555");

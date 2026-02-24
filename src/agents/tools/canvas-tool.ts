@@ -6,10 +6,9 @@ import { writeBase64ToFile } from "../../cli/nodes-camera.js";
 import { canvasSnapshotTempPath, parseCanvasSnapshotPayload } from "../../cli/nodes-canvas.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { openFileWithinRoot, SafeOpenError } from "../../infra/fs-safe.js";
-import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import { imageMimeFromFormat } from "../../media/mime.js";
 import { resolveUserPath } from "../../utils.js";
-import { resolveSessionAgentId } from "../agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId, resolveSessionAgentId } from "../agent-scope.js";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
 import { type AnyAgentTool, imageResult, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool, type GatewayCallOptions } from "./gateway.js";
@@ -130,10 +129,11 @@ export function createCanvasTool(options?: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
 }): AnyAgentTool {
+  const cfg = options?.config ?? {};
   const agentId = options?.agentSessionKey
-    ? resolveSessionAgentId({ sessionKey: options.agentSessionKey, config: options?.config })
-    : undefined;
-  const localRoots = getAgentScopedMediaLocalRoots(options?.config ?? {}, agentId);
+    ? resolveSessionAgentId({ sessionKey: options.agentSessionKey, config: cfg })
+    : resolveDefaultAgentId(cfg);
+  const localRoots = [resolveAgentWorkspaceDir(cfg, agentId)];
 
   return {
     label: "Canvas",

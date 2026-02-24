@@ -1,14 +1,17 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./tools/gateway.js", () => ({
   callGatewayTool: vi.fn(),
+  readGatewayCallOptions: vi.fn(() => ({})),
 }));
 
 vi.mock("./tools/nodes-utils.js", () => ({
-  listNodes: vi.fn(async () => [{ nodeId: "node-1", commands: ["system.run"], platform: "darwin" }]),
+  listNodes: vi.fn(async () => [
+    { nodeId: "node-1", commands: ["system.run"], platform: "darwin" },
+  ]),
   resolveNodeIdFromList: vi.fn((nodes: Array<{ nodeId: string }>) => nodes[0]?.nodeId),
 }));
 
@@ -20,9 +23,19 @@ vi.mock("../infra/exec-obfuscation-detect.js", () => ({
   })),
 }));
 
+let callGatewayTool: typeof import("./tools/gateway.js").callGatewayTool;
+let createExecTool: typeof import("./bash-tools.exec.js").createExecTool;
+let detectCommandObfuscation: typeof import("../infra/exec-obfuscation-detect.js").detectCommandObfuscation;
+
 describe("exec approvals", () => {
   let previousHome: string | undefined;
   let previousUserProfile: string | undefined;
+
+  beforeAll(async () => {
+    ({ callGatewayTool } = await import("./tools/gateway.js"));
+    ({ createExecTool } = await import("./bash-tools.exec.js"));
+    ({ detectCommandObfuscation } = await import("../infra/exec-obfuscation-detect.js"));
+  });
 
   beforeEach(async () => {
     previousHome = process.env.HOME;
@@ -48,26 +61,22 @@ describe("exec approvals", () => {
   });
 
   it("reuses approval id as the node runId", async () => {
-    const { callGatewayTool } = await import("./tools/gateway.js");
     let invokeParams: unknown;
-    let resolveInvoke: (() => void) | undefined;
-    const invokeSeen = new Promise<void>((resolve) => {
-      resolveInvoke = resolve;
-    });
 
     vi.mocked(callGatewayTool).mockImplementation(async (method, _opts, params) => {
       if (method === "exec.approval.request") {
+        return { status: "accepted", id: (params as { id?: string })?.id };
+      }
+      if (method === "exec.approval.waitDecision") {
         return { decision: "allow-once" };
       }
       if (method === "node.invoke") {
         invokeParams = params;
-        resolveInvoke?.();
         return { ok: true };
       }
       return { ok: true };
     });
 
-    const { createExecTool } = await import("./bash-tools.exec.js");
     const tool = createExecTool({
       host: "node",
       ask: "always",
@@ -78,14 +87,15 @@ describe("exec approvals", () => {
     expect(result.details.status).toBe("approval-pending");
     const approvalId = (result.details as { approvalId: string }).approvalId;
 
-    await invokeSeen;
-
-    const runId = (invokeParams as { params?: { runId?: string } } | undefined)?.params?.runId;
-    expect(runId).toBe(approvalId);
+    await expect
+      .poll(() => (invokeParams as { params?: { runId?: string } } | undefined)?.params?.runId, {
+        timeout: 2000,
+        interval: 20,
+      })
+      .toBe(approvalId);
   });
 
   it("skips approval when node allowlist is satisfied", async () => {
-    const { callGatewayTool } = await import("./tools/gateway.js");
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-test-bin-"));
     const binDir = path.join(tempDir, "bin");
     await fs.mkdir(binDir, { recursive: true });
@@ -114,13 +124,10 @@ describe("exec approvals", () => {
       if (method === "node.invoke") {
         return { payload: { success: true, stdout: "ok" } };
       }
-      if (method === "exec.approval.request") {
-        return { decision: "allow-once" };
-      }
+      // exec.approval.request should NOT be called when allowlist is satisfied
       return { ok: true };
     });
 
-    const { createExecTool } = await import("./bash-tools.exec.js");
     const tool = createExecTool({
       host: "node",
       ask: "on-miss",
@@ -137,14 +144,12 @@ describe("exec approvals", () => {
   });
 
   it("honors ask=off for elevated gateway exec without prompting", async () => {
-    const { callGatewayTool } = await import("./tools/gateway.js");
     const calls: string[] = [];
     vi.mocked(callGatewayTool).mockImplementation(async (method) => {
       calls.push(method);
       return { ok: true };
     });
 
-    const { createExecTool } = await import("./bash-tools.exec.js");
     const tool = createExecTool({
       ask: "off",
       security: "full",
@@ -158,23 +163,25 @@ describe("exec approvals", () => {
   });
 
   it("requires approval for elevated ask when allowlist misses", async () => {
-    const { callGatewayTool } = await import("./tools/gateway.js");
     const calls: string[] = [];
     let resolveApproval: (() => void) | undefined;
     const approvalSeen = new Promise<void>((resolve) => {
       resolveApproval = resolve;
     });
 
-    vi.mocked(callGatewayTool).mockImplementation(async (method) => {
+    vi.mocked(callGatewayTool).mockImplementation(async (method, _opts, params) => {
       calls.push(method);
       if (method === "exec.approval.request") {
         resolveApproval?.();
+        // Return registration confirmation
+        return { status: "accepted", id: (params as { id?: string })?.id };
+      }
+      if (method === "exec.approval.waitDecision") {
         return { decision: "deny" };
       }
       return { ok: true };
     });
 
-    const { createExecTool } = await import("./bash-tools.exec.js");
     const tool = createExecTool({
       ask: "on-miss",
       security: "allowlist",
@@ -186,41 +193,10 @@ describe("exec approvals", () => {
     expect(result.details.status).toBe("approval-pending");
     await approvalSeen;
     expect(calls).toContain("exec.approval.request");
-  });
-
-  it("does not execute high-risk command when approval is not granted", async () => {
-    const { callGatewayTool } = await import("./tools/gateway.js");
-    const calls: string[] = [];
-    vi.mocked(callGatewayTool).mockImplementation(async (method) => {
-      calls.push(method);
-      if (method === "exec.approval.request") {
-        return {};
-      }
-      return { ok: true };
-    });
-
-    const { createExecTool } = await import("./bash-tools.exec.js");
-    const tool = createExecTool({
-      ask: "on-miss",
-      security: "allowlist",
-      approvalRunningNoticeMs: 0,
-      elevated: { enabled: true, allowed: true, defaultLevel: "ask" },
-    });
-
-    const result = await tool.execute("call5", { command: "rm -rf ./tmp", elevated: true });
-    expect(result.details.status).toBe("approval-pending");
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(calls).toContain("exec.approval.request");
-    expect(calls).not.toContain("node.invoke");
+    expect(calls).toContain("exec.approval.waitDecision");
   });
 
   it("denies node obfuscated command when approval request times out", async () => {
-    const { callGatewayTool } = await import("./tools/gateway.js");
-    const { createExecTool } = await import("./bash-tools.exec.js");
-    const { detectCommandObfuscation } = await import("../infra/exec-obfuscation-detect.js");
-
     vi.mocked(detectCommandObfuscation).mockReturnValue({
       detected: true,
       reasons: ["Content piped directly to shell interpreter"],
@@ -231,6 +207,9 @@ describe("exec approvals", () => {
     vi.mocked(callGatewayTool).mockImplementation(async (method) => {
       calls.push(method);
       if (method === "exec.approval.request") {
+        return { status: "accepted", id: "approval-id" };
+      }
+      if (method === "exec.approval.waitDecision") {
         return {};
       }
       if (method === "node.invoke") {
@@ -246,7 +225,7 @@ describe("exec approvals", () => {
       approvalRunningNoticeMs: 0,
     });
 
-    const result = await tool.execute("call6", { command: "echo hi | sh" });
+    const result = await tool.execute("call5", { command: "echo hi | sh" });
     expect(result.details.status).toBe("approval-pending");
     await expect.poll(() => calls.filter((call) => call === "node.invoke").length).toBe(0);
   });
@@ -256,10 +235,6 @@ describe("exec approvals", () => {
       return;
     }
 
-    const { callGatewayTool } = await import("./tools/gateway.js");
-    const { createExecTool } = await import("./bash-tools.exec.js");
-    const { detectCommandObfuscation } = await import("../infra/exec-obfuscation-detect.js");
-
     vi.mocked(detectCommandObfuscation).mockReturnValue({
       detected: true,
       reasons: ["Content piped directly to shell interpreter"],
@@ -268,6 +243,9 @@ describe("exec approvals", () => {
 
     vi.mocked(callGatewayTool).mockImplementation(async (method) => {
       if (method === "exec.approval.request") {
+        return { status: "accepted", id: "approval-id" };
+      }
+      if (method === "exec.approval.waitDecision") {
         return {};
       }
       return { ok: true };
@@ -282,7 +260,7 @@ describe("exec approvals", () => {
       approvalRunningNoticeMs: 0,
     });
 
-    const result = await tool.execute("call7", {
+    const result = await tool.execute("call6", {
       command: `echo touch ${JSON.stringify(markerPath)} | sh`,
     });
     expect(result.details.status).toBe("approval-pending");

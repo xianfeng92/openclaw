@@ -487,6 +487,25 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         legacyIssues,
       };
     } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      let message: string;
+      if (nodeErr?.code === "EACCES") {
+        // Permission denied — common in Docker/container deployments where the
+        // config file is owned by root but the gateway runs as a non-root user.
+        const uid = process.getuid?.();
+        const uidHint = typeof uid === "number" ? String(uid) : "$(id -u)";
+        message = [
+          `read failed: ${String(err)}`,
+          ``,
+          `Config file is not readable by the current process. If running in a container`,
+          `or 1-click deployment, fix ownership with:`,
+          `  chown ${uidHint} "${configPath}"`,
+          `Then restart the gateway.`,
+        ].join("\n");
+        deps.logger.error(message);
+      } else {
+        message = `read failed: ${String(err)}`;
+      }
       return {
         path: configPath,
         exists: true,
@@ -495,7 +514,7 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         valid: false,
         config: {},
         hash: hashConfigRaw(null),
-        issues: [{ path: "", message: `read failed: ${String(err)}` }],
+        issues: [{ path: "", message }],
         warnings: [],
         legacyIssues: [],
       };

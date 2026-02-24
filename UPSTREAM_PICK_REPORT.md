@@ -36,11 +36,23 @@ Date: 2026-02-24
 
 No additional P2 commit was picked in this batch.
 
+## P0 (next security batch)
+
+| Upstream commit | Local commit | Notes |
+| --- | --- | --- |
+| `649d14152` | `a77e8828d` | Prevent tabnabbing when opening chat images in Control UI. |
+| `83689fc83` | `268578679` | Include proxy-vouched auth in shared-auth skip logic (adapted to current `tailscale` auth method in this branch). |
+| `d51a4695f` | `7c5b77231` | Deny `cron` on HTTP tools invoke by default; kept explicit allow override path (`gateway.tools.allow`) for compatibility. |
+| _local follow-up_ | `b4581221b` | Branch-specific backport alignment: auth method mapping + stable regression test mocks/error handling. |
+
 ## Test notes
 
 - Focused regression suites passed:
   - `src/gateway/hooks-mapping.test.ts`
   - `src/infra/net/ssrf.pinning.test.ts`
   - `src/infra/archive.test.ts`
+- New batch checks passed:
+  - `src/gateway/tools-invoke-http.cron-regression.test.ts` (via `vitest.gateway` config)
+  - `ui/src/ui/app-chat.test.ts`
+  - `ui/src/ui/views/chat.test.ts`
 - Full `pnpm test` was executed but does not pass on this branch due many existing unrelated failures/timeouts outside the picked areas.
-

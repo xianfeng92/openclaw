@@ -122,4 +122,28 @@ describe("exec host env validation", () => {
       }),
     ).rejects.toThrow(/Security Violation: Environment variable 'LD_DEBUG' is forbidden/);
   });
+
+  it("blocks HOME override on host execution", async () => {
+    const { createExecTool } = await import("./bash-tools.exec.js");
+    const tool = createExecTool({ host: "gateway", security: "full", ask: "off" });
+
+    await expect(
+      tool.execute("call1", {
+        command: "echo ok",
+        env: { HOME: "/tmp/evil-home" },
+      }),
+    ).rejects.toThrow(/Security Violation: Environment variable 'HOME' is forbidden/);
+  });
+
+  it("blocks ZDOTDIR override on host execution", async () => {
+    const { createExecTool } = await import("./bash-tools.exec.js");
+    const tool = createExecTool({ host: "gateway", security: "full", ask: "off" });
+
+    await expect(
+      tool.execute("call1", {
+        command: "echo ok",
+        env: { ZDOTDIR: "/tmp/evil-zdotdir" },
+      }),
+    ).rejects.toThrow(/Security Violation: Environment variable 'ZDOTDIR' is forbidden/);
+  });
 });

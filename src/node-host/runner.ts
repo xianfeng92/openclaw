@@ -192,6 +192,8 @@ const blockedEnvKeys = new Set([
   "PERL5LIB",
   "PERL5OPT",
   "RUBYOPT",
+  "HOME",
+  "ZDOTDIR",
 ]);
 
 const blockedEnvPrefixes = ["DYLD_", "LD_"];

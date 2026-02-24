@@ -74,6 +74,8 @@ const DANGEROUS_HOST_ENV_VARS = new Set([
   "PERL5LIB",
   "BASH_ENV",
   "ENV",
+  "HOME",
+  "ZDOTDIR",
   "GCONV_PATH",
   "IFS",
   "SSLKEYLOGFILE",

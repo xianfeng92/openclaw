@@ -115,6 +115,39 @@ function extractAgentIdFromAbsoluteSessionPath(candidateAbsPath: string): string
   return agentId || undefined;
 }
 
+function resolveStructuralSessionFallbackPath(
+  candidateAbsPath: string,
+  expectedAgentId: string,
+): string | undefined {
+  const normalized = path.normalize(path.resolve(candidateAbsPath));
+  const parts = normalized.split(path.sep).filter(Boolean);
+  const sessionsIndex = parts.lastIndexOf("sessions");
+  if (sessionsIndex < 2 || parts[sessionsIndex - 2] !== "agents") {
+    return undefined;
+  }
+  const agentIdPart = parts[sessionsIndex - 1];
+  if (!agentIdPart) {
+    return undefined;
+  }
+  const normalizedAgentId = normalizeAgentId(agentIdPart);
+  if (normalizedAgentId !== agentIdPart.toLowerCase()) {
+    return undefined;
+  }
+  if (normalizedAgentId !== normalizeAgentId(expectedAgentId)) {
+    return undefined;
+  }
+  const relativeSegments = parts.slice(sessionsIndex + 1);
+  // Session transcripts are stored as direct files in "sessions/".
+  if (relativeSegments.length !== 1) {
+    return undefined;
+  }
+  const fileName = relativeSegments[0];
+  if (!fileName || fileName === "." || fileName === "..") {
+    return undefined;
+  }
+  return normalized;
+}
+
 function safeRealpathSync(filePath: string): string | undefined {
   try {
     return fs.realpathSync(filePath);
@@ -172,9 +205,15 @@ function resolvePathWithinSessionsDir(
       if (resolvedFromPath) {
         return resolvedFromPath;
       }
-      // If the path structurally matches .../agents/<agent>/sessions/...,
-      // keep it for cross-root migrations (e.g. OPENCLAW_STATE_DIR changed).
-      return path.resolve(realTrimmed);
+      // Cross-root compatibility for older absolute paths:
+      // keep only canonical .../agents/<agentId>/sessions/<file> shapes.
+      const structuralFallback = resolveStructuralSessionFallbackPath(
+        realTrimmed,
+        extractedAgentId,
+      );
+      if (structuralFallback) {
+        return structuralFallback;
+      }
     }
   }
 

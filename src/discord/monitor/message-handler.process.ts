@@ -358,7 +358,12 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
   const { dispatcher, replyOptions, markDispatchIdle } = createReplyDispatcherWithTyping({
     ...prefixOptions,
     humanDelay: resolveHumanDelayConfig(cfg, route.agentId),
-    deliver: async (payload: ReplyPayload) => {
+    deliver: async (payload: ReplyPayload, info) => {
+      if (info.kind === "block") {
+        // Block payloads carry reasoning/thinking content that should not be
+        // delivered to external channels. Skip them regardless of streamMode.
+        return;
+      }
       const replyToId = replyReference.use();
       await deliverDiscordReply({
         replies: [payload],

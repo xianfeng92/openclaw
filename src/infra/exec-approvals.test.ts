@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   analyzeArgvCommand,
   analyzeShellCommand,
+  extractShellCommandFromArgv,
   evaluateExecAllowlist,
   evaluateShellAllowlist,
   isSafeBinUsage,
@@ -15,8 +16,10 @@ import {
   normalizeSafeBins,
   requiresExecApproval,
   resolveCommandResolution,
+  resolveCommandResolutionFromArgv,
   resolveExecApprovals,
   resolveExecApprovalsFromFile,
+  resolveAllowAlwaysPatterns,
   type ExecAllowlistEntry,
   type ExecApprovalsFile,
 } from "./exec-approvals.js";
@@ -30,6 +33,14 @@ function makePathEnv(binDir: string): NodeJS.ProcessEnv {
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-exec-approvals-"));
+}
+
+function makeExecutable(dir: string, name: string): string {
+  const fileName = process.platform === "win32" && !name.endsWith(".exe") ? `${name}.exe` : name;
+  const filePath = path.join(dir, fileName);
+  fs.writeFileSync(filePath, "");
+  fs.chmodSync(filePath, 0o755);
+  return filePath;
 }
 
 describe("exec approvals allowlist matching", () => {
@@ -113,6 +124,19 @@ describe("exec approvals command resolution", () => {
     const res = resolveCommandResolution('"./bin/tool" --version', cwd, undefined);
     expect(res?.resolvedPath).toBe(script);
   });
+
+  it("unwraps nice wrapper argv to resolve the effective executable", () => {
+    const dir = makeTempDir();
+    makeExecutable(dir, "nice");
+    const bash = makeExecutable(dir, "bash");
+    const res = resolveCommandResolutionFromArgv(
+      ["nice", "bash", "-lc", "echo hi"],
+      undefined,
+      makePathEnv(dir),
+    );
+    expect(res?.rawExecutable).toBe("bash");
+    expect(res?.resolvedPath).toBe(bash);
+  });
 });
 
 describe("exec approvals shell parsing", () => {
@@ -134,6 +158,11 @@ describe("exec approvals shell parsing", () => {
     expect(res.segments[0]?.argv).toEqual(["/bin/echo", "ok"]);
   });
 
+  it("extracts shell commands after known dispatch wrappers", () => {
+    const command = extractShellCommandFromArgv(["/usr/bin/nice", "/bin/bash", "-lc", "echo hi"]);
+    expect(command).toBe("echo hi");
+  });
+
   it("rejects command substitution inside double quotes", () => {
     const res = analyzeShellCommand({ command: 'echo "output: $(whoami)"' });
     expect(res.ok).toBe(false);
@@ -144,6 +173,18 @@ describe("exec approvals shell parsing", () => {
     const res = analyzeShellCommand({ command: 'echo "output: `id`"' });
     expect(res.ok).toBe(false);
     expect(res.reason).toBe("unsupported shell token: `");
+  });
+
+  it("rejects escaped LF line continuations inside double quotes", () => {
+    const res = analyzeShellCommand({ command: 'echo "ok $\\\n(id -u)"' });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("unsupported shell token: newline");
+  });
+
+  it("rejects escaped CRLF line continuations inside double quotes", () => {
+    const res = analyzeShellCommand({ command: 'echo "ok $\\\r\n(id -u)"' });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("unsupported shell token: newline");
   });
 
   it("rejects command substitution outside quotes", () => {
@@ -256,6 +297,17 @@ describe("exec approvals shell allowlist (chained commands)", () => {
       safeBins: new Set(),
       cwd: "/tmp",
       platform: "win32",
+    });
+    expect(result.analysisOk).toBe(false);
+    expect(result.allowlistSatisfied).toBe(false);
+  });
+
+  it("fails allowlist analysis for shell line continuations", () => {
+    const result = evaluateShellAllowlist({
+      command: 'echo "ok $\\\n(id -u)"',
+      allowlist: [{ pattern: "/usr/bin/echo" }],
+      safeBins: new Set(),
+      cwd: "/tmp",
     });
     expect(result.analysisOk).toBe(false);
     expect(result.allowlistSatisfied).toBe(false);
@@ -445,6 +497,97 @@ describe("exec approvals policy helpers", () => {
         allowlistSatisfied: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe("resolveAllowAlwaysPatterns", () => {
+  it("unwraps known dispatch wrappers before shell wrappers", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const dir = makeTempDir();
+    const whoami = makeExecutable(dir, "whoami");
+    const patterns = resolveAllowAlwaysPatterns({
+      segments: [
+        {
+          raw: "/usr/bin/nice /bin/zsh -lc whoami",
+          argv: ["/usr/bin/nice", "/bin/zsh", "-lc", "whoami"],
+          resolution: {
+            rawExecutable: "/usr/bin/nice",
+            resolvedPath: "/usr/bin/nice",
+            executableName: "nice",
+          },
+        },
+      ],
+      cwd: dir,
+      env: makePathEnv(dir),
+      platform: process.platform,
+    });
+    expect(patterns).toEqual([whoami]);
+    expect(patterns).not.toContain("/usr/bin/nice");
+  });
+
+  it("fails closed for unresolved dispatch wrappers", () => {
+    const patterns = resolveAllowAlwaysPatterns({
+      segments: [
+        {
+          raw: "sudo /bin/zsh -lc whoami",
+          argv: ["sudo", "/bin/zsh", "-lc", "whoami"],
+          resolution: {
+            rawExecutable: "sudo",
+            resolvedPath: "/usr/bin/sudo",
+            executableName: "sudo",
+          },
+        },
+      ],
+      platform: process.platform,
+    });
+    expect(patterns).toEqual([]);
+  });
+
+  it("prevents allow-always bypass for dispatch-wrapper + shell-wrapper chains", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const dir = makeTempDir();
+    const echo = makeExecutable(dir, "echo");
+    makeExecutable(dir, "id");
+    const safeBins = resolveSafeBins(undefined);
+    const env = makePathEnv(dir);
+
+    const first = evaluateShellAllowlist({
+      command: "/usr/bin/nice /bin/zsh -lc 'echo warmup-ok'",
+      allowlist: [],
+      safeBins,
+      cwd: dir,
+      env,
+      platform: process.platform,
+    });
+    const persisted = resolveAllowAlwaysPatterns({
+      segments: first.segments,
+      cwd: dir,
+      env,
+      platform: process.platform,
+    });
+    expect(persisted).toEqual([echo]);
+
+    const second = evaluateShellAllowlist({
+      command: "/usr/bin/nice /bin/zsh -lc 'id > marker'",
+      allowlist: [{ pattern: echo }],
+      safeBins,
+      cwd: dir,
+      env,
+      platform: process.platform,
+    });
+    expect(second.allowlistSatisfied).toBe(false);
+    expect(
+      requiresExecApproval({
+        ask: "on-miss",
+        security: "allowlist",
+        analysisOk: second.analysisOk,
+        allowlistSatisfied: second.allowlistSatisfied,
+      }),
+    ).toBe(true);
   });
 });
 

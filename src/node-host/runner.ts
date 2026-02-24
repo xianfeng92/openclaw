@@ -16,11 +16,13 @@ import { loadOrCreateDeviceIdentity } from "../infra/device-identity.js";
 import {
   addAllowlistEntry,
   analyzeArgvCommand,
+  extractShellCommandFromArgv,
   evaluateExecAllowlist,
   evaluateShellAllowlist,
   requiresExecApproval,
   normalizeExecApprovals,
   recordAllowlistUse,
+  resolveAllowAlwaysPatterns,
   resolveExecApprovals,
   resolveSafeBins,
   ensureExecApprovals,
@@ -126,6 +128,27 @@ function isCmdExeInvocation(argv: string[]): boolean {
   }
   const base = path.win32.basename(token).toLowerCase();
   return base === "cmd.exe" || base === "cmd";
+}
+
+function formatSystemRunAllowlistMissMessage(params?: {
+  shellWrapperBlocked?: boolean;
+  windowsShellWrapperBlocked?: boolean;
+}): string {
+  if (params?.windowsShellWrapperBlocked) {
+    return (
+      "SYSTEM_RUN_DENIED: allowlist miss " +
+      "(Windows shell wrappers like cmd.exe /c require approval; " +
+      "approve once/always or run with --ask on-miss|always)"
+    );
+  }
+  if (params?.shellWrapperBlocked) {
+    return (
+      "SYSTEM_RUN_DENIED: allowlist miss " +
+      "(shell wrappers like sh/bash/zsh -c require approval; " +
+      "approve once/always or run with --ask on-miss|always)"
+    );
+  }
+  return "SYSTEM_RUN_DENIED: allowlist miss";
 }
 
 function resolveExecAsk(value?: string): ExecAsk {
@@ -939,20 +962,23 @@ async function handleInvoke(
     segments = analysis.segments;
   }
   const isWindows = process.platform === "win32";
-  const cmdInvocation = rawCommand
-    ? isCmdExeInvocation(segments[0]?.argv ?? [])
-    : isCmdExeInvocation(argv);
-  if (security === "allowlist" && isWindows && cmdInvocation) {
+  const shellCommand = extractShellCommandFromArgv(argv);
+  const shellWrapperInvocation = shellCommand !== null;
+  const cmdInvocation = isCmdExeInvocation(argv);
+  const shellWrapperBlocked = security === "allowlist" && shellWrapperInvocation;
+  const windowsShellWrapperBlocked = shellWrapperBlocked && isWindows && cmdInvocation;
+  if (shellWrapperBlocked) {
     analysisOk = false;
     allowlistSatisfied = false;
   }
+  const approvalDecision =
+    params.approvalDecision === "allow-once" || params.approvalDecision === "allow-always"
+      ? params.approvalDecision
+      : null;
+  const approvedByAsk = approvalDecision !== null || params.approved === true;
 
   const useMacAppExec = process.platform === "darwin";
   if (useMacAppExec) {
-    const approvalDecision =
-      params.approvalDecision === "allow-once" || params.approvalDecision === "allow-always"
-        ? params.approvalDecision
-        : null;
     const execRequest: ExecHostRequest = {
       command: argv,
       rawCommand: rawCommand || null,
@@ -1055,12 +1081,6 @@ async function handleInvoke(
     analysisOk,
     allowlistSatisfied,
   });
-
-  const approvalDecision =
-    params.approvalDecision === "allow-once" || params.approvalDecision === "allow-always"
-      ? params.approvalDecision
-      : null;
-  const approvedByAsk = approvalDecision !== null || params.approved === true;
   if (requiresAsk && !approvedByAsk) {
     await sendNodeEvent(
       client,
@@ -1081,11 +1101,14 @@ async function handleInvoke(
   }
   if (approvalDecision === "allow-always" && security === "allowlist") {
     if (analysisOk) {
-      for (const segment of segments) {
-        const pattern = segment.resolution?.resolvedPath ?? "";
-        if (pattern) {
-          addAllowlistEntry(approvals.file, agentId, pattern);
-        }
+      const patterns = resolveAllowAlwaysPatterns({
+        segments,
+        cwd: params.cwd ?? undefined,
+        env,
+        platform: process.platform,
+      });
+      for (const pattern of patterns) {
+        addAllowlistEntry(approvals.file, agentId, pattern);
       }
     }
   }
@@ -1104,7 +1127,13 @@ async function handleInvoke(
     );
     await sendInvokeResult(client, frame, {
       ok: false,
-      error: { code: "UNAVAILABLE", message: "SYSTEM_RUN_DENIED: allowlist miss" },
+      error: {
+        code: "UNAVAILABLE",
+        message: formatSystemRunAllowlistMissMessage({
+          shellWrapperBlocked,
+          windowsShellWrapperBlocked,
+        }),
+      },
     });
     return;
   }

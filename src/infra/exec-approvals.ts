@@ -416,6 +416,457 @@ type CommandResolution = {
   executableName: string;
 };
 
+const MAX_DISPATCH_WRAPPER_DEPTH = 4;
+const MAX_ALLOW_ALWAYS_RECURSION_DEPTH = 3;
+const POSIX_SHELL_WRAPPERS = new Set(["ash", "bash", "dash", "fish", "ksh", "sh", "zsh"]);
+const WINDOWS_CMD_WRAPPERS = new Set(["cmd.exe", "cmd"]);
+const POWERSHELL_WRAPPERS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"]);
+const DISPATCH_WRAPPER_EXECUTABLES = new Set([
+  "chrt",
+  "chrt.exe",
+  "doas",
+  "doas.exe",
+  "env",
+  "env.exe",
+  "ionice",
+  "ionice.exe",
+  "nice",
+  "nice.exe",
+  "nohup",
+  "nohup.exe",
+  "setsid",
+  "setsid.exe",
+  "stdbuf",
+  "stdbuf.exe",
+  "sudo",
+  "sudo.exe",
+  "taskset",
+  "taskset.exe",
+  "timeout",
+  "timeout.exe",
+]);
+const POSIX_INLINE_COMMAND_FLAGS = new Set(["-lc", "-c", "--command"]);
+const POWERSHELL_INLINE_COMMAND_FLAGS = new Set(["-c", "-command", "--command"]);
+const ENV_OPTIONS_WITH_VALUE = new Set([
+  "-u",
+  "--unset",
+  "-C",
+  "--chdir",
+  "-S",
+  "--split-string",
+  "--default-signal",
+  "--ignore-signal",
+  "--block-signal",
+]);
+const ENV_FLAG_OPTIONS = new Set(["-i", "--ignore-environment", "-0", "--null"]);
+const NICE_OPTIONS_WITH_VALUE = new Set(["-n", "--adjustment", "--priority"]);
+const STDBUF_OPTIONS_WITH_VALUE = new Set(["-i", "--input", "-o", "--output", "-e", "--error"]);
+const TIMEOUT_FLAG_OPTIONS = new Set(["--foreground", "--preserve-status", "-v", "--verbose"]);
+const TIMEOUT_OPTIONS_WITH_VALUE = new Set(["-k", "--kill-after", "-s", "--signal"]);
+
+function basenameLower(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return path.posix.basename(trimmed.replace(/\\/g, "/")).toLowerCase();
+}
+
+function normalizeExecutableName(value?: string | null): string | null {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed ? trimmed : null;
+}
+
+function stripExeSuffix(value: string): string {
+  return value.endsWith(".exe") ? value.slice(0, -4) : value;
+}
+
+function unwrapEnvInvocation(argv: string[]): string[] | null {
+  let idx = 1;
+  let expectsValue = false;
+  while (idx < argv.length) {
+    const token = argv[idx]?.trim() ?? "";
+    if (!token) {
+      idx += 1;
+      continue;
+    }
+    if (expectsValue) {
+      expectsValue = false;
+      idx += 1;
+      continue;
+    }
+    if (token === "--") {
+      idx += 1;
+      break;
+    }
+    if (token.startsWith("-") && token !== "-") {
+      const lower = token.toLowerCase();
+      const [flag] = lower.split("=", 2);
+      if (ENV_FLAG_OPTIONS.has(flag)) {
+        idx += 1;
+        continue;
+      }
+      if (ENV_OPTIONS_WITH_VALUE.has(flag)) {
+        if (!lower.includes("=")) {
+          expectsValue = true;
+        }
+        idx += 1;
+        continue;
+      }
+      return null;
+    }
+    const eq = token.indexOf("=");
+    if (eq > 0) {
+      idx += 1;
+      continue;
+    }
+    break;
+  }
+  if (expectsValue) {
+    return null;
+  }
+  return idx < argv.length ? argv.slice(idx) : null;
+}
+
+function unwrapNiceInvocation(argv: string[]): string[] | null {
+  let idx = 1;
+  let expectsOptionValue = false;
+  while (idx < argv.length) {
+    const token = argv[idx]?.trim() ?? "";
+    if (!token) {
+      idx += 1;
+      continue;
+    }
+    if (expectsOptionValue) {
+      expectsOptionValue = false;
+      idx += 1;
+      continue;
+    }
+    if (token === "--") {
+      idx += 1;
+      break;
+    }
+    if (token.startsWith("-") && token !== "-") {
+      const lower = token.toLowerCase();
+      const [flag] = lower.split("=", 2);
+      if (/^-\d+$/.test(lower)) {
+        idx += 1;
+        continue;
+      }
+      if (NICE_OPTIONS_WITH_VALUE.has(flag)) {
+        if (!lower.includes("=") && lower === flag) {
+          expectsOptionValue = true;
+        }
+        idx += 1;
+        continue;
+      }
+      if (lower.startsWith("-n") && lower.length > 2) {
+        idx += 1;
+        continue;
+      }
+      return null;
+    }
+    break;
+  }
+  if (expectsOptionValue) {
+    return null;
+  }
+  return idx < argv.length ? argv.slice(idx) : null;
+}
+
+function unwrapNohupInvocation(argv: string[]): string[] | null {
+  let idx = 1;
+  while (idx < argv.length) {
+    const token = argv[idx]?.trim() ?? "";
+    if (!token) {
+      idx += 1;
+      continue;
+    }
+    if (token === "--") {
+      idx += 1;
+      break;
+    }
+    if (token.startsWith("-") && token !== "-") {
+      const lower = token.toLowerCase();
+      if (lower === "--help" || lower === "--version") {
+        idx += 1;
+        continue;
+      }
+      return null;
+    }
+    break;
+  }
+  return idx < argv.length ? argv.slice(idx) : null;
+}
+
+function unwrapStdbufInvocation(argv: string[]): string[] | null {
+  let idx = 1;
+  let expectsOptionValue = false;
+  while (idx < argv.length) {
+    const token = argv[idx]?.trim() ?? "";
+    if (!token) {
+      idx += 1;
+      continue;
+    }
+    if (expectsOptionValue) {
+      expectsOptionValue = false;
+      idx += 1;
+      continue;
+    }
+    if (token === "--") {
+      idx += 1;
+      break;
+    }
+    if (token.startsWith("-") && token !== "-") {
+      const lower = token.toLowerCase();
+      const [flag] = lower.split("=", 2);
+      if (STDBUF_OPTIONS_WITH_VALUE.has(flag)) {
+        if (!lower.includes("=")) {
+          expectsOptionValue = true;
+        }
+        idx += 1;
+        continue;
+      }
+      return null;
+    }
+    break;
+  }
+  if (expectsOptionValue) {
+    return null;
+  }
+  return idx < argv.length ? argv.slice(idx) : null;
+}
+
+function unwrapTimeoutInvocation(argv: string[]): string[] | null {
+  let idx = 1;
+  let expectsOptionValue = false;
+  while (idx < argv.length) {
+    const token = argv[idx]?.trim() ?? "";
+    if (!token) {
+      idx += 1;
+      continue;
+    }
+    if (expectsOptionValue) {
+      expectsOptionValue = false;
+      idx += 1;
+      continue;
+    }
+    if (token === "--") {
+      idx += 1;
+      break;
+    }
+    if (token.startsWith("-") && token !== "-") {
+      const lower = token.toLowerCase();
+      const [flag] = lower.split("=", 2);
+      if (TIMEOUT_FLAG_OPTIONS.has(flag)) {
+        idx += 1;
+        continue;
+      }
+      if (TIMEOUT_OPTIONS_WITH_VALUE.has(flag)) {
+        if (!lower.includes("=")) {
+          expectsOptionValue = true;
+        }
+        idx += 1;
+        continue;
+      }
+      return null;
+    }
+    break;
+  }
+  if (expectsOptionValue || idx >= argv.length) {
+    return null;
+  }
+  idx += 1; // duration
+  return idx < argv.length ? argv.slice(idx) : null;
+}
+
+function unwrapKnownDispatchWrapperInvocation(argv: string[]): string[] | null | undefined {
+  const token0 = argv[0]?.trim();
+  if (!token0) {
+    return undefined;
+  }
+  const base = basenameLower(token0);
+  const normalizedBase = stripExeSuffix(base);
+  switch (normalizedBase) {
+    case "env":
+      return unwrapEnvInvocation(argv);
+    case "nice":
+      return unwrapNiceInvocation(argv);
+    case "nohup":
+      return unwrapNohupInvocation(argv);
+    case "stdbuf":
+      return unwrapStdbufInvocation(argv);
+    case "timeout":
+      return unwrapTimeoutInvocation(argv);
+    case "chrt":
+    case "doas":
+    case "ionice":
+    case "setsid":
+    case "sudo":
+    case "taskset":
+      return null;
+    default:
+      return undefined;
+  }
+}
+
+function unwrapDispatchWrappersForResolution(
+  argv: string[],
+  maxDepth = MAX_DISPATCH_WRAPPER_DEPTH,
+): string[] {
+  let current = argv;
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    const unwrapped = unwrapKnownDispatchWrapperInvocation(current);
+    if (unwrapped === undefined) {
+      break;
+    }
+    if (!unwrapped || unwrapped.length === 0) {
+      break;
+    }
+    current = unwrapped;
+  }
+  return current;
+}
+
+function parsePosixInlineCommand(argv: string[]): string | null {
+  for (let i = 1; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (!token) {
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (POSIX_INLINE_COMMAND_FLAGS.has(lower)) {
+      const command = argv
+        .slice(i + 1)
+        .join(" ")
+        .trim();
+      return command || null;
+    }
+    if (lower.startsWith("--command=")) {
+      const command = token.slice(token.indexOf("=") + 1).trim();
+      return command || null;
+    }
+  }
+  return null;
+}
+
+function parsePowershellInlineCommand(argv: string[]): string | null {
+  for (let i = 1; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (!token) {
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (POWERSHELL_INLINE_COMMAND_FLAGS.has(lower)) {
+      const command = argv
+        .slice(i + 1)
+        .join(" ")
+        .trim();
+      return command || null;
+    }
+    if (
+      lower.startsWith("-command=") ||
+      lower.startsWith("--command=") ||
+      lower.startsWith("-c=")
+    ) {
+      const command = token.slice(token.indexOf("=") + 1).trim();
+      return command || null;
+    }
+  }
+  return null;
+}
+
+function parseCmdInlineCommand(argv: string[]): string | null {
+  for (let i = 1; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (!token) {
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (lower === "/c") {
+      const command = argv
+        .slice(i + 1)
+        .join(" ")
+        .trim();
+      return command || null;
+    }
+    if (lower.startsWith("/c:")) {
+      const command = token.slice(3).trim();
+      return command || null;
+    }
+  }
+  return null;
+}
+
+function isShellWrapperToken(token: string): boolean {
+  const base = basenameLower(token);
+  const normalized = stripExeSuffix(base);
+  return (
+    POSIX_SHELL_WRAPPERS.has(normalized) ||
+    WINDOWS_CMD_WRAPPERS.has(base) ||
+    WINDOWS_CMD_WRAPPERS.has(normalized) ||
+    POWERSHELL_WRAPPERS.has(base) ||
+    POWERSHELL_WRAPPERS.has(normalized)
+  );
+}
+
+function extractShellInlineCommand(argv: string[]): string | null {
+  const token0 = argv[0]?.trim();
+  if (!token0) {
+    return null;
+  }
+  const base0 = basenameLower(token0);
+  const normalized0 = stripExeSuffix(base0);
+  if (POSIX_SHELL_WRAPPERS.has(normalized0)) {
+    return parsePosixInlineCommand(argv);
+  }
+  if (WINDOWS_CMD_WRAPPERS.has(base0) || WINDOWS_CMD_WRAPPERS.has(normalized0)) {
+    return parseCmdInlineCommand(argv);
+  }
+  if (POWERSHELL_WRAPPERS.has(base0) || POWERSHELL_WRAPPERS.has(normalized0)) {
+    return parsePowershellInlineCommand(argv);
+  }
+  return null;
+}
+
+function isShellWrapperSegment(segment: ExecCommandSegment): boolean {
+  const candidates = [
+    normalizeExecutableName(segment.resolution?.executableName),
+    normalizeExecutableName(segment.resolution?.rawExecutable),
+    normalizeExecutableName(segment.argv[0]),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    if (isShellWrapperToken(candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isDispatchWrapperSegment(segment: ExecCommandSegment): boolean {
+  const candidates = [
+    normalizeExecutableName(segment.resolution?.executableName),
+    normalizeExecutableName(segment.resolution?.rawExecutable),
+    normalizeExecutableName(segment.argv[0]),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    if (DISPATCH_WRAPPER_EXECUTABLES.has(candidate)) {
+      return true;
+    }
+    const base = basenameLower(candidate);
+    if (DISPATCH_WRAPPER_EXECUTABLES.has(base)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isExecutableFile(filePath: string): boolean {
   try {
     const stat = fs.statSync(filePath);
@@ -505,7 +956,8 @@ export function resolveCommandResolutionFromArgv(
   cwd?: string,
   env?: NodeJS.ProcessEnv,
 ): CommandResolution | null {
-  const rawExecutable = argv[0]?.trim();
+  const effectiveArgv = unwrapDispatchWrappersForResolution(argv);
+  const rawExecutable = effectiveArgv[0]?.trim();
   if (!rawExecutable) {
     return null;
   }
@@ -640,7 +1092,7 @@ export type ExecCommandAnalysis = {
 };
 
 const DISALLOWED_PIPELINE_TOKENS = new Set([">", "<", "`", "\n", "\r", "(", ")"]);
-const DOUBLE_QUOTE_ESCAPES = new Set(["\\", '"', "$", "`", "\n", "\r"]);
+const DOUBLE_QUOTE_ESCAPES = new Set(["\\", '"', "$", "`"]);
 const WINDOWS_UNSUPPORTED_TOKENS = new Set([
   "&",
   "|",
@@ -657,6 +1109,10 @@ const WINDOWS_UNSUPPORTED_TOKENS = new Set([
 
 function isDoubleQuoteEscape(next: string | undefined): next is string {
   return Boolean(next && DOUBLE_QUOTE_ESCAPES.has(next));
+}
+
+function isEscapedLineContinuation(next: string | undefined): next is string {
+  return next === "\n" || next === "\r";
 }
 
 type IteratorAction = "split" | "skip" | "include" | { reject: string };
@@ -710,6 +1166,9 @@ function iterateQuoteAware(
       continue;
     }
     if (inDouble) {
+      if (ch === "\\" && isEscapedLineContinuation(next)) {
+        return { ok: false, reason: "unsupported shell token: newline" };
+      }
       if (ch === "\\" && isDoubleQuoteEscape(next)) {
         buf += ch;
         buf += next;
@@ -1036,6 +1495,110 @@ export function analyzeArgvCommand(params: {
   };
 }
 
+export function extractShellCommandFromArgv(argv: string[]): string | null {
+  if (argv.length === 0) {
+    return null;
+  }
+  let current = argv;
+  for (let depth = 0; depth < MAX_DISPATCH_WRAPPER_DEPTH; depth += 1) {
+    const inline = extractShellInlineCommand(current);
+    if (inline) {
+      return inline;
+    }
+    const unwrapped = unwrapKnownDispatchWrapperInvocation(current);
+    if (!unwrapped || unwrapped.length === 0) {
+      return null;
+    }
+    current = unwrapped;
+  }
+  return null;
+}
+
+function collectAllowAlwaysPatterns(params: {
+  segment: ExecCommandSegment;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: string | null;
+  depth: number;
+  out: Set<string>;
+}) {
+  if (params.depth >= MAX_ALLOW_ALWAYS_RECURSION_DEPTH) {
+    return;
+  }
+
+  if (isDispatchWrapperSegment(params.segment)) {
+    const unwrappedArgv = unwrapKnownDispatchWrapperInvocation(params.segment.argv);
+    if (!unwrappedArgv || unwrappedArgv.length === 0) {
+      return;
+    }
+    collectAllowAlwaysPatterns({
+      segment: {
+        raw: unwrappedArgv.join(" "),
+        argv: unwrappedArgv,
+        resolution: resolveCommandResolutionFromArgv(unwrappedArgv, params.cwd, params.env),
+      },
+      cwd: params.cwd,
+      env: params.env,
+      platform: params.platform,
+      depth: params.depth + 1,
+      out: params.out,
+    });
+    return;
+  }
+
+  const candidatePath = resolveAllowlistCandidatePath(params.segment.resolution, params.cwd);
+  if (!candidatePath) {
+    return;
+  }
+  if (!isShellWrapperSegment(params.segment)) {
+    params.out.add(candidatePath);
+    return;
+  }
+  const inlineCommand = extractShellInlineCommand(params.segment.argv);
+  if (!inlineCommand) {
+    return;
+  }
+  const analysis = analyzeShellCommand({
+    command: inlineCommand,
+    cwd: params.cwd,
+    env: params.env,
+    platform: params.platform,
+  });
+  if (!analysis.ok) {
+    return;
+  }
+  for (const nestedSegment of analysis.segments) {
+    collectAllowAlwaysPatterns({
+      segment: nestedSegment,
+      cwd: params.cwd,
+      env: params.env,
+      platform: params.platform,
+      depth: params.depth + 1,
+      out: params.out,
+    });
+  }
+}
+
+export function resolveAllowAlwaysPatterns(params: {
+  segments: ExecCommandSegment[];
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: string | null;
+}): string[] {
+  const out = new Set<string>();
+  for (const segment of params.segments) {
+    collectAllowAlwaysPatterns({
+      segment,
+      cwd: params.cwd,
+      env: params.env,
+      platform: params.platform,
+      depth: 0,
+      out,
+    });
+  }
+  return [...out];
+}
+
 function isPathLikeToken(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -1264,6 +1827,10 @@ function splitCommandChain(command: string): string[] | null {
       continue;
     }
     if (inDouble) {
+      if (ch === "\\" && isEscapedLineContinuation(next)) {
+        invalidChain = true;
+        break;
+      }
       if (ch === "\\" && isDoubleQuoteEscape(next)) {
         buf += ch;
         buf += next;
@@ -1331,6 +1898,10 @@ export type ExecAllowlistAnalysis = {
   segments: ExecCommandSegment[];
 };
 
+function hasShellLineContinuation(command: string): boolean {
+  return /\\(?:\r\n|\n|\r)/.test(command);
+}
+
 /**
  * Evaluates allowlist for shell commands (including &&, ||, ;) and returns analysis metadata.
  */
@@ -1344,6 +1915,19 @@ export function evaluateShellAllowlist(params: {
   autoAllowSkills?: boolean;
   platform?: string | null;
 }): ExecAllowlistAnalysis {
+  const analysisFailure = (): ExecAllowlistAnalysis => ({
+    analysisOk: false,
+    allowlistSatisfied: false,
+    allowlistMatches: [],
+    segments: [],
+  });
+
+  // Keep allowlist analysis conservative: line continuation semantics are shell-dependent
+  // and can change token boundaries at runtime.
+  if (hasShellLineContinuation(params.command)) {
+    return analysisFailure();
+  }
+
   const chainParts = isWindowsPlatform(params.platform) ? null : splitCommandChain(params.command);
   if (!chainParts) {
     const analysis = analyzeShellCommand({
@@ -1353,12 +1937,7 @@ export function evaluateShellAllowlist(params: {
       platform: params.platform,
     });
     if (!analysis.ok) {
-      return {
-        analysisOk: false,
-        allowlistSatisfied: false,
-        allowlistMatches: [],
-        segments: [],
-      };
+      return analysisFailure();
     }
     const evaluation = evaluateExecAllowlist({
       analysis,
@@ -1387,12 +1966,7 @@ export function evaluateShellAllowlist(params: {
       platform: params.platform,
     });
     if (!analysis.ok) {
-      return {
-        analysisOk: false,
-        allowlistSatisfied: false,
-        allowlistMatches: [],
-        segments: [],
-      };
+      return analysisFailure();
     }
 
     segments.push(...analysis.segments);

@@ -1,16 +1,15 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import { isTruthyEnvValue } from "./env.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
+const DEFAULT_SHELL = "/bin/sh";
 let lastAppliedKeys: string[] = [];
 let cachedShellPath: string | null | undefined;
-
-function resolveShell(env: NodeJS.ProcessEnv): string {
-  const shell = env.SHELL?.trim();
-  return shell && shell.length > 0 ? shell : "/bin/sh";
-}
+let cachedEtcShells: Set<string> | null | undefined;
 
 function resolveShellExecEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const execEnv: NodeJS.ProcessEnv = { ...env };
@@ -29,6 +28,66 @@ function resolveShellExecEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   }
 
   return execEnv;
+}
+
+function resolveTimeoutMs(timeoutMs: number | undefined): number {
+  if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.max(0, timeoutMs);
+}
+
+function readEtcShells(): Set<string> | null {
+  if (cachedEtcShells !== undefined) {
+    return cachedEtcShells;
+  }
+  try {
+    const raw = fs.readFileSync("/etc/shells", "utf8");
+    const entries = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#") && path.isAbsolute(line));
+    cachedEtcShells = new Set(entries);
+  } catch {
+    cachedEtcShells = null;
+  }
+  return cachedEtcShells;
+}
+
+function isTrustedShellPath(shell: string): boolean {
+  if (!path.isAbsolute(shell)) {
+    return false;
+  }
+  const normalized = path.normalize(shell);
+  if (normalized !== shell) {
+    return false;
+  }
+
+  const registeredShells = readEtcShells();
+  return registeredShells?.has(shell) === true;
+}
+
+function resolveShell(env: NodeJS.ProcessEnv): string {
+  const shell = env.SHELL?.trim();
+  if (shell && isTrustedShellPath(shell)) {
+    return shell;
+  }
+  return DEFAULT_SHELL;
+}
+
+function execLoginShellEnvZero(params: {
+  shell: string;
+  env: NodeJS.ProcessEnv;
+  exec: typeof execFileSync;
+  timeoutMs: number;
+}): Buffer {
+  return params.exec(params.shell, ["-l", "-c", "env -0"], {
+    encoding: "buffer",
+    timeout: params.timeoutMs,
+    maxBuffer: DEFAULT_MAX_BUFFER_BYTES,
+    env: params.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 function parseShellEnv(stdout: Buffer): Map<string, string> {
@@ -81,23 +140,13 @@ export function loadShellEnvFallback(opts: ShellEnvFallbackOptions): ShellEnvFal
     return { ok: true, applied: [], skippedReason: "already-has-keys" };
   }
 
-  const timeoutMs =
-    typeof opts.timeoutMs === "number" && Number.isFinite(opts.timeoutMs)
-      ? Math.max(0, opts.timeoutMs)
-      : DEFAULT_TIMEOUT_MS;
-
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs);
   const shell = resolveShell(opts.env);
   const execEnv = resolveShellExecEnv(opts.env);
 
   let stdout: Buffer;
   try {
-    stdout = exec(shell, ["-l", "-c", "env -0"], {
-      encoding: "buffer",
-      timeout: timeoutMs,
-      maxBuffer: DEFAULT_MAX_BUFFER_BYTES,
-      env: execEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    stdout = execLoginShellEnvZero({ shell, env: execEnv, exec, timeoutMs });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(`[openclaw] shell env fallback failed: ${msg}`);
@@ -160,22 +209,13 @@ export function getShellPathFromLoginShell(opts: {
   }
 
   const exec = opts.exec ?? execFileSync;
-  const timeoutMs =
-    typeof opts.timeoutMs === "number" && Number.isFinite(opts.timeoutMs)
-      ? Math.max(0, opts.timeoutMs)
-      : DEFAULT_TIMEOUT_MS;
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs);
   const shell = resolveShell(opts.env);
   const execEnv = resolveShellExecEnv(opts.env);
 
   let stdout: Buffer;
   try {
-    stdout = exec(shell, ["-l", "-c", "env -0"], {
-      encoding: "buffer",
-      timeout: timeoutMs,
-      maxBuffer: DEFAULT_MAX_BUFFER_BYTES,
-      env: execEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    stdout = execLoginShellEnvZero({ shell, env: execEnv, exec, timeoutMs });
   } catch {
     cachedShellPath = null;
     return cachedShellPath;
@@ -189,6 +229,7 @@ export function getShellPathFromLoginShell(opts: {
 
 export function resetShellPathCacheForTests(): void {
   cachedShellPath = undefined;
+  cachedEtcShells = undefined;
 }
 
 export function getShellEnvAppliedKeys(): string[] {

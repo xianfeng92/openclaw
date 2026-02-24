@@ -7,6 +7,7 @@ import type { ExecApprovalDecision } from "../../infra/exec-approvals.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import { GatewayClient } from "../../gateway/client.js";
 import { logDebug, logError } from "../../logger.js";
+import { compileSafeRegex } from "../../security/safe-regex.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import { createDiscordClient } from "../send.shared.js";
 
@@ -233,11 +234,11 @@ export class DiscordExecApprovalHandler {
         return false;
       }
       const matches = config.sessionFilter.some((p) => {
-        try {
-          return session.includes(p) || new RegExp(p).test(session);
-        } catch {
+        if (session.includes(p)) {
           return session.includes(p);
         }
+        const regex = compileSafeRegex(p);
+        return regex ? regex.test(session) : false;
       });
       if (!matches) {
         return false;

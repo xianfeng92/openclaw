@@ -1624,6 +1624,192 @@ function defaultFileExists(filePath: string): boolean {
   }
 }
 
+type SafeBinPolicy = {
+  knownLongFlags: readonly string[];
+  deniedLongFlags: ReadonlySet<string>;
+  allowedValueLongFlags: ReadonlySet<string>;
+  deniedShortFlags: ReadonlySet<string>;
+  allowedValueShortFlags: ReadonlySet<string>;
+  maxPositional?: number;
+  rejectUnknownLong?: boolean;
+};
+
+const EMPTY_FLAGS = new Set<string>();
+const SAFE_BIN_POLICIES: Record<string, SafeBinPolicy> = {
+  sort: {
+    knownLongFlags: [
+      "--key",
+      "--field-separator",
+      "--buffer-size",
+      "--parallel",
+      "--batch-size",
+      "--compress-program",
+      "--files0-from",
+      "--output",
+      "--random-source",
+      "--temporary-directory",
+    ],
+    deniedLongFlags: new Set([
+      "--compress-program",
+      "--files0-from",
+      "--output",
+      "--random-source",
+      "--temporary-directory",
+    ]),
+    allowedValueLongFlags: new Set([
+      "--key",
+      "--field-separator",
+      "--buffer-size",
+      "--parallel",
+      "--batch-size",
+    ]),
+    deniedShortFlags: new Set(["-T", "-o"]),
+    allowedValueShortFlags: new Set(["-k", "-t", "-S"]),
+    maxPositional: 0,
+    rejectUnknownLong: true,
+  },
+  wc: {
+    knownLongFlags: ["--files0-from"],
+    deniedLongFlags: new Set(["--files0-from"]),
+    allowedValueLongFlags: EMPTY_FLAGS,
+    deniedShortFlags: EMPTY_FLAGS,
+    allowedValueShortFlags: EMPTY_FLAGS,
+  },
+};
+
+function hasGlobToken(value: string): boolean {
+  return /[*?[\]]/.test(value);
+}
+
+function normalizeSafeBinExecName(value: string): string {
+  const lowered = value.trim().toLowerCase();
+  return lowered.endsWith(".exe") ? lowered.slice(0, -4) : lowered;
+}
+
+function resolveSafeBinPolicy(value: string): SafeBinPolicy | null {
+  const key = normalizeSafeBinExecName(value);
+  return SAFE_BIN_POLICIES[key] ?? null;
+}
+
+function resolveCanonicalLongFlag(flag: string, knownLongFlags: readonly string[]): string | null {
+  if (!flag.startsWith("--") || flag.length <= 2) {
+    return null;
+  }
+  if (knownLongFlags.includes(flag)) {
+    return flag;
+  }
+  const matches = knownLongFlags.filter((candidate) => candidate.startsWith(flag));
+  if (matches.length !== 1) {
+    return null;
+  }
+  return matches[0] ?? null;
+}
+
+function isDeniedLongFlagOrAbbreviation(flag: string, denied: ReadonlySet<string>): boolean {
+  if (denied.has(flag)) {
+    return true;
+  }
+  for (const candidate of denied) {
+    if (candidate.startsWith(flag)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasUnsafeSafeBinValue(
+  value: string | undefined,
+  cwd: string,
+  exists: (filePath: string) => boolean,
+): boolean {
+  if (!value || value.trim().length === 0) {
+    return true;
+  }
+  if (value === "-") {
+    return false;
+  }
+  if (hasGlobToken(value)) {
+    return true;
+  }
+  if (isPathLikeToken(value)) {
+    return true;
+  }
+  return exists(path.resolve(cwd, value));
+}
+
+function consumeSafeBinLongOption(params: {
+  args: string[];
+  index: number;
+  policy: SafeBinPolicy;
+  cwd: string;
+  exists: (filePath: string) => boolean;
+}): number {
+  const token = params.args[params.index] ?? "";
+  const eqIndex = token.indexOf("=");
+  const flag = eqIndex > 0 ? token.slice(0, eqIndex) : token;
+  const inlineValue = eqIndex > 0 ? token.slice(eqIndex + 1) : undefined;
+
+  const policy = params.policy;
+  let canonical = flag;
+  if (policy.rejectUnknownLong) {
+    const resolved = resolveCanonicalLongFlag(flag, policy.knownLongFlags);
+    if (!resolved) {
+      return -1;
+    }
+    canonical = resolved;
+  } else if (isDeniedLongFlagOrAbbreviation(flag, policy.deniedLongFlags)) {
+    return -1;
+  }
+
+  if (policy.deniedLongFlags.has(canonical)) {
+    return -1;
+  }
+
+  const expectsValue = policy.allowedValueLongFlags.has(canonical);
+  if (inlineValue !== undefined) {
+    if (!expectsValue) {
+      return policy.rejectUnknownLong ? -1 : params.index + 1;
+    }
+    return hasUnsafeSafeBinValue(inlineValue, params.cwd, params.exists) ? -1 : params.index + 1;
+  }
+
+  if (!expectsValue) {
+    return params.index + 1;
+  }
+  const nextValue = params.args[params.index + 1];
+  return hasUnsafeSafeBinValue(nextValue, params.cwd, params.exists) ? -1 : params.index + 2;
+}
+
+function consumeSafeBinShortOptionCluster(params: {
+  args: string[];
+  index: number;
+  policy: SafeBinPolicy;
+  cwd: string;
+  exists: (filePath: string) => boolean;
+}): number {
+  const token = params.args[params.index] ?? "";
+  if (!token.startsWith("-") || token.startsWith("--") || token.length <= 1) {
+    return params.index + 1;
+  }
+  const cluster = token.slice(1);
+  for (let i = 0; i < cluster.length; i += 1) {
+    const flag = `-${cluster[i]}`;
+    if (params.policy.deniedShortFlags.has(flag)) {
+      return -1;
+    }
+    if (!params.policy.allowedValueShortFlags.has(flag)) {
+      continue;
+    }
+    const inlineValue = cluster.slice(i + 1);
+    if (inlineValue) {
+      return hasUnsafeSafeBinValue(inlineValue, params.cwd, params.exists) ? -1 : params.index + 1;
+    }
+    const nextValue = params.args[params.index + 1];
+    return hasUnsafeSafeBinValue(nextValue, params.cwd, params.exists) ? -1 : params.index + 2;
+  }
+  return params.index + 1;
+}
+
 export function normalizeSafeBins(entries?: string[]): Set<string> {
   if (!Array.isArray(entries)) {
     return new Set();
@@ -1667,16 +1853,53 @@ export function isSafeBinUsage(params: {
   }
   const cwd = params.cwd ?? process.cwd();
   const exists = params.fileExists ?? defaultFileExists;
-  const argv = params.argv.slice(1);
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
+  const policy = resolveSafeBinPolicy(execName);
+  let positionalCount = 0;
+  for (let i = 1; i < params.argv.length; ) {
+    const token = params.argv[i];
     if (!token) {
+      i += 1;
       continue;
     }
     if (token === "-") {
+      i += 1;
+      continue;
+    }
+    if (token === "--") {
+      i += 1;
       continue;
     }
     if (token.startsWith("-")) {
+      if (token.startsWith("--")) {
+        if (policy) {
+          const nextIndex = consumeSafeBinLongOption({
+            args: params.argv,
+            index: i,
+            policy,
+            cwd,
+            exists,
+          });
+          if (nextIndex < 0) {
+            return false;
+          }
+          i = nextIndex;
+          continue;
+        }
+      } else if (policy) {
+        const nextIndex = consumeSafeBinShortOptionCluster({
+          args: params.argv,
+          index: i,
+          policy,
+          cwd,
+          exists,
+        });
+        if (nextIndex < 0) {
+          return false;
+        }
+        i = nextIndex;
+        continue;
+      }
+
       const eqIndex = token.indexOf("=");
       if (eqIndex > 0) {
         const value = token.slice(eqIndex + 1);
@@ -1684,7 +1907,12 @@ export function isSafeBinUsage(params: {
           return false;
         }
       }
+      i += 1;
       continue;
+    }
+    positionalCount += 1;
+    if (typeof policy?.maxPositional === "number" && positionalCount > policy.maxPositional) {
+      return false;
     }
     if (isPathLikeToken(token)) {
       return false;
@@ -1692,6 +1920,7 @@ export function isSafeBinUsage(params: {
     if (exists(path.resolve(cwd, token))) {
       return false;
     }
+    i += 1;
   }
   return true;
 }

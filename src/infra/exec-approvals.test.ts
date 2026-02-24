@@ -364,6 +364,76 @@ describe("exec approvals safe bins", () => {
     });
     expect(ok).toBe(false);
   });
+
+  it("blocks denied sort long-option abbreviations in safe-bin mode", () => {
+    const ok = isSafeBinUsage({
+      argv: ["sort", "--compress-prog=sh"],
+      resolution: {
+        rawExecutable: "sort",
+        resolvedPath: "/usr/bin/sort",
+        executableName: "sort",
+      },
+      safeBins: normalizeSafeBins(["sort"]),
+      cwd: "/tmp",
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("blocks denied wc long-option abbreviations in safe-bin mode", () => {
+    const ok = isSafeBinUsage({
+      argv: ["wc", "--files0-fro=list.txt"],
+      resolution: {
+        rawExecutable: "wc",
+        resolvedPath: "/usr/bin/wc",
+        executableName: "wc",
+      },
+      safeBins: normalizeSafeBins(["wc"]),
+      cwd: "/tmp",
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rejects unknown sort long options in safe-bin mode", () => {
+    const ok = isSafeBinUsage({
+      argv: ["sort", "--totally-unknown=1"],
+      resolution: {
+        rawExecutable: "sort",
+        resolvedPath: "/usr/bin/sort",
+        executableName: "sort",
+      },
+      safeBins: normalizeSafeBins(["sort"]),
+      cwd: "/tmp",
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rejects ambiguous sort long-option abbreviations in safe-bin mode", () => {
+    const ok = isSafeBinUsage({
+      argv: ["sort", "--f=1"],
+      resolution: {
+        rawExecutable: "sort",
+        resolvedPath: "/usr/bin/sort",
+        executableName: "sort",
+      },
+      safeBins: normalizeSafeBins(["sort"]),
+      cwd: "/tmp",
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("allows unambiguous safe sort long-option abbreviations", () => {
+    const ok = isSafeBinUsage({
+      argv: ["sort", "--ke=1,1"],
+      resolution: {
+        rawExecutable: "sort",
+        resolvedPath: "/usr/bin/sort",
+        executableName: "sort",
+      },
+      safeBins: normalizeSafeBins(["sort"]),
+      cwd: "/tmp",
+    });
+    expect(ok).toBe(true);
+  });
 });
 
 describe("exec approvals allowlist evaluation", () => {

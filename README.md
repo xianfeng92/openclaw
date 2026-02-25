@@ -35,15 +35,15 @@ Alternative installers:
 - macOS/Linux: `curl -fsSL https://openclaw.ai/install.sh | bash`
 - Windows (PowerShell): `iwr -useb https://openclaw.ai/install.ps1 | iex`
 
-## Current Project Status (Snapshot: 2026-02-23)
+## Current Project Status (Snapshot: 2026-02-25)
 
 | Workstream               | Status                                    | Notes                                                                                                                                                   |
 | ------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop MVP Slim         | Phase 0-4 complete                        | Completed branch hygiene, security hardening, desktop auth UX, and slim-mode scope alignment.                                                           |
+| Desktop MVP Slim         | Phase 0-5 complete                        | Added Super Terminal (Ctrl+Shift+T) with markdown rendering, Dracula theme, and enhanced UX.                                                            |
 | Slim mode strategy       | Locked                                    | `OPENCLAW_DESKTOP_MVP_SLIM` / `CLAWDBOT_DESKTOP_MVP_SLIM` drive runtime slim gating; plugin ecosystem is disabled in slim mode (architecture retained). |
 | Minimal toolset strategy | Locked                                    | Opt-in only (`desktopMvpMinimalToolset` or env flag); not default-on.                                                                                   |
 | Project Neuro            | P0 complete, P1 complete, P2-001 complete | Event contracts, privacy baseline, context ingest/snapshot, action loop, undo/policy/retention/reliability, and heuristic preview are shipped.          |
-| Next focus               | In progress                               | Phase 5 wrap-up (design doc in `.codex/knowledge/` after merge completion).                                                                             |
+| Next focus               | TBD                                       | Awaiting roadmap definition.                                                                                                                            |
 
 ## Key Features
 

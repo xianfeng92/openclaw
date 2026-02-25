@@ -473,8 +473,13 @@ export function attachGatewayWsMessageHandler(params: {
         };
         if (!device) {
           const canSkipDevice = sharedAuthOk;
+          const requestOriginNormalized = (requestOrigin ?? "").trim().toLowerCase();
+          const hasOpaqueOrMissingOrigin =
+            requestOriginNormalized.length === 0 || requestOriginNormalized === "null";
+          const allowLoopbackOpaqueOriginControlUi =
+            isControlUi && hasOpaqueOrMissingOrigin && hostIsLocal && sharedAuthOk;
 
-          if (isControlUi && !allowControlUiBypass) {
+          if (isControlUi && !allowControlUiBypass && !allowLoopbackOpaqueOriginControlUi) {
             const errorMessage = "control ui requires HTTPS or localhost (secure context)";
             setHandshakeState("failed");
             setCloseCause("control-ui-insecure-auth", {
@@ -492,6 +497,11 @@ export function attachGatewayWsMessageHandler(params: {
             });
             close(1008, errorMessage);
             return;
+          }
+          if (allowLoopbackOpaqueOriginControlUi) {
+            logWsControl.warn(
+              "allowing loopback control-ui connection with opaque/missing Origin via shared auth",
+            );
           }
 
           // Allow shared-secret authenticated connections (e.g., control-ui) to skip device identity

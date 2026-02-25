@@ -59,24 +59,38 @@ export function checkBrowserOrigin(params: {
   origin?: string;
   allowedOrigins?: string[];
 }): OriginCheckResult {
+  const allowlist = (params.allowedOrigins ?? [])
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  const requestHost = normalizeHostHeader(params.requestHost);
+  const requestHostname = resolveHostName(requestHost);
+  const originRaw = (params.origin ?? "").trim().toLowerCase();
+  // Desktop/native wrappers (e.g. file://) may present `Origin: null` (or omit
+  // Origin entirely). Allow this only for loopback hosts to keep remote origin
+  // checks strict.
+  if (!originRaw || originRaw === "null") {
+    if (allowlist.includes(originRaw)) {
+      return { ok: true };
+    }
+    if (isLoopbackHost(requestHostname)) {
+      return { ok: true };
+    }
+    return { ok: false, reason: "origin missing or invalid" };
+  }
+
   const parsedOrigin = parseOrigin(params.origin);
   if (!parsedOrigin) {
     return { ok: false, reason: "origin missing or invalid" };
   }
-
-  const allowlist = (params.allowedOrigins ?? [])
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
   if (allowlist.includes(parsedOrigin.origin)) {
     return { ok: true };
   }
 
-  const requestHost = normalizeHostHeader(params.requestHost);
   if (requestHost && parsedOrigin.host === requestHost) {
     return { ok: true };
   }
 
-  const requestHostname = resolveHostName(requestHost);
   if (isLoopbackHost(parsedOrigin.hostname) && isLoopbackHost(requestHostname)) {
     return { ok: true };
   }

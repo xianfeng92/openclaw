@@ -7,6 +7,8 @@ import { GatewayManager } from "./gateway.js";
 import { ChatWindowManager } from "./window.js";
 import { SettingsManager } from "./settings.js";
 import { setupIpc } from "./ipc.js";
+import { TerminalWindowManager } from "./terminal-window.js";
+import { setupTerminalIpc } from "./terminal-ipc.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,13 +16,16 @@ const __dirname = path.dirname(__filename);
 let tray: ReturnType<typeof createTray> | null = null;
 let gatewayManager: GatewayManager | null = null;
 let chatWindowManager: ChatWindowManager | null = null;
+let terminalWindowManager: TerminalWindowManager | null = null;
 let settingsManager: SettingsManager | null = null;
 let hiddenWindow: BrowserWindow | null = null;
 const PRIMARY_INVOKE_SHORTCUT = "Alt+Space";
 const FALLBACK_INVOKE_SHORTCUT = "Alt+Shift+Space";
+const TERMINAL_SHORTCUT = "CommandOrControl+Shift+T";
 const INVOKE_SHORTCUT_RETRY_MS = 15_000;
 const INVOKE_SHORTCUTS = [PRIMARY_INVOKE_SHORTCUT, FALLBACK_INVOKE_SHORTCUT] as const;
 let registeredInvokeShortcuts = new Set<string>();
+let registeredTerminalShortcut = false;
 let invokeHotkeyRetryTimer: ReturnType<typeof setInterval> | null = null;
 
 function unregisterInvokeHotkeys(): void {
@@ -32,6 +37,16 @@ function unregisterInvokeHotkeys(): void {
     }
   }
   registeredInvokeShortcuts.clear();
+
+  if (registeredTerminalShortcut) {
+    try {
+      globalShortcut.unregister(TERMINAL_SHORTCUT);
+      registeredTerminalShortcut = false;
+      console.log("[App] Unregistered terminal shortcut");
+    } catch (err) {
+      console.warn(`[App] Failed to unregister terminal shortcut:`, err);
+    }
+  }
 }
 
 function clearInvokeHotkeyRetry(): void {
@@ -74,6 +89,23 @@ function registerInvokeHotkeys(): void {
       console.log(`[App] Registered invoke shortcut: ${shortcut}`);
     } catch (err) {
       console.warn(`[App] Error registering invoke shortcut ${shortcut}:`, err);
+    }
+  }
+
+  // Register terminal shortcut
+  if (!registeredTerminalShortcut && terminalWindowManager) {
+    try {
+      const ok = globalShortcut.register(TERMINAL_SHORTCUT, () => {
+        terminalWindowManager?.toggle();
+      });
+      if (ok) {
+        registeredTerminalShortcut = true;
+        console.log(`[App] Registered terminal shortcut: ${TERMINAL_SHORTCUT}`);
+      } else {
+        console.warn(`[App] Failed to register terminal shortcut: ${TERMINAL_SHORTCUT}`);
+      }
+    } catch (err) {
+      console.warn(`[App] Error registering terminal shortcut:`, err);
     }
   }
 
@@ -181,9 +213,14 @@ void app
   // Initialize managers
   gatewayManager = new GatewayManager();
   chatWindowManager = new ChatWindowManager(gatewayManager);
+  terminalWindowManager = new TerminalWindowManager();
   settingsManager = new SettingsManager();
 
   console.log("[App] Managers initialized");
+
+  // Setup terminal IPC handlers (pass gatewayManager for auth)
+  setupTerminalIpc(gatewayManager);
+  console.log("[App] Terminal IPC setup complete");
 
   // Create a hidden window to keep app alive
   // Electron requires at least one window to stay running
@@ -251,6 +288,7 @@ app.on("quit", () => {
   tray = null;
   gatewayManager = null;
   chatWindowManager = null;
+  terminalWindowManager = null;
   settingsManager = null;
 });
 
@@ -269,5 +307,6 @@ process.on("SIGTERM", () => {
 export type AppContext = {
   gatewayManager: GatewayManager;
   chatWindowManager: ChatWindowManager;
+  terminalWindowManager: TerminalWindowManager;
   settingsManager: SettingsManager;
 };

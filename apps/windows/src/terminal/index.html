@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Terminal</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      color-scheme: dark;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: #1e1e1e;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+      font-size: 14px;
+      color: #d4d4d4;
+    }
+
+    #terminal {
+      width: 100%;
+      height: 100vh;
+      padding: 8px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .line {
+      line-height: 1.4;
+      min-height: 1.4em;
+    }
+
+    .prompt {
+      color: #0dbc79;
+    }
+
+    .input-line {
+      display: flex;
+      align-items: center;
+    }
+
+    .input-line .prompt {
+      margin-right: 4px;
+    }
+
+    #input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #d4d4d4;
+      font-family: inherit;
+      font-size: inherit;
+      caret-color: #d4d4d4;
+    }
+
+    /* ANSI colors */
+    .ansi-bold { font-weight: bold; }
+    .ansi-dim { opacity: 0.7; }
+    .ansi-italic { font-style: italic; }
+    .ansi-underline { text-decoration: underline; }
+    .ansi-black { color: #000000; }
+    .ansi-red { color: #cd3131; }
+    .ansi-green { color: #0dbc79; }
+    .ansi-yellow { color: #e5e510; }
+    .ansi-blue { color: #2472c8; }
+    .ansi-magenta { color: #bc3fbc; }
+    .ansi-cyan { color: #11a8cd; }
+    .ansi-white { color: #e5e5e5; }
+    .ansi-bright-black { color: #666666; }
+    .ansi-bright-red { color: #f14c4c; }
+    .ansi-bright-green { color: #23d18b; }
+    .ansi-bright-yellow { color: #f5f543; }
+    .ansi-bright-blue { color: #3b8eea; }
+    .ansi-bright-magenta { color: #d670d6; }
+    .ansi-bright-cyan { color: #29b8db; }
+    .ansi-bright-white { color: #ffffff; }
+    .bg-black { background-color: #000000; }
+    .bg-red { background-color: #cd3131; }
+    .bg-green { background-color: #0dbc79; }
+    .bg-yellow { background-color: #e5e510; }
+    .bg-blue { background-color: #2472c8; }
+    .bg-magenta { background-color: #bc3fbc; }
+    .bg-cyan { background-color: #11a8cd; }
+    .bg-white { background-color: #e5e5e5; }
+
+    /* Scrollbar styling */
+    #terminal::-webkit-scrollbar {
+      width: 10px;
+    }
+    #terminal::-webkit-scrollbar-track {
+      background: #1e1e1e;
+    }
+    #terminal::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 5px;
+    }
+    #terminal::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <script type="module" src="./terminal.mjs"></script>
+</body>
+</html>

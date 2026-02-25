@@ -35,6 +35,23 @@ describe("checkBrowserOrigin", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("accepts missing origin on loopback host", () => {
+    const result = checkBrowserOrigin({
+      requestHost: "127.0.0.1:18789",
+      origin: "",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts null origin when explicitly allowlisted", () => {
+    const result = checkBrowserOrigin({
+      requestHost: "gateway.example.com:18789",
+      origin: "null",
+      allowedOrigins: ["null"],
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it("rejects mismatched origins", () => {
     const result = checkBrowserOrigin({
       requestHost: "gateway.example.com:18789",

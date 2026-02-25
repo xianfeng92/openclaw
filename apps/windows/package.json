@@ -8,9 +8,11 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm build:main && pnpm build:preload",
+    "build": "pnpm build:main && pnpm build:preload && pnpm build:terminal && pnpm build:preload:terminal && node scripts/copy-terminal-files.cjs",
     "build:main": "tsdown --no-config src/main/index.ts -f esm -d dist/main --target node22 --sourcemap --clean --external electron",
     "build:preload": "tsdown --no-config src/preload/index.ts -f cjs -d dist/preload --target node22 --sourcemap --no-clean --external electron",
+    "build:terminal": "tsdown --no-config src/terminal/ansi.ts -f esm -d dist/terminal --target esnext --sourcemap --no-clean && tsdown --no-config src/terminal/gateway-client.ts -f esm -d dist/terminal --target esnext --sourcemap --no-clean && tsdown --no-config src/terminal/terminal.ts -f esm -d dist/terminal --target esnext --sourcemap --no-clean && tsdown --no-config src/terminal/command-handler.ts -f esm -d dist/terminal --target esnext --sourcemap --no-clean",
+    "build:preload:terminal": "tsdown --no-config src/preload/terminal-api.ts -f cjs -d dist/preload --target node22 --sourcemap --no-clean --external electron",
     "build:prod": "pnpm build && electron-builder --win --x64",
     "build:dir": "pnpm build && electron-builder --dir",
     "lint": "oxlint --type-aware",

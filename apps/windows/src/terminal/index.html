@@ -10,6 +10,16 @@
     }
 
     :root {
+      --bg-main: #0d1117;
+      --text-primary: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent-prompt: #00ff41;
+      --bg-block: #161b22;
+      --accent-cyan: #00f0ff;
+      --warn: #f2cc60;
+      --error: #ff7b72;
+      --border-subtle: rgba(139, 148, 158, 0.45);
+
       color-scheme: dark;
     }
 
@@ -22,99 +32,246 @@
     }
 
     body {
-      background: #1e1e1e;
-      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+      background: radial-gradient(1400px 700px at 0% 0%, #111a24 0%, var(--bg-main) 52%);
+      font-family:
+        "JetBrainsMono Nerd Font",
+        "FiraCode Nerd Font",
+        "Hack Nerd Font",
+        "JetBrains Mono",
+        "Fira Code",
+        "Hack",
+        "Consolas",
+        monospace;
       font-size: 14px;
-      color: #d4d4d4;
+      color: var(--text-primary);
+      text-rendering: geometricPrecision;
+      letter-spacing: 0.01em;
+    }
+
+    #terminal-shell {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     #terminal {
       width: 100%;
-      height: 100vh;
-      padding: 8px;
+      flex: 1;
+      padding: 10px 10px 6px;
       overflow-y: auto;
       overflow-x: hidden;
       white-space: pre-wrap;
-      word-wrap: break-word;
+      word-break: break-word;
     }
 
     .line {
-      line-height: 1.4;
-      min-height: 1.4em;
+      line-height: 1.45;
+      min-height: 1.45em;
+      color: var(--text-primary);
     }
 
     .prompt {
-      color: #0dbc79;
+      color: var(--accent-prompt);
+      text-shadow: 0 0 6px rgba(0, 255, 65, 0.25);
+      user-select: none;
     }
 
     .input-line {
       display: flex;
       align-items: center;
+      gap: 6px;
+      padding-top: 8px;
+      padding-bottom: 4px;
+      position: sticky;
+      bottom: 0;
+      background:
+        linear-gradient(180deg, rgba(13, 17, 23, 0) 0%, rgba(13, 17, 23, 0.92) 36%, var(--bg-main) 100%);
+      z-index: 5;
     }
 
     .input-line .prompt {
-      margin-right: 4px;
+      margin-right: 2px;
+    }
+
+    .input-stack {
+      flex: 1;
+      position: relative;
+      min-height: 1.45em;
+    }
+
+    .input-ghost {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      color: var(--text-muted);
+      white-space: pre;
+      pointer-events: none;
+      overflow: hidden;
+      min-height: 1.45em;
     }
 
     #input {
-      flex: 1;
+      width: 100%;
       background: transparent;
       border: none;
       outline: none;
-      color: #d4d4d4;
+      color: var(--accent-prompt);
       font-family: inherit;
       font-size: inherit;
-      caret-color: #d4d4d4;
+      line-height: 1.45;
+      caret-color: var(--accent-prompt);
+      position: relative;
+      z-index: 1;
+    }
+
+    .command-echo .prompt-mark {
+      color: var(--accent-prompt);
+    }
+
+    .command-echo .command-text {
+      color: var(--text-primary);
+    }
+
+    .io-turn {
+      margin: 10px 0 14px;
+      padding: 8px 10px 10px;
+      border-bottom: 1px dashed var(--text-muted);
+      border-radius: 6px;
+    }
+
+    .io-turn.io-user {
+      background: linear-gradient(180deg, rgba(0, 240, 255, 0.05) 0%, rgba(22, 27, 34, 0.5) 100%);
+    }
+
+    .io-turn.io-assistant {
+      background: var(--bg-block);
+    }
+
+    .io-header {
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      user-select: none;
+    }
+
+    .io-body {
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      line-height: 1.45;
+      min-height: 1.45em;
+    }
+
+    .spinner-line {
+      color: var(--accent-cyan);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .system-info {
+      color: var(--text-muted);
+    }
+
+    .system-ok {
+      color: var(--accent-prompt);
+    }
+
+    .system-warn {
+      color: var(--warn);
+    }
+
+    .system-error {
+      color: var(--error);
+    }
+
+    .status-bar {
+      position: sticky;
+      bottom: 0;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      min-height: 32px;
+      padding: 6px 10px;
+      background:
+        linear-gradient(90deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 0.96) 100%);
+      border-top: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 12px;
+      backdrop-filter: blur(2px);
+      z-index: 8;
+    }
+
+    .status-item {
+      white-space: nowrap;
+    }
+
+    .status-prompt {
+      color: var(--accent-prompt);
     }
 
     /* ANSI colors */
     .ansi-bold { font-weight: bold; }
-    .ansi-dim { opacity: 0.7; }
+    .ansi-dim { opacity: 0.7; color: var(--text-muted); }
     .ansi-italic { font-style: italic; }
     .ansi-underline { text-decoration: underline; }
-    .ansi-black { color: #000000; }
-    .ansi-red { color: #cd3131; }
-    .ansi-green { color: #0dbc79; }
-    .ansi-yellow { color: #e5e510; }
-    .ansi-blue { color: #2472c8; }
-    .ansi-magenta { color: #bc3fbc; }
-    .ansi-cyan { color: #11a8cd; }
-    .ansi-white { color: #e5e5e5; }
-    .ansi-bright-black { color: #666666; }
-    .ansi-bright-red { color: #f14c4c; }
-    .ansi-bright-green { color: #23d18b; }
-    .ansi-bright-yellow { color: #f5f543; }
-    .ansi-bright-blue { color: #3b8eea; }
-    .ansi-bright-magenta { color: #d670d6; }
-    .ansi-bright-cyan { color: #29b8db; }
-    .ansi-bright-white { color: #ffffff; }
-    .bg-black { background-color: #000000; }
-    .bg-red { background-color: #cd3131; }
-    .bg-green { background-color: #0dbc79; }
-    .bg-yellow { background-color: #e5e510; }
-    .bg-blue { background-color: #2472c8; }
-    .bg-magenta { background-color: #bc3fbc; }
-    .bg-cyan { background-color: #11a8cd; }
-    .bg-white { background-color: #e5e5e5; }
 
-    /* Scrollbar styling */
+    .ansi-black { color: #0b0f14; }
+    .ansi-red { color: var(--error); }
+    .ansi-green { color: var(--accent-prompt); }
+    .ansi-yellow { color: var(--warn); }
+    .ansi-blue { color: #58a6ff; }
+    .ansi-magenta { color: #79c0ff; }
+    .ansi-cyan { color: var(--accent-cyan); }
+    .ansi-white { color: var(--text-primary); }
+
+    .ansi-bright-black { color: var(--text-muted); }
+    .ansi-bright-red { color: #ffa198; }
+    .ansi-bright-green { color: #3cf477; }
+    .ansi-bright-yellow { color: #ffe380; }
+    .ansi-bright-blue { color: #79c0ff; }
+    .ansi-bright-magenta { color: #d2a8ff; }
+    .ansi-bright-cyan { color: #72fff7; }
+    .ansi-bright-white { color: #f0f6fc; }
+
+    .bg-black { background-color: #0b0f14; }
+    .bg-red { background-color: rgba(255, 123, 114, 0.2); }
+    .bg-green { background-color: rgba(0, 255, 65, 0.2); }
+    .bg-yellow { background-color: rgba(242, 204, 96, 0.2); }
+    .bg-blue { background-color: rgba(88, 166, 255, 0.2); }
+    .bg-magenta { background-color: rgba(210, 168, 255, 0.2); }
+    .bg-cyan { background-color: rgba(0, 240, 255, 0.2); }
+    .bg-white { background-color: var(--text-primary); }
+
     #terminal::-webkit-scrollbar {
       width: 10px;
     }
     #terminal::-webkit-scrollbar-track {
-      background: #1e1e1e;
+      background: #0f141c;
     }
     #terminal::-webkit-scrollbar-thumb {
-      background: #444;
+      background: #27313f;
       border-radius: 5px;
+      border: 2px solid #0f141c;
     }
     #terminal::-webkit-scrollbar-thumb:hover {
-      background: #555;
+      background: #3a4a5f;
     }
   </style>
 </head>
 <body>
-  <div id="terminal"></div>
+  <main id="terminal-shell">
+    <div id="terminal"></div>
+    <div id="status-bar" class="status-bar" aria-live="polite">
+      <span id="status-agent" class="status-item status-prompt">[Agent: main]</span>
+      <span id="status-ping" class="status-item">[Ping: --ms]</span>
+      <span id="status-memory" class="status-item">[Memory: --MB]</span>
+      <span id="status-time" class="status-item">[Current Time: --:--:--]</span>
+    </div>
+  </main>
   <script type="module" src="./terminal.mjs"></script>
 </body>
 </html>

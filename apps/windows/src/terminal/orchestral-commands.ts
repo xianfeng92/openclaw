@@ -1,0 +1,465 @@
+/**
+ * Orchestral command handlers for OpenClaw Super Terminal.
+ * Integrates with the orchestration system via IPC.
+ */
+import type { TerminalAPI } from "../preload/terminal-api";
+
+declare global {
+  interface Window {
+    terminalAPI: TerminalAPI;
+  }
+}
+
+type WriteLineFn = (terminal: HTMLElement, text: string) => void;
+type WriteHtmlFn = (terminal: HTMLElement, html: string) => void;
+
+// Helper to escape HTML
+function escapeHtml(text: string): string {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Helper to write styled section
+function writeSection(terminal: HTMLElement, title: string, icon = "[i]", writeHtml: WriteHtmlFn): void {
+  writeHtml(
+    terminal,
+    `<span style="color: var(--accent-cyan); font-weight: bold;">${icon} ${title}</span>`,
+  );
+}
+
+// Check if orchestral API is available
+function hasOrchestralAPI(): boolean {
+  return typeof window.terminalAPI?.orchestralSpawn === "function";
+}
+
+// Show orchestral help
+function showOrchestralHelp(terminal: HTMLElement, writeHtml: WriteHtmlFn): void {
+  if (!hasOrchestralAPI()) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Orchestral commands not available. Update to the latest version.</span>`,
+    );
+    return;
+  }
+
+  writeHtml(terminal, `
+<span style="font-weight: bold; color: var(--accent-prompt);">
+╔═══════════════════════════════════════════════════════════╗
+║              Orchestral Commands                            ║
+╚═══════════════════════════════════════════════════════════╝
+</span>
+
+<span style="font-weight: bold; color: var(--accent-cyan);">Task Management:</span>
+  /spawn &lt;description&gt; [--agent &lt;type&gt;] [--branch &lt;name&gt;] [--no-code]
+      Spawn a new agent task in an isolated environment
+      --no-code: Skip automatic VS Code opening
+
+  /tasks [--status &lt;running|completed|failed&gt;] [--agent &lt;type&gt;]
+      List tasks with optional filters
+
+<span style="font-weight: bold; color: var(--accent-cyan);">Agent Management:</span>
+  /agents list
+      List all running agents
+
+  /agents kill &lt;task-id&gt;
+      Terminate a running agent task
+
+  /agents attach &lt;task-id&gt;
+      Show command to attach to an agent's session
+
+  /agents redirect &lt;task-id&gt; &lt;message&gt;
+      Send a message to redirect an agent
+
+  /agents output &lt;task-id&gt;
+      Show recent output from an agent's session
+
+<span style="font-weight: bold; color: var(--accent-cyan);">Examples:</span>
+  /spawn "Add user authentication"
+  /spawn "Fix login bug" --agent codex
+  /agents list
+  /tasks --status running
+  /agents kill task-20250225-001
+`);
+}
+
+// Handle /spawn command
+export async function handleSpawnCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: WriteLineFn,
+  writeHtml: WriteHtmlFn,
+): Promise<void> {
+  if (!hasOrchestralAPI()) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Orchestral API not available</span>`,
+    );
+    return;
+  }
+
+  if (args.length === 0) {
+    writeHtml(terminal, `<span class="system-info">Usage: /spawn &lt;description&gt; [--agent &lt;claude|codex|gemini&gt;] [--branch &lt;name&gt;] [--no-code]</span>`);
+    return;
+  }
+
+  // Parse arguments
+  const description: string[] = [];
+  let agent: string | undefined;
+  let branch: string | undefined;
+  let openVsCode = true;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--agent" && i + 1 < args.length) {
+      agent = args[++i];
+    } else if (arg === "--branch" && i + 1 < args.length) {
+      branch = args[++i];
+    } else if (arg === "--no-code") {
+      openVsCode = false;
+    } else {
+      description.push(arg);
+    }
+  }
+
+  const desc = description.join(" ");
+  if (!desc) {
+    writeHtml(terminal, `<span class="system-error">Error: Description is required</span>`);
+    return;
+  }
+
+  writeSection(terminal, "Creating Task", "[spawn]", writeHtml);
+  writeLine(terminal, `Description: ${desc}`);
+  if (agent) writeLine(terminal, `Agent: ${agent}`);
+  if (branch) writeLine(terminal, `Branch: ${branch}`);
+  if (!openVsCode) writeLine(terminal, `VS Code: disabled`);
+
+  try {
+    const result = await window.terminalAPI.orchestralSpawn!({
+      description: desc,
+      agent,
+      branch,
+    });
+
+    console.log("[Orchestral] Spawn result:", result);
+
+    if (result.success && result.task) {
+      writeLine(terminal, "");
+      writeHtml(terminal, `<span class="system-ok">${result.task.message || "Task created"}</span>`);
+
+      if (result.task.details) {
+        writeLine(terminal, "");
+        const detailLines = result.task.details.split("\n");
+        for (const line of detailLines) {
+          if (line.includes("Worktree:") || line.includes("Branch:") || line.includes("Repository:")) {
+            writeHtml(terminal, `<span style="color: var(--accent-cyan);">${line}</span>`);
+          } else {
+            writeLine(terminal, line);
+          }
+        }
+      }
+
+      if (result.task.worktreeCreated && result.task.worktree) {
+        writeLine(terminal, "");
+        writeSection(terminal, "Next Steps", "[next]", writeHtml);
+        writeHtml(terminal, `<span style="color: var(--text-primary);">1. Open VS Code:</span>`);
+        writeHtml(
+          terminal,
+          `<span class="system-info">   code --add "${result.task.worktree}"</span>`,
+        );
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span style="color: var(--text-primary);">2. Or navigate in terminal:</span>`);
+        writeHtml(
+          terminal,
+          `<span class="system-info">   cd "${result.task.worktree}"</span>`,
+        );
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span style="color: var(--text-primary);">3. Implement: ${desc}</span>`);
+
+        // Try to open VS Code automatically (unless --no-code flag)
+        if (openVsCode) {
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--accent-cyan);">Opening VS Code...</span>`);
+          try {
+            await window.terminalAPI.execShell(`code --add "${result.task.worktree}"`);
+            writeHtml(terminal, `<span class="system-ok">[ok] VS Code opened</span>`);
+          } catch (codeError) {
+            console.error("[Orchestral] VS Code error:", codeError);
+            writeHtml(terminal, `<span class="system-warn">[warn] Could not open VS Code automatically</span>`);
+          }
+        }
+      }
+
+      writeLine(terminal, "");
+      writeHtml(
+        terminal,
+        `<span class="system-info">Tip: Use /agents list to see all tasks</span>`,
+      );
+    } else {
+      writeHtml(
+        terminal,
+        `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
+      );
+    }
+  } catch (err) {
+    console.error("[Orchestral] Spawn error:", err);
+    writeHtml(
+      terminal,
+      `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+    );
+  }
+}
+
+// Handle /agents command
+export async function handleAgentsCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: WriteLineFn,
+  writeHtml: WriteHtmlFn,
+): Promise<void> {
+  if (!hasOrchestralAPI()) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Orchestral API not available</span>`,
+    );
+    return;
+  }
+
+  const subcommand = args[0]?.toLowerCase() || "list";
+
+  switch (subcommand) {
+    case "list": {
+      writeSection(terminal, "Running Agents", "[agent]", writeHtml);
+      writeLine(terminal, "Fetching agents...");
+
+      try {
+        const result = await window.terminalAPI.orchestralAgents!("list", []);
+
+        if (result.tasks && result.tasks.length > 0) {
+          for (const task of result.tasks) {
+            writeLine(terminal, "");
+            const agentTag = task.agent === "claude" ? "[claude]" : task.agent === "codex" ? "[codex]" : "[gemini]";
+            writeHtml(terminal, `<span class="system-ok">${agentTag} ${task.id}</span>`);
+            writeLine(terminal, `  ${task.description}`);
+            writeLine(terminal, `  Started: ${new Date(task.startedAt).toLocaleTimeString()}`);
+            if (task.tmuxSession) {
+              writeLine(terminal, `  Session: ${task.tmuxSession}`);
+            }
+            if (task.branch) {
+              writeLine(terminal, `  Branch: ${task.branch}`);
+            }
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">Total: ${result.tasks.length} running agent(s)</span>`);
+        } else {
+          writeLine(terminal, "No running agents.");
+        }
+      } catch (err) {
+        writeHtml(
+          terminal,
+          `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+        );
+      }
+      break;
+    }
+
+    case "kill": {
+      const taskId = args[1];
+      if (!taskId) {
+        writeHtml(terminal, `<span class="system-info">Usage: /agents kill &lt;task-id&gt;</span>`);
+        return;
+      }
+
+      writeLine(terminal, `Terminating task ${taskId}...`);
+
+      try {
+        const result = await window.terminalAPI.orchestralAgents!("kill", [taskId]);
+        if (result.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Task ${taskId} terminated</span>`);
+        } else {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
+          );
+        }
+      } catch (err) {
+        writeHtml(
+          terminal,
+          `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+        );
+      }
+      break;
+    }
+
+    case "attach": {
+      const taskId = args[1];
+      if (!taskId) {
+        writeHtml(terminal, `<span class="system-info">Usage: /agents attach &lt;task-id&gt;</span>`);
+        return;
+      }
+
+      try {
+        const result = await window.terminalAPI.orchestralAgents!("attach", [taskId]);
+        if (result.success && result.attachCommand) {
+          writeSection(terminal, "Attach to Session", "[tmux]", writeHtml);
+          writeLine(terminal, `Task: ${taskId}`);
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--accent-cyan);">Run in another terminal:</span>`);
+          writeHtml(terminal, `<span style="color: var(--text-primary);">  ${result.attachCommand}</span>`);
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">(Press Ctrl+B, then D to detach without killing)</span>`);
+        } else {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] Task not found or no session available</span>`,
+          );
+        }
+      } catch (err) {
+        writeHtml(
+          terminal,
+          `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+        );
+      }
+      break;
+    }
+
+    case "redirect": {
+      const taskId = args[1];
+      const message = args.slice(2).join(" ");
+
+      if (!taskId || !message) {
+        writeHtml(terminal, `<span class="system-info">Usage: /agents redirect &lt;task-id&gt; &lt;message&gt;</span>`);
+        return;
+      }
+
+      try {
+        const result = await window.terminalAPI.orchestralAgents!("redirect", [taskId, message]);
+        if (result.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Message sent to ${taskId}</span>`);
+        } else {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
+          );
+        }
+      } catch (err) {
+        writeHtml(
+          terminal,
+          `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+        );
+      }
+      break;
+    }
+
+    case "output": {
+      const taskId = args[1];
+      if (!taskId) {
+        writeHtml(terminal, `<span class="system-info">Usage: /agents output &lt;task-id&gt;</span>`);
+        return;
+      }
+
+      writeSection(terminal, `Agent Output: ${taskId}`, "[out]", writeHtml);
+
+      try {
+        const result = await window.terminalAPI.orchestralAgents!("output", [taskId]);
+        if (result.success && result.output) {
+          const lines = result.output.split("\n");
+          const preview = lines.slice(-20).join("\n"); // Show last 20 lines
+          writeHtml(terminal, `<span style="color: var(--text-primary);">${escapeHtml(preview)}</span>`);
+        } else if (result.success) {
+          writeHtml(terminal, `<span class="system-info">No output available or session is not active</span>`);
+        } else {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
+          );
+        }
+      } catch (err) {
+        writeHtml(
+          terminal,
+          `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+        );
+      }
+      break;
+    }
+
+    default:
+      writeHtml(terminal, `<span class="system-info">Usage: /agents [list|kill|attach|redirect|output] [args]</span>`);
+      break;
+  }
+}
+
+// Handle /tasks command
+export async function handleTasksCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: WriteLineFn,
+  writeHtml: WriteHtmlFn,
+): Promise<void> {
+  if (!hasOrchestralAPI()) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Orchestral API not available</span>`,
+    );
+    return;
+  }
+
+  // Parse filters
+  const filters: Record<string, string> = {};
+  for (const arg of args) {
+    if (arg.startsWith("--status=")) {
+      filters.status = arg.slice(9);
+    } else if (arg.startsWith("--agent=")) {
+      filters.agent = arg.slice(8);
+    } else if (arg.startsWith("--limit=")) {
+      filters.limit = arg.slice(8);
+    }
+  }
+
+  writeSection(terminal, "Tasks", "[tasks]", writeHtml);
+  writeLine(terminal, "Fetching tasks...");
+
+  try {
+    const result = await window.terminalAPI.orchestralTasks!(filters);
+
+    if (result.tasks && result.tasks.length > 0) {
+      // Show summary counts
+      const allResult = await window.terminalAPI.orchestralTasks!({});
+      if (allResult.summary) {
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span class="system-info">${allResult.summary}</span>`);
+        writeLine(terminal, "");
+      }
+
+      for (const task of result.tasks) {
+        const statusTag = task.status === "running" ? "[RUN]" :
+                          task.status === "completed" ? "[DONE]" :
+                          task.status === "failed" ? "[FAIL]" :
+                          task.status === "pending" ? "[PEND]" : "[STOP]";
+        const agentTag = task.agent === "claude" ? "[claude]" : task.agent === "codex" ? "[codex]" : "[gemini]";
+
+        writeHtml(terminal, `<span style="color: var(--text-primary);">${statusTag} ${agentTag} ${task.id} [${task.status}]</span>`);
+        writeLine(terminal, `  ${task.description}`);
+        writeLine(terminal, `  Started: ${new Date(task.startedAt).toLocaleString()}`);
+
+        if (task.completedAt) {
+          const duration = Math.round((task.completedAt - task.startedAt) / 1000);
+          writeLine(terminal, `  Duration: ${duration}s`);
+        }
+        writeLine(terminal, "");
+      }
+
+      writeHtml(terminal, `<span class="system-info">Showing ${result.tasks.length} task(s)</span>`);
+    } else {
+      writeLine(terminal, "No tasks found.");
+    }
+  } catch (err) {
+    writeHtml(
+      terminal,
+      `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+    );
+  }
+}
+
+// Export help function
+export { showOrchestralHelp };

@@ -1,11 +1,22 @@
 import type { TerminalAPI } from "../preload/terminal-api";
-import { TerminalGatewayClient } from "./gateway-client.js";
+import { TerminalGatewayClient, type GatewayChatState } from "./gateway-client.js";
+import {
+  handleSpawnCommand,
+  handleAgentsCommand,
+  handleTasksCommand,
+  showOrchestralHelp,
+} from "./orchestral-commands.js";
 
 declare global {
   interface Window {
     terminalAPI: TerminalAPI;
   }
 }
+
+const SPINNER_FRAMES = ["[ / ]", "[ - ]", "[ \\ ]", "[ | ]"] as const;
+const TYPEWRITER_MIN_DELAY_MS = 10;
+const TYPEWRITER_MAX_DELAY_MS = 30;
+const CHAT_TIMEOUT_MS = 60_000;
 
 export type ParsedCommand =
   | { type: "shell"; command: string }
@@ -18,6 +29,8 @@ let gatewayClient: TerminalGatewayClient | null = null;
 let currentSessionKey = "default";
 let currentAgent = "main";
 
+type TurnRole = "user" | "assistant";
+
 export function parseCommand(input: string): ParsedCommand {
   const trimmed = input.trim();
 
@@ -25,12 +38,10 @@ export function parseCommand(input: string): ParsedCommand {
     return { type: "empty" };
   }
 
-  // Local shell command (! prefix)
   if (trimmed.startsWith("!") && trimmed !== "!") {
     return { type: "shell", command: trimmed.slice(1) };
   }
 
-  // Slash command
   if (trimmed.startsWith("/")) {
     const parts = trimmed.split(/\s+/);
     const cmd = parts[0];
@@ -38,44 +49,87 @@ export function parseCommand(input: string): ParsedCommand {
     return { type: "slash", command: cmd, args };
   }
 
-  // Regular message - send to agent
   return { type: "message", content: trimmed };
 }
 
-// Helper to write plain text to terminal
-function writeLine(terminal: HTMLElement, text: string): void {
+export function getTerminalStateSnapshot(): {
+  agent: string;
+  sessionKey: string;
+  connected: boolean;
+} {
+  return {
+    agent: currentAgent,
+    sessionKey: currentSessionKey,
+    connected: gatewayClient?.isConnected() ?? false,
+  };
+}
+
+function appendBeforeInput(terminal: HTMLElement, node: HTMLElement): void {
   const inputLine = terminal.querySelector(".input-line");
-  const line = document.createElement("div");
-  line.className = "line";
-  line.textContent = text;
   if (inputLine) {
-    terminal.insertBefore(line, inputLine);
+    terminal.insertBefore(node, inputLine);
   } else {
-    terminal.appendChild(line);
+    terminal.appendChild(node);
   }
   terminal.scrollTop = terminal.scrollHeight;
+}
+
+// Helper to write plain text to terminal
+function writeLine(terminal: HTMLElement, text: string, className = "system-info"): void {
+  const line = document.createElement("div");
+  line.className = `line ${className}`;
+  line.textContent = text;
+  appendBeforeInput(terminal, line);
 }
 
 // Helper to write HTML (with colors) to terminal
-function writeHtml(terminal: HTMLElement, html: string): void {
-  const inputLine = terminal.querySelector(".input-line");
+function writeHtml(terminal: HTMLElement, html: string, className = "line"): void {
   const line = document.createElement("div");
-  line.className = "line";
+  line.className = className;
   line.innerHTML = html;
-  if (inputLine) {
-    terminal.insertBefore(line, inputLine);
-  } else {
-    terminal.appendChild(line);
-  }
-  terminal.scrollTop = terminal.scrollHeight;
+  appendBeforeInput(terminal, line);
 }
 
-// Write a styled section header
-function writeSection(terminal: HTMLElement, title: string, icon = "ℹ️"): void {
-  writeHtml(
-    terminal,
-    `<span style="color: #11a8cd; font-weight: bold;">${icon} ${title}</span>`,
-  );
+function createTurn(terminal: HTMLElement, role: TurnRole, label: string): HTMLDivElement {
+  const turn = document.createElement("section");
+  turn.className = `io-turn io-${role}`;
+
+  const header = document.createElement("div");
+  header.className = "io-header";
+  header.textContent = label;
+  turn.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "io-body";
+  turn.appendChild(body);
+
+  appendBeforeInput(terminal, turn);
+  return body;
+}
+
+function startAsciiSpinner(container: HTMLElement, label: string): () => void {
+  let frame = 0;
+  container.textContent = `${SPINNER_FRAMES[frame]} ${label}`;
+  const timer = window.setInterval(() => {
+    frame = (frame + 1) % SPINNER_FRAMES.length;
+    container.textContent = `${SPINNER_FRAMES[frame]} ${label}`;
+  }, 95);
+
+  return () => {
+    window.clearInterval(timer);
+  };
+}
+
+function randomTypeDelayMs(): number {
+  const span = TYPEWRITER_MAX_DELAY_MS - TYPEWRITER_MIN_DELAY_MS + 1;
+  return TYPEWRITER_MIN_DELAY_MS + Math.floor(Math.random() * span);
+}
+
+function createClientRunId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `run-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
 export async function handleCommand(terminal: HTMLElement, input: string): Promise<void> {
@@ -84,15 +138,12 @@ export async function handleCommand(terminal: HTMLElement, input: string): Promi
   switch (parsed.type) {
     case "empty":
       return;
-
     case "shell":
       await handleShellCommand(terminal, parsed.command);
       break;
-
     case "slash":
       await handleSlashCommand(terminal, parsed.command, parsed.args);
       break;
-
     case "message":
       await handleMessage(terminal, parsed.content);
       break;
@@ -106,27 +157,25 @@ async function handleShellCommand(terminal: HTMLElement, command: string): Promi
     const result = await window.terminalAPI.execShell(command);
     const runId = result.runId;
 
-    // Wait for output
     const unsubscribe = window.terminalAPI.onShellOutput((data) => {
-      if (data.runId !== runId) return;
+      if (data.runId !== runId) {
+        return;
+      }
 
       if (data.type === "stdout") {
-        writeLine(terminal, data.data);
+        writeLine(terminal, data.data, "line");
       } else if (data.type === "stderr") {
-        writeHtml(terminal, `<span style="color: #cd3131;">${escapeHtml(data.data)}</span>`);
+        writeHtml(terminal, `<span class="system-error">${escapeHtml(data.data)}</span>`);
       } else if (data.type === "exit") {
         unsubscribe();
         const exitCode = data.exitCode ?? 0;
         if (exitCode !== 0) {
-          writeHtml(
-            terminal,
-            `<span style="color: #666666;">Exit code: ${exitCode}</span>`,
-          );
+          writeHtml(terminal, `<span class="system-info">Exit code: ${exitCode}</span>`);
         }
       }
     });
   } catch (err) {
-    writeHtml(terminal, `<span style="color: #cd3131;">Error: ${escapeHtml(String(err))}</span>`);
+    writeHtml(terminal, `<span class="system-error">Error: ${escapeHtml(String(err))}</span>`);
   }
 }
 
@@ -170,7 +219,7 @@ async function handleSlashCommand(
         writeLine(terminal, "Available agents: main, claude, gpt, local");
       } else {
         currentAgent = args[0];
-        writeLine(terminal, `Switched to agent: ${currentAgent}`);
+        writeHtml(terminal, `<span class="system-ok">[ok] Switched to agent: ${escapeHtml(currentAgent)}</span>`);
       }
       return;
     }
@@ -181,54 +230,64 @@ async function handleSlashCommand(
         writeLine(terminal, "Usage: /session <session-key> | new | list");
       } else if (args[0] === "new") {
         currentSessionKey = `session-${Date.now()}`;
-        writeLine(terminal, `Created new session: ${currentSessionKey}`);
+        writeHtml(
+          terminal,
+          `<span class="system-ok">[ok] Created new session: ${escapeHtml(currentSessionKey)}</span>`,
+        );
       } else if (args[0] === "list") {
         writeLine(terminal, "Sessions: (list not implemented in MVP)");
       } else {
         currentSessionKey = args[0];
-        writeLine(terminal, `Switched to session: ${currentSessionKey}`);
+        writeHtml(
+          terminal,
+          `<span class="system-ok">[ok] Switched to session: ${escapeHtml(currentSessionKey)}</span>`,
+        );
       }
       return;
     }
 
     case "/whoami": {
       const gatewayInfo = await window.terminalAPI.getGatewayInfo();
-      writeHtml(terminal, `
-<span style="font-weight: bold; color: #0dbc79;">User Information</span>
-  Agent: ${currentAgent}
-  Session: ${currentSessionKey}
-  Gateway Port: ${gatewayInfo.port ?? "unknown"}
-  Platform: ${navigator.platform}
-`.trim());
+      writeHtml(
+        terminal,
+        `
+<span class="system-ok"><strong>User Information</strong></span>
+Agent: ${escapeHtml(currentAgent)}
+Session: ${escapeHtml(currentSessionKey)}
+Gateway Port: ${gatewayInfo.port ?? "unknown"}
+Platform: ${escapeHtml(navigator.platform)}
+`.trim(),
+      );
       return;
     }
 
     case "/env":
     case "/environment": {
-      writeHtml(terminal, `
-<span style="font-weight: bold; color: #0dbc79;">Environment</span>
-  Terminal: OpenClaw Super Terminal v1.0
-  Mode: Desktop (Electron)
-  Platform: ${navigator.platform}
-  User Agent: ${navigator.userAgent}
-  Language: ${navigator.language}
-`.trim());
+      writeHtml(
+        terminal,
+        `
+<span class="system-ok"><strong>Environment</strong></span>
+Terminal: OpenClaw Terminal
+Mode: Desktop (Electron)
+Platform: ${escapeHtml(navigator.platform)}
+Language: ${escapeHtml(navigator.language)}
+`.trim(),
+      );
       return;
     }
 
     case "/echo": {
-      writeLine(terminal, args.join(" "));
+      writeLine(terminal, args.join(" "), "line");
       return;
     }
 
     case "/date": {
-      writeLine(terminal, new Date().toString());
+      writeLine(terminal, new Date().toString(), "line");
       return;
     }
 
     case "/time": {
-      const now = new Date();
-      writeLine(terminal, now.toLocaleTimeString());
+      writeLine(terminal, new Date().toLocaleTimeString(), "line");
       return;
     }
 
@@ -250,17 +309,38 @@ async function handleSlashCommand(
       if (gatewayClient) {
         gatewayClient.disconnect();
         gatewayClient = null;
-        writeLine(terminal, "Disconnected from Gateway");
+        writeHtml(terminal, "<span class='system-warn'>[!] Disconnected from gateway</span>");
       } else {
-        writeLine(terminal, "Not connected to Gateway");
+        writeLine(terminal, "Not connected to gateway");
       }
+      return;
+    }
+
+    case "/spawn": {
+      await handleSpawnCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/agents": {
+      await handleAgentsCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/tasks": {
+      await handleTasksCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/orchestral":
+    case "/orch": {
+      showOrchestralHelp(terminal, writeHtml);
       return;
     }
 
     default: {
       writeHtml(
         terminal,
-        `<span style="color: #e5e510;">Unknown command: ${escapeHtml(command)}</span>`,
+        `<span class="system-warn">Unknown command: ${escapeHtml(command)}</span>`,
       );
       writeLine(terminal, "Type /help for available commands");
     }
@@ -268,14 +348,16 @@ async function handleSlashCommand(
 }
 
 function showHelp(terminal: HTMLElement): void {
-  writeHtml(terminal, `
-<span style="font-weight: bold; color: #0dbc79;">
+  writeHtml(
+    terminal,
+    `
+<span class="system-ok"><strong>
 ╔═══════════════════════════════════════════════════════════╗
-║                    OpenClaw Terminal Help                  ║
+║                    OpenClaw Terminal Help                ║
 ╚═══════════════════════════════════════════════════════════╝
-</span>
+</strong></span>
 
-<span style="font-weight: bold; color: #11a8cd;">Terminal Commands:</span>
+<span class="system-info"><strong>Terminal Commands:</strong></span>
   /help          - Show this help message
   /clear         - Clear the terminal screen
   /status        - Show terminal and gateway status
@@ -286,180 +368,242 @@ function showHelp(terminal: HTMLElement): void {
   /date          - Show current date
   /time          - Show current time
 
-<span style="font-weight: bold; color: #11a8cd;">Session Commands:</span>
+<span class="system-info"><strong>Session Commands:</strong></span>
   /agent &lt;name&gt;   - Switch agent (main, claude, gpt, local)
   /session &lt;key&gt;  - Switch session key
   /session new    - Create a new session
 
-<span style="font-weight: bold; color: #11a8cd;">Gateway Commands:</span>
-  /connect       - Connect to Gateway
-  /disconnect    - Disconnect from Gateway
+<span class="system-info"><strong>Orchestral Commands:</strong></span>
+  /spawn &lt;desc&gt;  - Spawn a new agent task
+  /agents list    - List running agents
+  /agents kill    - Terminate an agent
+  /tasks          - List all tasks
+  /orchestral     - Show orchestral command help
 
-<span style="font-weight: bold; color: #11a8cd;">Shell Commands:</span>
-  !&lt;command&gt;     - Execute shell command
+<span class="system-info"><strong>Gateway Commands:</strong></span>
+  /connect        - Connect to gateway
+  /disconnect     - Disconnect from gateway
+
+<span class="system-info"><strong>Shell Commands:</strong></span>
+  !&lt;command&gt;      - Execute shell command
   Example: !ls, !pwd, !git status
 
-<span style="font-weight: bold; color: #11a8cd;">Agent Messages:</span>
-  Just type a message to send it to the current agent
+<span class="system-info"><strong>Agent Messages:</strong></span>
+  Type a message to send it to the current agent
 
-<span style="font-weight: bold; color: #11a8cd;">Keyboard Shortcuts:</span>
+<span class="system-info"><strong>Keyboard Shortcuts:</strong></span>
   Enter          - Execute command
   Tab            - Autocomplete command
   Ctrl+C         - Abort current input
   Ctrl+L         - Clear screen
   Up/Down        - Browse command history
   Ctrl+Shift+T   - Toggle terminal window
-`);
+`.trim(),
+  );
 }
 
-async function showStatus(terminal: HTMLElement): void {
+async function showStatus(terminal: HTMLElement): Promise<void> {
   const gatewayInfo = await window.terminalAPI.getGatewayInfo();
   const connected = gatewayClient?.isConnected() ?? false;
 
-  writeHtml(terminal, `
-<span style="font-weight: bold; color: #0dbc79;">OpenClaw Terminal Status</span>
+  writeHtml(
+    terminal,
+    `
+<span class="system-ok"><strong>OpenClaw Terminal Status</strong></span>
 
-<span style="color: #11a8cd;">Session:</span>
-  Agent: ${currentAgent}
-  Session: ${currentSessionKey}
+<span class="system-info"><strong>Session:</strong></span>
+  Agent: ${escapeHtml(currentAgent)}
+  Session: ${escapeHtml(currentSessionKey)}
 
-<span style="color: #11a8cd;">Gateway:</span>
-  Status: ${connected ? "<span style='color: #0dbc79;'>Connected</span>" : "<span style='color: #cd3131;'>Disconnected</span>"}
+<span class="system-info"><strong>Gateway:</strong></span>
+  Status: ${connected ? "<span class='system-ok'>Connected</span>" : "<span class='system-error'>Disconnected</span>"}
   Port: ${gatewayInfo.port ?? "unknown"}
 
-<span style="color: #11a8cd;">Terminal:</span>
-  Platform: ${navigator.platform}
+<span class="system-info"><strong>Terminal:</strong></span>
+  Platform: ${escapeHtml(navigator.platform)}
   Mode: Desktop
-`.trim());
+`.trim(),
+  );
 }
 
-async function connectGateway(terminal: HTMLElement): void {
-  writeLine(terminal, "Connecting to Gateway...");
+async function connectGateway(terminal: HTMLElement): Promise<void> {
+  writeLine(terminal, "Connecting to gateway...");
 
   try {
     const gatewayInfo = await window.terminalAPI.getGatewayInfo();
-
     if (!gatewayInfo.port) {
       writeHtml(
         terminal,
-        "<span style='color: #cd3131;'>Error: Gateway port not found. Is Gateway running?</span>",
+        "<span class='system-error'>Error: Gateway port not found. Is gateway running?</span>",
       );
       return;
     }
 
-    // Use default auth token
     const auth = window.terminalAPI.getGatewayAuthSync();
     if (!auth?.token) {
-      writeHtml(
-        terminal,
-        "<span style='color: #cd3131;'>Error: Gateway auth token not found</span>",
-      );
+      writeHtml(terminal, "<span class='system-error'>Error: Gateway auth token not found</span>");
       return;
     }
 
     const url = `ws://127.0.0.1:${auth.port}`;
     gatewayClient = new TerminalGatewayClient(url, auth.token);
-
     await gatewayClient.connect();
-    writeHtml(
-      terminal,
-      "<span style='color: #0dbc79;'>✓ Connected to Gateway</span>",
-    );
+    writeHtml(terminal, "<span class='system-ok'>[ok] Connected to gateway</span>");
   } catch (err) {
     writeHtml(
       terminal,
-      `<span style='color: #cd3131;'>✗ Failed to connect: ${escapeHtml(String(err))}</span>`,
+      `<span class='system-error'>[err] Failed to connect: ${escapeHtml(String(err))}</span>`,
     );
   }
 }
 
 async function handleMessage(terminal: HTMLElement, content: string): Promise<void> {
-  // Check if connected to Gateway
   if (!gatewayClient || !gatewayClient.isConnected()) {
-    // Auto-connect
     await connectGateway(terminal);
     if (!gatewayClient?.isConnected()) {
-      writeLine(terminal, "Cannot send message: Not connected to Gateway");
+      writeHtml(terminal, "<span class='system-error'>Cannot send message: gateway offline</span>");
       return;
     }
   }
 
-  // Show user message
-  writeHtml(terminal, `<span style="color: #e5e5e5;">${escapeHtml(content)}</span>`);
+  const userBody = createTurn(terminal, "user", "[user input]");
+  userBody.textContent = content;
 
-  // Show thinking indicator
-  writeHtml(
-    terminal,
-    `<span style="color: #11a8cd;">⟳ Thinking...</span>`,
-  );
+  const assistantBody = createTurn(terminal, "assistant", `[assistant:${currentAgent}]`);
+  const spinnerNode = document.createElement("div");
+  spinnerNode.className = "spinner-line";
+  assistantBody.appendChild(spinnerNode);
+
+  const outputNode = document.createElement("div");
+  outputNode.className = "io-body";
+  assistantBody.appendChild(outputNode);
+
+  const stopSpinner = startAsciiSpinner(spinnerNode, "thinking");
+  let spinnerVisible = true;
+  const hideSpinner = () => {
+    if (!spinnerVisible) {
+      return;
+    }
+    spinnerVisible = false;
+    stopSpinner();
+    spinnerNode.remove();
+  };
+
+  const runId = createClientRunId();
+  let closed = false;
+  let seq = -1;
+  let targetText = "";
+  let renderedLength = 0;
+  let typingTimer: number | null = null;
+  let timeoutTimer: number | null = null;
+  let terminalState: "pending" | GatewayChatState = "pending";
+
+  const renderOutput = (text: string) => {
+    outputNode.textContent = text;
+    terminal.scrollTop = terminal.scrollHeight;
+  };
+
+  const maybeFinalize = () => {
+    if (closed || terminalState === "pending" || typingTimer !== null) {
+      return;
+    }
+    closed = true;
+    hideSpinner();
+    if (!targetText) {
+      if (terminalState === "aborted") {
+        renderOutput("[aborted]");
+      } else if (terminalState === "error") {
+        renderOutput("[error] request failed");
+      } else {
+        renderOutput("[no output]");
+      }
+    }
+    if (timeoutTimer !== null) {
+      window.clearTimeout(timeoutTimer);
+      timeoutTimer = null;
+    }
+    unsubscribe();
+  };
+
+  const pumpTypewriter = () => {
+    if (typingTimer !== null) {
+      return;
+    }
+    const tick = () => {
+      if (renderedLength < targetText.length) {
+        renderedLength += 1;
+        renderOutput(targetText.slice(0, renderedLength));
+        typingTimer = window.setTimeout(tick, randomTypeDelayMs());
+        return;
+      }
+      typingTimer = null;
+      maybeFinalize();
+    };
+    tick();
+  };
+
+  const mergeIncomingText = (incoming: string, state: "delta" | "final") => {
+    if (!incoming) {
+      return;
+    }
+
+    if (!targetText) {
+      targetText = incoming;
+    } else if (incoming === targetText) {
+      // Ignore exact duplicate payloads.
+    } else if (incoming.startsWith(targetText)) {
+      targetText = incoming;
+    } else if (state === "delta" && !targetText.startsWith(incoming)) {
+      // Some streams send chunk deltas instead of cumulative text.
+      targetText += incoming;
+    } else if (state === "final" && targetText.startsWith(incoming)) {
+      // Keep the longer already-streamed body.
+    } else {
+      targetText = incoming;
+    }
+
+    if (renderedLength > targetText.length) {
+      renderedLength = targetText.length;
+    }
+    hideSpinner();
+    pumpTypewriter();
+  };
+
+  const unsubscribe = gatewayClient.onEvent((event) => {
+    if (closed || event.runId !== runId) {
+      return;
+    }
+    if (typeof event.seq === "number") {
+      if (event.seq <= seq) {
+        return;
+      }
+      seq = event.seq;
+    }
+
+    if (event.state === "delta") {
+      mergeIncomingText(event.text, "delta");
+      return;
+    }
+
+    terminalState = event.state;
+    mergeIncomingText(event.text, "final");
+    maybeFinalize();
+  });
+
+  timeoutTimer = window.setTimeout(() => {
+    if (closed) {
+      return;
+    }
+    terminalState = "error";
+    mergeIncomingText("[timeout] no response received within 60s", "final");
+    maybeFinalize();
+  }, CHAT_TIMEOUT_MS);
 
   try {
-    let responseStarted = false;
-    let lastResponseLine: HTMLElement | null = null;
-
-    const unsubscribe = gatewayClient!.onEvent((message, state) => {
-      console.log("[Terminal] Event received:", { message, state });
-
-      if (!responseStarted) {
-        // Remove "Thinking..." line (last line before input)
-        const lines = terminal.querySelectorAll(".line");
-        if (lines.length > 0) {
-          const lastLine = lines[lines.length - 1];
-          if (lastLine.textContent?.includes("Thinking")) {
-            lastLine.remove();
-          }
-        }
-        responseStarted = true;
-      }
-
-      // Create or update response line
-      if (!lastResponseLine) {
-        const inputLine = terminal.querySelector(".input-line");
-        lastResponseLine = document.createElement("div");
-        lastResponseLine.className = "line";
-        if (inputLine) {
-          terminal.insertBefore(lastResponseLine, inputLine);
-        } else {
-          terminal.appendChild(lastResponseLine);
-        }
-      }
-
-      // Update the response display
-      lastResponseLine.innerHTML = `<span style="color: #d4d4d4;">${escapeHtml(message)}</span>`;
-      terminal.scrollTop = terminal.scrollHeight;
-
-      if (state === "final" || state === "aborted") {
-        lastResponseLine = null;
-        unsubscribe();
-        writeLine(terminal, ""); // Add blank line
-      }
-    });
-
-    const result = await gatewayClient!.sendMessage(currentSessionKey, content);
-    console.log("[Terminal] sendMessage result:", result);
-
-    // If no response after timeout, remove thinking indicator
-    setTimeout(() => {
-      if (!responseStarted) {
-        unsubscribe();
-        const lines = terminal.querySelectorAll(".line");
-        if (lines.length > 0) {
-          const lastLine = lines[lines.length - 1];
-          if (lastLine.textContent?.includes("Thinking")) {
-            lastLine.remove();
-          }
-        }
-        writeHtml(
-          terminal,
-          "<span style='color: #e5e510;'>⚠ No response received (timeout)</span>",
-        );
-      }
-    }, 60000);
+    await gatewayClient.sendMessage(currentSessionKey, content, { idempotencyKey: runId });
   } catch (err) {
-    console.error("[Terminal] sendMessage error:", err);
-    writeHtml(
-      terminal,
-      `<span style='color: #cd3131;'>✗ Error: ${escapeHtml(String(err))}</span>`,
-    );
+    terminalState = "error";
+    mergeIncomingText(`[error] ${String(err)}`, "final");
+    maybeFinalize();
   }
 }

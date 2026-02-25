@@ -15,6 +15,17 @@ export interface TerminalAPI {
 
   // Get auth sync (for bootstrap)
   getGatewayAuthSync: () => { token: string; port: number } | null;
+
+  // Orchestral commands
+  orchestralSpawn: (opts: {
+    description: string;
+    agent?: string;
+    branch?: string;
+  }) => Promise<{ success: boolean; task?: any; error?: string }>;
+
+  orchestralAgents: (action: string, args: string[]) => Promise<any>;
+
+  orchestralTasks: (filters: Record<string, string>) => Promise<any>;
 }
 
 const api: TerminalAPI = {
@@ -45,6 +56,11 @@ const api: TerminalAPI = {
       return null;
     }
   },
+
+  // Orchestral commands
+  orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),
+  orchestralAgents: (action, args) => ipcRenderer.invoke("terminal:orchestral-agents", action, args),
+  orchestralTasks: (filters) => ipcRenderer.invoke("terminal:orchestral-tasks", filters),
 };
 
 contextBridge.exposeInMainWorld("terminalAPI", api);

@@ -324,7 +324,7 @@ export async function runTui(opts: TuiOptions) {
     const agentLabel = formatAgentLabel(currentAgentId);
     header.setText(
       theme.header(
-        `openclaw tui - ${client.connection.url} - agent ${agentLabel} - session ${sessionLabel}`,
+        ` ⚡ OPENCLAW TUI │ ${client.connection.url} │ Agent: ${agentLabel} │ Session: ${sessionLabel} `,
       ),
     );
   };
@@ -511,15 +511,15 @@ export async function runTui(opts: TuiOptions) {
     const reasoningLabel =
       reasoning === "on" ? "reasoning" : reasoning === "stream" ? "reasoning:stream" : null;
     const footerParts = [
-      `agent ${agentLabel}`,
-      `session ${sessionLabel}`,
+      `Agent: ${agentLabel}`,
+      `Session: ${sessionLabel}`,
       modelLabel,
-      think !== "off" ? `think ${think}` : null,
-      verbose !== "off" ? `verbose ${verbose}` : null,
+      think !== "off" ? `Think: ${think}` : null,
+      verbose !== "off" ? `Verbose: ${verbose}` : null,
       reasoningLabel,
       tokens,
     ].filter(Boolean);
-    footer.setText(theme.dim(footerParts.join(" | ")));
+    footer.setText(theme.dim(` ${footerParts.join(" │ ")} `));
   };
 
   const { openOverlay, closeOverlay } = createOverlayHandlers(tui, editor);

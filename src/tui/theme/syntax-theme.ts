@@ -4,49 +4,88 @@ type HighlightTheme = Record<string, (text: string) => string>;
 
 /**
  * Syntax highlighting theme for code blocks.
+ * Dracula-inspired theme matching the overall TUI aesthetic.
  * Uses chalk functions to style different token types.
  */
 export function createSyntaxTheme(fallback: (text: string) => string): HighlightTheme {
   return {
-    keyword: chalk.hex("#C586C0"), // purple - if, const, function, etc.
-    built_in: chalk.hex("#4EC9B0"), // teal - console, Math, etc.
-    type: chalk.hex("#4EC9B0"), // teal - types
-    literal: chalk.hex("#569CD6"), // blue - true, false, null
-    number: chalk.hex("#B5CEA8"), // green - numbers
-    string: chalk.hex("#CE9178"), // orange - strings
-    regexp: chalk.hex("#D16969"), // red - regex
-    symbol: chalk.hex("#B5CEA8"), // green - symbols
-    class: chalk.hex("#4EC9B0"), // teal - class names
-    function: chalk.hex("#DCDCAA"), // yellow - function names
-    title: chalk.hex("#DCDCAA"), // yellow - titles/names
-    params: chalk.hex("#9CDCFE"), // light blue - parameters
-    comment: chalk.hex("#6A9955"), // green - comments
-    doctag: chalk.hex("#608B4E"), // darker green - jsdoc tags
-    meta: chalk.hex("#9CDCFE"), // light blue - meta/preprocessor
-    "meta-keyword": chalk.hex("#C586C0"), // purple
-    "meta-string": chalk.hex("#CE9178"), // orange
-    section: chalk.hex("#DCDCAA"), // yellow - sections
-    tag: chalk.hex("#569CD6"), // blue - HTML/XML tags
-    name: chalk.hex("#9CDCFE"), // light blue - tag names
-    attr: chalk.hex("#9CDCFE"), // light blue - attributes
-    attribute: chalk.hex("#9CDCFE"), // light blue - attributes
-    variable: chalk.hex("#9CDCFE"), // light blue - variables
-    bullet: chalk.hex("#D7BA7D"), // gold - list bullets in markdown
-    code: chalk.hex("#CE9178"), // orange - inline code
-    emphasis: chalk.italic, // italic
-    strong: chalk.bold, // bold
-    formula: chalk.hex("#C586C0"), // purple - math
-    link: chalk.hex("#4EC9B0"), // teal - links
-    quote: chalk.hex("#6A9955"), // green - quotes
-    addition: chalk.hex("#B5CEA8"), // green - diff additions
-    deletion: chalk.hex("#F44747"), // red - diff deletions
-    "selector-tag": chalk.hex("#D7BA7D"), // gold - CSS selectors
-    "selector-id": chalk.hex("#D7BA7D"), // gold
-    "selector-class": chalk.hex("#D7BA7D"), // gold
-    "selector-attr": chalk.hex("#D7BA7D"), // gold
-    "selector-pseudo": chalk.hex("#D7BA7D"), // gold
-    "template-tag": chalk.hex("#C586C0"), // purple
-    "template-variable": chalk.hex("#9CDCFE"), // light blue
-    default: fallback, // fallback to code color
+    // Keywords - Dracula pink/magenta
+    keyword: chalk.hex("#FF79C6"),
+    "meta-keyword": chalk.hex("#FF79C6"),
+
+    // Built-ins and types - Dracula cyan
+    built_in: chalk.hex("#8BE9FD"),
+    type: chalk.hex("#8BE9FD"),
+    class: chalk.hex("#8BE9FD"),
+
+    // Literals and booleans - Dracula purple
+    literal: chalk.hex("#BD93F9"),
+    number: chalk.hex("#BD93F9"),
+
+    // Strings - Dracula green
+    string: chalk.hex("#50FA7B"),
+    "meta-string": chalk.hex("#50FA7B"),
+
+    // Regex - Dracula orange
+    regexp: chalk.hex("#FFB86C"),
+
+    // Symbols - Dracula yellow
+    symbol: chalk.hex("#F1FA8C"),
+
+    // Functions and titles - Dracula green
+    function: chalk.hex("#50FA7B"),
+    title: chalk.hex("#50FA7B"),
+    section: chalk.hex("#50FA7B"),
+
+    // Parameters - Dracula cyan
+    params: chalk.hex("#8BE9FD"),
+
+    // Comments - Dracula comment gray
+    comment: chalk.hex("#6272A4"),
+    doctag: chalk.hex("#6272A4"),
+    quote: chalk.hex("#6272A4"),
+
+    // Meta - Dracula purple
+    meta: chalk.hex("#BD93F9"),
+
+    // HTML/XML tags - Dracula pink
+    tag: chalk.hex("#FF79C6"),
+    name: chalk.hex("#F8F8F2"),
+    attr: chalk.hex("#8BE9FD"),
+    attribute: chalk.hex("#8BE9FD"),
+    variable: chalk.hex("#F8F8F2"),
+
+    // Markdown bullets - Dracula yellow
+    bullet: chalk.hex("#F1FA8C"),
+
+    // Inline code - Dracula orange
+    code: chalk.hex("#FFB86C"),
+
+    // Text styling
+    emphasis: chalk.italic,
+    strong: chalk.bold,
+
+    // Formula/math - Dracula pink
+    formula: chalk.hex("#FF79C6"),
+
+    // Links - Dracula cyan
+    link: chalk.hex("#8BE9FD"),
+
+    // Diff - green/red
+    addition: chalk.hex("#50FA7B"),
+    deletion: chalk.hex("#FF5555"),
+
+    // CSS selectors - Dracula yellow
+    "selector-tag": chalk.hex("#F1FA8C"),
+    "selector-id": chalk.hex("#F1FA8C"),
+    "selector-class": chalk.hex("#F1FA8C"),
+    "selector-attr": chalk.hex("#8BE9FD"),
+    "selector-pseudo": chalk.hex("#FF79C6"),
+
+    // Templates
+    "template-tag": chalk.hex("#FF79C6"),
+    "template-variable": chalk.hex("#8BE9FD"),
+
+    default: fallback,
   };
 }

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "task-1772003670592",
+    "agent": "claude",
+    "description": "今天天气",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772003670592",
+    "branch": "orchestral/task-17720036705",
+    "startedAt": 1772003693736,
+    "status": "running"
+  },
+  {
+    "id": "task-1772005860429",
+    "agent": "claude",
+    "description": "今日热点新闻",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772005860429",
+    "branch": "orchestral/task-17720058604",
+    "startedAt": 1772005883882,
+    "status": "running"
+  }
+]

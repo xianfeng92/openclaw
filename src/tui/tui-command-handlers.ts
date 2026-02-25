@@ -23,6 +23,11 @@ import {
   createSettingsList,
 } from "./components/selectors.js";
 import { formatStatusSummary } from "./tui-status-summary.js";
+import {
+  handleAgentsCommand,
+  handleSpawnCommand,
+  handleTasksCommand,
+} from "./orchestral-commands.js";
 
 type CommandHandlerContext = {
   client: GatewayChatClient;
@@ -446,6 +451,15 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         break;
       case "settings":
         openSettings();
+        break;
+      case "spawn":
+        await handleSpawnCommand(args, state, chatLog, setActivityStatus);
+        break;
+      case "agents":
+        await handleAgentsCommand(args, chatLog);
+        break;
+      case "tasks":
+        await handleTasksCommand(args, chatLog);
         break;
       case "exit":
       case "quit":

@@ -8,7 +8,18 @@ const generateUUID = (): string => {
   });
 };
 
-export type GatewayEventHandler = (message: string, state: "delta" | "final" | "aborted") => void;
+export type GatewayChatState = "delta" | "final" | "aborted" | "error";
+
+export type GatewayChatEvent = {
+  event: "chat";
+  runId: string;
+  sessionKey?: string;
+  seq?: number;
+  state: GatewayChatState;
+  text: string;
+};
+
+export type GatewayEventHandler = (event: GatewayChatEvent) => void;
 
 function extractTextPart(part: unknown): string {
   if (typeof part === "string") {
@@ -48,7 +59,7 @@ export class TerminalGatewayClient {
   private pendingRequests = new Map<string, {
     resolve: (value: any) => void;
     reject: (err: Error) => void;
-    timeout?: number;
+    timeout?: ReturnType<typeof setTimeout>;
   }>();
 
   constructor(url: string, token: string) {
@@ -175,68 +186,74 @@ export class TerminalGatewayClient {
   }
 
   private notifyEventHandlers(frame: any): void {
-    const payload = frame.payload;
-
-    // Extract text from various payload formats
-    let text = "";
-    let state: "delta" | "final" | "aborted" = "final";
-
-    if (typeof payload === "string") {
-      text = payload;
-    } else if (payload && typeof payload === "object") {
-      // Check for different payload structures
-      if (payload.message !== undefined) {
-        text = extractMessageText(payload.message);
-      } else if (payload.text && typeof payload.text === "string") {
-        text = payload.text;
-      } else if (payload.delta && typeof payload.delta === "string") {
-        text = payload.delta;
-        state = "delta";
-      } else if (payload.content && typeof payload.content === "string") {
-        text = payload.content;
-      } else if (payload.parts && Array.isArray(payload.parts)) {
-        // Handle parts array
-        text = payload.parts.map((p: any) => {
-          if (typeof p === "string") return p;
-          if (p && p.text) return p.text;
-          if (p && p.delta) return p.delta;
-          return "";
-        }).join("");
-      }
-
-      if (payload.state) {
-        if (payload.state === "delta" || payload.state === "final" || payload.state === "aborted") {
-          state = payload.state;
-        } else if (payload.state === "error") {
-          // Keep terminal flow simple: render the error text and close this response turn.
-          state = "final";
-        }
-      }
-
-      if (!text && typeof payload.errorMessage === "string") {
-        text = payload.errorMessage;
-      }
+    if (frame?.event !== "chat") {
+      return;
+    }
+    const payload = frame?.payload;
+    if (!payload || typeof payload !== "object") {
+      return;
     }
 
-    if (text) {
-      console.log("[Gateway] Notifying handlers:", text.substring(0, 50), state);
-      for (const handler of this.eventHandlers) {
-        try {
-          handler(text, state);
-        } catch (err) {
-          console.error("[Gateway] Event handler error:", err);
-        }
+    const runId = typeof payload.runId === "string" ? payload.runId : "";
+    if (!runId) {
+      return;
+    }
+
+    let state: GatewayChatState = "final";
+    if (
+      payload.state === "delta" ||
+      payload.state === "final" ||
+      payload.state === "aborted" ||
+      payload.state === "error"
+    ) {
+      state = payload.state;
+    }
+
+    let text = "";
+    if (payload.message !== undefined) {
+      text = extractMessageText(payload.message);
+    } else if (typeof payload.text === "string") {
+      text = payload.text;
+    } else if (typeof payload.delta === "string") {
+      text = payload.delta;
+    } else if (typeof payload.content === "string") {
+      text = payload.content;
+    } else if (Array.isArray(payload.parts)) {
+      text = payload.parts.map((p: any) => extractTextPart(p)).join("");
+    }
+    if (!text && typeof payload.errorMessage === "string") {
+      text = payload.errorMessage;
+    }
+
+    const event: GatewayChatEvent = {
+      event: "chat",
+      runId,
+      sessionKey: typeof payload.sessionKey === "string" ? payload.sessionKey : undefined,
+      seq: typeof payload.seq === "number" ? payload.seq : undefined,
+      state,
+      text,
+    };
+
+    for (const handler of this.eventHandlers) {
+      try {
+        handler(event);
+      } catch (err) {
+        console.error("[Gateway] Event handler error:", err);
       }
     }
   }
 
-  async sendMessage(sessionKey: string, message: string): Promise<string> {
+  async sendMessage(
+    sessionKey: string,
+    message: string,
+    opts?: { idempotencyKey?: string },
+  ): Promise<{ runId: string; status: string }> {
     if (!this.helloReceived) {
       throw new Error("Not connected to Gateway");
     }
 
     return new Promise((resolve, reject) => {
-      const requestId = generateUUID();
+      const requestId = opts?.idempotencyKey ?? generateUUID();
 
       // Set up timeout
       const timeout = setTimeout(() => {
@@ -244,7 +261,17 @@ export class TerminalGatewayClient {
         reject(new Error("Request timeout"));
       }, 60000);
 
-      this.pendingRequests.set(requestId, { resolve, reject, timeout });
+      this.pendingRequests.set(requestId, {
+        resolve: (value: unknown) => {
+          const rec =
+            value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+          const runId = typeof rec?.runId === "string" ? rec.runId : requestId;
+          const status = typeof rec?.status === "string" ? rec.status : "started";
+          resolve({ runId, status });
+        },
+        reject,
+        timeout,
+      });
 
       // Send the message request
       this.send({

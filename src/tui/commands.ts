@@ -8,6 +8,8 @@ const REASONING_LEVELS = ["on", "off"];
 const ELEVATED_LEVELS = ["on", "off", "ask", "full"];
 const ACTIVATION_LEVELS = ["mention", "always"];
 const USAGE_FOOTER_LEVELS = ["off", "tokens", "full"];
+const AGENT_TYPES = ["claude", "codex", "gemini"];
+const TASK_STATUSES = ["pending", "running", "completed", "failed", "blocked"];
 
 export type ParsedCommand = {
   name: string;
@@ -43,7 +45,6 @@ export function getSlashCommands(options: SlashCommandOptions = {}): SlashComman
     { name: "help", description: "Show slash command help" },
     { name: "status", description: "Show gateway status summary" },
     { name: "agent", description: "Switch agent (or open picker)" },
-    { name: "agents", description: "Open agent picker" },
     { name: "session", description: "Switch session (or open picker)" },
     { name: "sessions", description: "Open session picker" },
     {
@@ -117,6 +118,32 @@ export function getSlashCommands(options: SlashCommandOptions = {}): SlashComman
     { name: "new", description: "Reset the session" },
     { name: "reset", description: "Reset the session" },
     { name: "settings", description: "Open settings" },
+    {
+      name: "spawn",
+      description: "Spawn a new agent task",
+      getArgumentCompletions: (prefix) =>
+        AGENT_TYPES.filter((v) => v.startsWith(prefix.toLowerCase())).map((value) => ({
+          value,
+          label: value,
+        })),
+    },
+    {
+      name: "agents",
+      description: "Manage orchestral agents (list|kill|attach|redirect)",
+      getArgumentCompletions: (prefix) =>
+        ["list", "kill", "attach", "redirect", "output"]
+          .filter((v) => v.startsWith(prefix.toLowerCase()))
+          .map((value) => ({ value, label: value })),
+    },
+    {
+      name: "tasks",
+      description: "List tasks with optional filters",
+      getArgumentCompletions: (prefix) =>
+        TASK_STATUSES.filter((v) => v.startsWith(prefix.toLowerCase())).map((value) => ({
+          value,
+          label: value,
+        })),
+    },
     { name: "exit", description: "Exit the TUI" },
     { name: "quit", description: "Exit the TUI" },
   ];
@@ -145,7 +172,7 @@ export function helpText(options: SlashCommandOptions = {}): string {
     "/help",
     "/commands",
     "/status",
-    "/agent <id> (or /agents)",
+    "/agent <id> (or open picker)",
     "/session <key> (or /sessions)",
     "/model <provider/model> (or /models)",
     `/think <${thinkLevels}>`,
@@ -158,6 +185,9 @@ export function helpText(options: SlashCommandOptions = {}): string {
     "/new or /reset",
     "/abort",
     "/settings",
+    "/spawn <description> [--agent <type>] [--branch <name>] [--no-code]",
+    "/agents <list|kill|attach|redirect|output> [args]",
+    "/tasks [--status <running|completed|failed>] [--agent <type>]",
     "/exit",
   ].join("\n");
 }

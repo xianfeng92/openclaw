@@ -53,7 +53,279 @@
       width: 100%;
       height: 100vh;
       display: flex;
+      flex-direction: row;
+    }
+
+    #sidebar {
+      width: 300px;
+      min-width: 250px;
+      max-width: 400px;
+      height: 100vh;
+      background-color: #0d1117;
+      border-right: 1px solid #30363d;
+      display: flex;
       flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: width 0.2s ease, transform 0.2s ease;
+    }
+
+    #sidebar.collapsed {
+      width: 0;
+      min-width: 0;
+      transform: translateX(-100%);
+    }
+
+    .sidebar-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #161b22;
+    }
+
+    .sidebar-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .sidebar-toggle {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 14px;
+      border-radius: 4px;
+    }
+
+    .sidebar-toggle:hover {
+      background-color: #21262d;
+      color: var(--text-primary);
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px 0;
+    }
+
+    .sidebar-content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .sidebar-content::-webkit-scrollbar-track {
+      background: #0f141c;
+    }
+
+    .sidebar-content::-webkit-scrollbar-thumb {
+      background: #27313f;
+      border-radius: 3px;
+    }
+
+    .sidebar-panel {
+      margin-bottom: 4px;
+    }
+
+    .sidebar-panel-header {
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s;
+    }
+
+    .sidebar-panel-header:hover {
+      background-color: #161b22;
+    }
+
+    .sidebar-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .sidebar-panel-icon {
+      font-size: 14px;
+    }
+
+    .sidebar-panel-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      background-color: #21262d;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .sidebar-panel-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.2s ease;
+    }
+
+    .sidebar-panel.open .sidebar-panel-content {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .sidebar-item {
+      padding: 6px 16px 6px 36px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-item:hover {
+      background-color: #161b22;
+      color: var(--text-primary);
+    }
+
+    .sidebar-item.active {
+      background-color: #1f242c;
+      color: var(--accent-cyan);
+    }
+
+    .sidebar-item-status {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .sidebar-item-status.running {
+      background-color: var(--warn);
+      box-shadow: 0 0 4px var(--warn);
+    }
+
+    .sidebar-item-status.completed {
+      background-color: var(--accent-prompt);
+    }
+
+    .sidebar-item-status.failed {
+      background-color: var(--error);
+    }
+
+    .sidebar-item-status.pending {
+      background-color: var(--text-muted);
+    }
+
+    .sidebar-item-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background-color: #161b22;
+    }
+
+    .sidebar-action-btn {
+      padding: 8px 12px;
+      font-size: 12px;
+      border: 1px solid #30363d;
+      background-color: #21262d;
+      color: var(--text-primary);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .sidebar-action-btn:hover {
+      background-color: #30363d;
+      border-color: #484f58;
+    }
+
+    .sidebar-action-btn:active {
+      transform: translateY(1px);
+    }
+
+    .sidebar-action-btn.primary {
+      background-color: #1f6feb;
+      border-color: #1f6feb;
+      color: #ffffff;
+    }
+
+    .sidebar-action-btn.primary:hover {
+      background-color: #388bfd;
+    }
+
+    .sidebar-empty {
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .sidebar-empty-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+      opacity: 0.5;
+    }
+
+    #terminal-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .sidebar-toggle-btn {
+      position: absolute;
+      left: 300px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 40px;
+      background-color: #161b22;
+      border: 1px solid #30363d;
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 10px;
+      z-index: 50;
+      transition: left 0.2s ease;
+    }
+
+    .sidebar-toggle-btn:hover {
+      background-color: #21262d;
+      color: var(--text-primary);
+    }
+
+    .sidebar.collapsed ~ .sidebar-toggle-btn {
+      left: 0;
+    }
+
+    /* Hide collapse button when sidebar is collapsed */
+    #sidebar.collapsed .sidebar-toggle {
+      visibility: hidden;
+      pointer-events: none;
     }
 
     #terminal {
@@ -271,11 +543,11 @@
     .status-bar {
       position: fixed;
       bottom: 0;
-      left: 0;
+      left: 300px;
+      right: 0;
       display: flex;
       justify-content: space-between;
       gap: 10px;
-      width: 100%;
       align-items: center;
       min-height: 32px;
       padding: 4px 16px;
@@ -284,6 +556,11 @@
       color: var(--text-muted);
       font-size: 12px;
       z-index: 100;
+      transition: left 0.2s ease;
+    }
+
+    #sidebar.collapsed ~ #terminal-container .status-bar {
+      left: 0;
     }
 
     .status-item {
@@ -347,12 +624,83 @@
 </head>
 <body>
   <main id="terminal-shell">
-    <div id="terminal"></div>
-    <div id="status-bar" class="status-bar" aria-live="polite">
-      <span id="status-agent" class="status-item status-prompt">[Agent: main]</span>
-      <span id="status-ping" class="status-item">[Ping: --ms]</span>
-      <span id="status-memory" class="status-item">[Memory: --MB]</span>
-      <span id="status-time" class="status-item">[Current Time: --:--:--]</span>
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">OpenClaw</span>
+        <button class="sidebar-toggle" id="sidebar-collapse" title="Collapse sidebar">◀</button>
+      </div>
+      <div class="sidebar-content" id="sidebar-content">
+        <!-- Tasks Panel -->
+        <div class="sidebar-panel open" id="panel-tasks">
+          <div class="sidebar-panel-header">
+            <span class="sidebar-panel-title">
+              <span class="sidebar-panel-icon">📋</span>
+              Tasks
+            </span>
+            <span class="sidebar-panel-count" id="tasks-count">0</span>
+          </div>
+          <div class="sidebar-panel-content" id="tasks-list">
+            <div class="sidebar-empty">
+              <div class="sidebar-empty-icon">📋</div>
+              No tasks yet
+            </div>
+          </div>
+        </div>
+
+        <!-- Agents Panel -->
+        <div class="sidebar-panel open" id="panel-agents">
+          <div class="sidebar-panel-header">
+            <span class="sidebar-panel-title">
+              <span class="sidebar-panel-icon">🤖</span>
+              Agents
+            </span>
+            <span class="sidebar-panel-count" id="agents-count">0</span>
+          </div>
+          <div class="sidebar-panel-content" id="agents-list">
+            <div class="sidebar-empty">
+              <div class="sidebar-empty-icon">🤖</div>
+              No agents running
+            </div>
+          </div>
+        </div>
+
+        <!-- Context Panel -->
+        <div class="sidebar-panel" id="panel-context">
+          <div class="sidebar-panel-header">
+            <span class="sidebar-panel-title">
+              <span class="sidebar-panel-icon">📚</span>
+              Context
+            </span>
+          </div>
+          <div class="sidebar-panel-content" id="context-list">
+            <div class="sidebar-empty">
+              <div class="sidebar-empty-icon">📚</div>
+              No context loaded
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <button class="sidebar-action-btn primary" id="btn-spawn">
+          <span>⚡</span> Spawn Task
+        </button>
+        <button class="sidebar-action-btn" id="btn-refresh">
+          <span>🔄</span> Refresh
+        </button>
+      </div>
+    </aside>
+
+    <button class="sidebar-toggle-btn" id="sidebar-expand" title="Expand sidebar">▶</button>
+
+    <div id="terminal-container">
+      <div id="terminal"></div>
+      <div id="status-bar" class="status-bar" aria-live="polite">
+        <span id="status-agent" class="status-item status-prompt">[Agent: main]</span>
+        <span id="status-ping" class="status-item">[Ping: --ms]</span>
+        <span id="status-memory" class="status-item">[Memory: --MB]</span>
+        <span id="status-tasks" class="status-item">[Tasks: 0]</span>
+        <span id="status-time" class="status-item">[Current Time: --:--:--]</span>
+      </div>
     </div>
   </main>
   <script type="module" src="./terminal.mjs"></script>

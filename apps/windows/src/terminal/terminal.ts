@@ -1,5 +1,6 @@
 import type { TerminalAPI } from "../preload/terminal-api";
 import { handleCommand, parseCommand, getTerminalStateSnapshot } from "./command-handler.js";
+import { initSidebar, toggleSidebar } from "./sidebar.js";
 
 declare global {
   interface Window {
@@ -243,6 +244,7 @@ function initTerminal(): void {
 ║  /help for commands                                      ║
 ║  !cmd for local shell execution                          ║
 ║  /spawn /agents /tasks for orchestration                 ║
+║  Ctrl+B toggles sidebar                                  ║
 ║  Use --no-code to skip VS Code auto-open                ║
 ╚═══════════════════════════════════════════════════════════╝
 </strong></span>
@@ -357,6 +359,15 @@ function initTerminal(): void {
         clearTerminal();
         break;
       }
+
+      case "b": {
+        if (!event.ctrlKey) {
+          return;
+        }
+        event.preventDefault();
+        toggleSidebar();
+        break;
+      }
     }
   });
 
@@ -367,5 +378,7 @@ function initTerminal(): void {
   });
 }
 
+// Initialize sidebar first, then terminal
+initSidebar();
 initTerminal();
 startStatusBarLoop();

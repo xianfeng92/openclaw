@@ -43,6 +43,7 @@ Alternative installers:
 | Slim mode strategy       | Locked                                    | `OPENCLAW_DESKTOP_MVP_SLIM` / `CLAWDBOT_DESKTOP_MVP_SLIM` drive runtime slim gating; plugin ecosystem is disabled in slim mode (architecture retained). |
 | Minimal toolset strategy | Locked                                    | Opt-in only (`desktopMvpMinimalToolset` or env flag); not default-on.                                                                                   |
 | Project Neuro            | P0 complete, P1 complete, P2-001 complete | Event contracts, privacy baseline, context ingest/snapshot, action loop, undo/policy/retention/reliability, and heuristic preview are shipped.          |
+| **Super Terminal Evol**  | **Step 1: Sidebar UI complete**           | Building toward Zoe-style orchestration: sidebar with Tasks/Agents/Context panels, Ctrl+B toggle.                                                        |
 | Next focus               | TBD                                       | Awaiting roadmap definition.                                                                                                                            |
 
 ## Key Features

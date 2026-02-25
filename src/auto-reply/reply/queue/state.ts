@@ -4,6 +4,7 @@ export type FollowupQueueState = {
   items: FollowupRun[];
   draining: boolean;
   lastEnqueuedAt: number;
+  lastClientRunId?: string;
   mode: QueueMode;
   debounceMs: number;
   cap: number;
@@ -18,6 +19,12 @@ export const DEFAULT_QUEUE_CAP = 20;
 export const DEFAULT_QUEUE_DROP: QueueDropPolicy = "summarize";
 
 export const FOLLOWUP_QUEUES = new Map<string, FollowupQueueState>();
+
+export type FollowupQueueStatus = {
+  depth: number;
+  draining: boolean;
+  droppedCount: number;
+};
 
 export function getFollowupQueue(key: string, settings: QueueSettings): FollowupQueueState {
   const existing = FOLLOWUP_QUEUES.get(key);
@@ -39,6 +46,7 @@ export function getFollowupQueue(key: string, settings: QueueSettings): Followup
     items: [],
     draining: false,
     lastEnqueuedAt: 0,
+    lastClientRunId: undefined,
     mode: settings.mode,
     debounceMs:
       typeof settings.debounceMs === "number"
@@ -69,8 +77,25 @@ export function clearFollowupQueue(key: string): number {
   queue.items.length = 0;
   queue.droppedCount = 0;
   queue.summaryLines = [];
+  queue.lastClientRunId = undefined;
   queue.lastRun = undefined;
   queue.lastEnqueuedAt = 0;
   FOLLOWUP_QUEUES.delete(cleaned);
   return cleared;
+}
+
+export function getFollowupQueueStatus(key: string): FollowupQueueStatus | undefined {
+  const cleaned = key.trim();
+  if (!cleaned) {
+    return undefined;
+  }
+  const queue = FOLLOWUP_QUEUES.get(cleaned);
+  if (!queue) {
+    return undefined;
+  }
+  return {
+    depth: queue.items.length,
+    draining: queue.draining,
+    droppedCount: queue.droppedCount,
+  };
 }

@@ -16,7 +16,10 @@ declare global {
 const SPINNER_FRAMES = ["[ / ]", "[ - ]", "[ \\ ]", "[ | ]"] as const;
 const TYPEWRITER_MIN_DELAY_MS = 10;
 const TYPEWRITER_MAX_DELAY_MS = 30;
-const CHAT_TIMEOUT_MS = 60_000;
+const CHAT_TIMEOUT_MS = 180_000;
+const CHAT_TIMEOUT_SECONDS = Math.round(CHAT_TIMEOUT_MS / 1000);
+const USER_PROMPT_HTML =
+  '<span class="prompt-host">[User@OpenClaw]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
 
 export type ParsedCommand =
   | { type: "shell"; command: string }
@@ -28,8 +31,6 @@ export type ParsedCommand =
 let gatewayClient: TerminalGatewayClient | null = null;
 let currentSessionKey = "default";
 let currentAgent = "main";
-
-type TurnRole = "user" | "assistant";
 
 export function parseCommand(input: string): ParsedCommand {
   const trimmed = input.trim();
@@ -88,23 +89,6 @@ function writeHtml(terminal: HTMLElement, html: string, className = "line"): voi
   line.className = className;
   line.innerHTML = html;
   appendBeforeInput(terminal, line);
-}
-
-function createTurn(terminal: HTMLElement, role: TurnRole, label: string): HTMLDivElement {
-  const turn = document.createElement("section");
-  turn.className = `io-turn io-${role}`;
-
-  const header = document.createElement("div");
-  header.className = "io-header";
-  header.textContent = label;
-  turn.appendChild(header);
-
-  const body = document.createElement("div");
-  body.className = "io-body";
-  turn.appendChild(body);
-
-  appendBeforeInput(terminal, turn);
-  return body;
 }
 
 function startAsciiSpinner(container: HTMLElement, label: string): () => void {
@@ -183,6 +167,181 @@ function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+function escapeHtmlAttr(text: string): string {
+  return escapeHtml(text).replace(/"/g, "&quot;");
+}
+
+function formatInlineMarkdown(text: string): string {
+  let html = escapeHtml(text);
+  const codeTokens: string[] = [];
+
+  html = html.replace(/`([^`\n]+)`/g, (_match, code: string) => {
+    const token = `@@CODE_${codeTokens.length}@@`;
+    codeTokens.push(`<code>${code}</code>`);
+    return token;
+  });
+
+  html = html.replace(
+    /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    (_match, label: string, url: string) => {
+      const safeUrl = escapeHtmlAttr(url);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    },
+  );
+
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+  html = html.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  html = html.replace(/(^|[^\w])\*([^*\n]+)\*(?=[^\w]|$)/g, "$1<em>$2</em>");
+  html = html.replace(/(^|[^\w])_([^_\n]+)_(?=[^\w]|$)/g, "$1<em>$2</em>");
+
+  return html.replace(/@@CODE_(\d+)@@/g, (_match, index: string) => {
+    const tokenIndex = Number(index);
+    return Number.isFinite(tokenIndex) ? (codeTokens[tokenIndex] ?? "") : "";
+  });
+}
+
+function renderAssistantMarkdown(markdown: string): string {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const blocks: string[] = [];
+  const paragraphLines: string[] = [];
+  const quoteLines: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+  const listItems: string[] = [];
+  let codeFence:
+    | {
+        lang: string;
+        lines: string[];
+      }
+    | null = null;
+
+  const flushParagraph = () => {
+    if (paragraphLines.length === 0) {
+      return;
+    }
+    const html = paragraphLines.map((line) => formatInlineMarkdown(line)).join("<br>");
+    blocks.push(`<p>${html}</p>`);
+    paragraphLines.length = 0;
+  };
+
+  const flushQuote = () => {
+    if (quoteLines.length === 0) {
+      return;
+    }
+    const html = quoteLines.map((line) => formatInlineMarkdown(line)).join("<br>");
+    blocks.push(`<blockquote>${html}</blockquote>`);
+    quoteLines.length = 0;
+  };
+
+  const flushList = () => {
+    if (!listType || listItems.length === 0) {
+      listType = null;
+      listItems.length = 0;
+      return;
+    }
+    blocks.push(`<${listType}>${listItems.join("")}</${listType}>`);
+    listType = null;
+    listItems.length = 0;
+  };
+
+  const flushCodeFence = () => {
+    if (!codeFence) {
+      return;
+    }
+    const langClass = codeFence.lang
+      ? ` class="language-${escapeHtmlAttr(codeFence.lang.toLowerCase())}"`
+      : "";
+    blocks.push(
+      `<pre class="assistant-code"><code${langClass}>${escapeHtml(codeFence.lines.join("\n"))}</code></pre>`,
+    );
+    codeFence = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\t/g, "  ");
+
+    if (codeFence) {
+      if (/^```/.test(line.trim())) {
+        flushCodeFence();
+      } else {
+        codeFence.lines.push(rawLine);
+      }
+      continue;
+    }
+
+    const fenceStart = line.trim().match(/^```([\w-]+)?\s*$/);
+    if (fenceStart) {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      codeFence = { lang: fenceStart[1] ?? "", lines: [] };
+      continue;
+    }
+
+    if (line.trim() === "") {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      const level = headingMatch[1].length;
+      blocks.push(
+        `<h${level} class="md-heading md-h${level}">${formatInlineMarkdown(headingMatch[2])}</h${level}>`,
+      );
+      continue;
+    }
+
+    const quoteMatch = line.match(/^\s*>\s?(.*)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(quoteMatch[1]);
+      continue;
+    }
+
+    const ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (ulMatch) {
+      flushParagraph();
+      flushQuote();
+      if (listType !== "ul") {
+        flushList();
+        listType = "ul";
+      }
+      listItems.push(`<li>${formatInlineMarkdown(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    const olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (olMatch) {
+      flushParagraph();
+      flushQuote();
+      if (listType !== "ol") {
+        flushList();
+        listType = "ol";
+      }
+      listItems.push(`<li>${formatInlineMarkdown(olMatch[1])}</li>`);
+      continue;
+    }
+
+    flushQuote();
+    flushList();
+    paragraphLines.push(line);
+  }
+
+  flushParagraph();
+  flushQuote();
+  flushList();
+  flushCodeFence();
+
+  return blocks.join("");
 }
 
 async function handleSlashCommand(
@@ -466,16 +625,21 @@ async function handleMessage(terminal: HTMLElement, content: string): Promise<vo
     }
   }
 
-  const userBody = createTurn(terminal, "user", "[user input]");
-  userBody.textContent = content;
+  const userLine = document.createElement("div");
+  userLine.className = "line user-line";
+  userLine.innerHTML = `<span class="user-prefix prompt-composite">${USER_PROMPT_HTML}</span> <span class="user-text">${escapeHtml(content)}</span>`;
+  appendBeforeInput(terminal, userLine);
 
-  const assistantBody = createTurn(terminal, "assistant", `[assistant:${currentAgent}]`);
+  const assistantBody = document.createElement("div");
+  assistantBody.className = "assistant-output";
+  appendBeforeInput(terminal, assistantBody);
+
   const spinnerNode = document.createElement("div");
   spinnerNode.className = "spinner-line";
   assistantBody.appendChild(spinnerNode);
 
   const outputNode = document.createElement("div");
-  outputNode.className = "io-body";
+  outputNode.className = "assistant-body";
   assistantBody.appendChild(outputNode);
 
   const stopSpinner = startAsciiSpinner(spinnerNode, "thinking");
@@ -499,7 +663,7 @@ async function handleMessage(terminal: HTMLElement, content: string): Promise<vo
   let terminalState: "pending" | GatewayChatState = "pending";
 
   const renderOutput = (text: string) => {
-    outputNode.textContent = text;
+    outputNode.innerHTML = renderAssistantMarkdown(text);
     terminal.scrollTop = terminal.scrollHeight;
   };
 
@@ -522,6 +686,9 @@ async function handleMessage(terminal: HTMLElement, content: string): Promise<vo
       window.clearTimeout(timeoutTimer);
       timeoutTimer = null;
     }
+    const separator = document.createElement("div");
+    separator.className = "turn-separator";
+    appendBeforeInput(terminal, separator);
     unsubscribe();
   };
 
@@ -595,7 +762,10 @@ async function handleMessage(terminal: HTMLElement, content: string): Promise<vo
       return;
     }
     terminalState = "error";
-    mergeIncomingText("[timeout] no response received within 60s", "final");
+    mergeIncomingText(
+      `[timeout] no response received within ${CHAT_TIMEOUT_SECONDS}s`,
+      "final",
+    );
     maybeFinalize();
   }, CHAT_TIMEOUT_MS);
 

@@ -57,10 +57,13 @@ const shellCommands = navigator.platform.includes("Win")
   ? shellCommandsWindows
   : shellCommandsUnix;
 
+const USER_PROMPT_HTML =
+  '<span class="prompt-host">[User@OpenClaw]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
+
 function createPrompt(): HTMLElement {
   const promptSpan = document.createElement("span");
-  promptSpan.className = "prompt";
-  promptSpan.textContent = "->";
+  promptSpan.className = "prompt prompt-composite";
+  promptSpan.innerHTML = USER_PROMPT_HTML;
   return promptSpan;
 }
 
@@ -154,7 +157,7 @@ function writeHtml(html: string, className = "line"): void {
 
 function writeCommandEcho(command: string): void {
   writeHtml(
-    `<span class="command-echo"><span class="prompt-mark">-&gt;</span> <span class="command-text">${escapeHtml(command)}</span></span>`,
+    `<span class="command-echo"><span class="prompt-composite">${USER_PROMPT_HTML}</span> <span class="command-text">${escapeHtml(command)}</span></span>`,
   );
 }
 

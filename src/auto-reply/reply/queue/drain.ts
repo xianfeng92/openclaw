@@ -91,6 +91,7 @@ export function scheduleFollowupDrain(
           });
           await runFollowup({
             prompt,
+            clientRunId: items.at(-1)?.clientRunId ?? queue.lastClientRunId,
             run,
             enqueuedAt: Date.now(),
             originatingChannel,
@@ -109,6 +110,7 @@ export function scheduleFollowupDrain(
           }
           await runFollowup({
             prompt: summaryPrompt,
+            clientRunId: queue.items.at(-1)?.clientRunId ?? queue.lastClientRunId,
             run,
             enqueuedAt: Date.now(),
           });

@@ -43,6 +43,9 @@ export function enqueueFollowupRun(
 
   queue.lastEnqueuedAt = Date.now();
   queue.lastRun = run.run;
+  if (run.clientRunId?.trim()) {
+    queue.lastClientRunId = run.clientRunId.trim();
+  }
 
   const shouldEnqueue = applyQueueDropPolicy({
     queue,

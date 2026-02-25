@@ -5,6 +5,7 @@ import { enqueueFollowupRun, scheduleFollowupDrain } from "./queue.js";
 
 function createRun(params: {
   prompt: string;
+  clientRunId?: string;
   messageId?: string;
   originatingChannel?: FollowupRun["originatingChannel"];
   originatingTo?: string;
@@ -13,6 +14,7 @@ function createRun(params: {
 }): FollowupRun {
   return {
     prompt: params.prompt,
+    clientRunId: params.clientRunId,
     messageId: params.messageId,
     enqueuedAt: Date.now(),
     originatingChannel: params.originatingChannel,
@@ -282,5 +284,45 @@ describe("followup queue collect routing", () => {
     expect(calls[0]?.prompt).toContain("[Queued messages while agent was busy]");
     expect(calls[0]?.originatingChannel).toBe("slack");
     expect(calls[0]?.originatingTo).toBe("channel:A");
+  });
+});
+
+describe("followup queue run id propagation", () => {
+  it("preserves latest clientRunId for summarize overflow followups", async () => {
+    const key = `test-summary-run-id-${Date.now()}`;
+    const calls: FollowupRun[] = [];
+    const runFollowup = async (run: FollowupRun) => {
+      calls.push(run);
+    };
+    const settings: QueueSettings = {
+      mode: "followup",
+      debounceMs: 0,
+      cap: 1,
+      dropPolicy: "summarize",
+    };
+
+    enqueueFollowupRun(
+      key,
+      createRun({
+        prompt: "first",
+        clientRunId: "run-1",
+      }),
+      settings,
+    );
+    enqueueFollowupRun(
+      key,
+      createRun({
+        prompt: "second",
+        clientRunId: "run-2",
+      }),
+      settings,
+    );
+
+    scheduleFollowupDrain(key, runFollowup);
+    await expect.poll(() => calls.length).toBe(2);
+    expect(calls[0]?.prompt).toContain("[Queue overflow]");
+    expect(calls[0]?.clientRunId).toBe("run-2");
+    expect(calls[1]?.prompt).toBe("second");
+    expect(calls[1]?.clientRunId).toBe("run-2");
   });
 });

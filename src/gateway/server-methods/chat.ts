@@ -6,8 +6,10 @@ import type { MsgContext } from "../../auto-reply/templating.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveThinkingDefault } from "../../agents/model-selection.js";
+import { isEmbeddedPiRunActive } from "../../agents/pi-embedded.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
+import { getFollowupQueueStatus } from "../../auto-reply/reply/queue.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
@@ -481,7 +483,169 @@ export const chatHandlers: GatewayRequestHandlers = {
         agentId,
         channel: INTERNAL_MESSAGE_CHANNEL,
       });
-      const finalReplyParts: string[] = [];
+      let agentRunStarted = false;
+      const dispatcherReplyParts: string[] = [];
+      let dispatchSettled = false;
+      let dispatcherReplyBroadcasted = false;
+      let dispatcherReplyFlushTimer: ReturnType<typeof setTimeout> | undefined;
+      let noReplyFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+      let noReplyFallbackStartedAtMs: number | undefined;
+      const noReplyFallbackGraceMs = 2500;
+      const noReplyFallbackPollMs = 1000;
+      const noReplyFallbackMaxWaitMs = Math.min(Math.max(timeoutMs + 2000, 10_000), 180_000);
+      const combineDispatcherReply = () =>
+        dispatcherReplyParts
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .join("\n\n")
+          .trim();
+      const sawAnyChatDelta = () =>
+        context.chatDeltaSentAt.has(clientRunId) || context.chatRunBuffers.has(clientRunId);
+      const clearDispatcherReplyFlushTimer = () => {
+        if (dispatcherReplyFlushTimer !== undefined) {
+          clearTimeout(dispatcherReplyFlushTimer);
+          dispatcherReplyFlushTimer = undefined;
+        }
+      };
+      const clearNoReplyFallbackTimer = () => {
+        if (noReplyFallbackTimer !== undefined) {
+          clearTimeout(noReplyFallbackTimer);
+          noReplyFallbackTimer = undefined;
+        }
+      };
+      const clearDispatcherReplyTimers = () => {
+        clearDispatcherReplyFlushTimer();
+        clearNoReplyFallbackTimer();
+      };
+      const resolvePendingFollowup = () => {
+        const queueStatus = p.sessionKey ? getFollowupQueueStatus(p.sessionKey) : undefined;
+        const queueDepth = queueStatus?.depth ?? 0;
+        const queueDraining = queueStatus?.draining ?? false;
+        const queueDroppedCount = queueStatus?.droppedCount ?? 0;
+        const queuePending = queueDraining || queueDepth > 0 || queueDroppedCount > 0;
+        const { entry: latestSessionEntry } = loadSessionEntry(p.sessionKey);
+        const sessionId = latestSessionEntry?.sessionId ?? entry?.sessionId;
+        const runActive = Boolean(sessionId && isEmbeddedPiRunActive(sessionId));
+        return {
+          queueDepth,
+          queueDraining,
+          queueDroppedCount,
+          queuePending,
+          runActive,
+          sessionId,
+        };
+      };
+      const tryBroadcastDispatcherReply = (reason: string) => {
+        if (dispatcherReplyBroadcasted) {
+          return false;
+        }
+        const combinedReply = combineDispatcherReply();
+        const hasChatDelta = sawAnyChatDelta();
+        context.logGateway.info(
+          `[webchat] dispatcher reply check: reason=${reason}, agentRunStarted=${agentRunStarted}, sawAnyChatDelta=${hasChatDelta}, combinedReply.len=${combinedReply.length}`,
+        );
+        const shouldBroadcastDispatcherReply =
+          Boolean(combinedReply) &&
+          // Directive-only commands.
+          (!agentRunStarted ||
+            // Agent started but no chat deltas were emitted.
+            // In that case, the only user-visible output is the dispatcher reply; broadcast it.
+            !hasChatDelta);
+        if (!shouldBroadcastDispatcherReply) {
+          return false;
+        }
+        clearDispatcherReplyTimers();
+        dispatcherReplyBroadcasted = true;
+        context.logGateway.info(
+          `[webchat] broadcasting reply: chars=${combinedReply.length} (agentRunStarted=${agentRunStarted}, reason=${reason})`,
+        );
+        let message: Record<string, unknown> | undefined;
+        const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(p.sessionKey);
+        const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
+        const appended = appendAssistantTranscriptMessage({
+          message: combinedReply,
+          sessionId,
+          storePath: latestStorePath,
+          sessionFile: latestEntry?.sessionFile,
+          createIfMissing: true,
+        });
+        if (appended.ok) {
+          message = appended.message;
+        } else {
+          context.logGateway.warn(
+            `webchat transcript append failed: ${appended.error ?? "unknown error"}`,
+          );
+          const now = Date.now();
+          message = {
+            role: "assistant",
+            content: [{ type: "text", text: combinedReply }],
+            timestamp: now,
+            stopReason: "injected",
+            usage: { input: 0, output: 0, totalTokens: 0 },
+          };
+        }
+        broadcastChatFinal({
+          context,
+          runId: clientRunId,
+          sessionKey: p.sessionKey,
+          message,
+        });
+        return true;
+      };
+      const scheduleDispatcherReplyFlush = (reason: string) => {
+        if (!dispatchSettled || dispatcherReplyBroadcasted) {
+          return;
+        }
+        clearDispatcherReplyFlushTimer();
+        // Coalesce back-to-back block payloads into one final reply for webchat.
+        dispatcherReplyFlushTimer = setTimeout(() => {
+          dispatcherReplyFlushTimer = undefined;
+          tryBroadcastDispatcherReply(reason);
+        }, 120);
+      };
+      const scheduleNoReplyFallbackCheck = (reason: string, delayMs: number) => {
+        clearNoReplyFallbackTimer();
+        if (noReplyFallbackStartedAtMs === undefined) {
+          noReplyFallbackStartedAtMs = Date.now();
+        }
+        noReplyFallbackTimer = setTimeout(() => {
+          noReplyFallbackTimer = undefined;
+          if (dispatcherReplyBroadcasted) {
+            return;
+          }
+          const lateBroadcasted = tryBroadcastDispatcherReply(reason);
+          if (lateBroadcasted) {
+            return;
+          }
+          if (sawAnyChatDelta()) {
+            // A followup run already produced visible output for this client run.
+            // Do not overwrite it with a synthetic "no response generated" error.
+            dispatcherReplyBroadcasted = true;
+            return;
+          }
+          const elapsedMs = Date.now() - (noReplyFallbackStartedAtMs ?? Date.now());
+          const pending = resolvePendingFollowup();
+          const shouldKeepWaiting =
+            elapsedMs < noReplyFallbackMaxWaitMs && (pending.runActive || pending.queuePending);
+          if (shouldKeepWaiting) {
+            context.logGateway.info(
+              `[webchat] deferring no-reply fallback: elapsedMs=${elapsedMs}, runActive=${pending.runActive}, queuePending=${pending.queuePending}, queueDraining=${pending.queueDraining}, queueDepth=${pending.queueDepth}, queueDroppedCount=${pending.queueDroppedCount}, sessionId=${pending.sessionId ?? "unknown"}`,
+            );
+            scheduleNoReplyFallbackCheck("queued_followup_pending", noReplyFallbackPollMs);
+            return;
+          }
+          dispatcherReplyBroadcasted = true;
+          context.logGateway.warn(
+            `[webchat] no dispatcher reply after grace window; emitting fallback error`,
+          );
+          broadcastChatError({
+            context,
+            runId: clientRunId,
+            sessionKey: p.sessionKey,
+            errorMessage: "no response generated",
+          });
+        }, Math.max(0, delayMs));
+      };
       const dispatcher = createReplyDispatcher({
         ...prefixOptions,
         onError: (err) => {
@@ -491,21 +655,29 @@ export const chatHandlers: GatewayRequestHandlers = {
           context.logGateway.info(
             `[webchat] deliver callback: kind=${info.kind}, textLen=${payload.text?.length ?? 0}`,
           );
-          if (info.kind !== "final") {
-            context.logGateway.info(`[webchat] skipping non-final kind: ${info.kind}`);
-            return;
-          }
           const text = payload.text?.trim() ?? "";
           if (!text) {
-            context.logGateway.warn(`[webchat] skipping empty final reply part`);
+            context.logGateway.warn(`[webchat] skipping empty ${info.kind} reply part`);
             return;
           }
-          context.logGateway.info(`[webchat] collecting final reply part: chars=${text.length}`);
-          finalReplyParts.push(text);
+          if (info.kind === "final" || info.kind === "block") {
+            context.logGateway.info(
+              `[webchat] collecting ${info.kind} reply part: chars=${text.length}`,
+            );
+            dispatcherReplyParts.push(text);
+            if (dispatchSettled) {
+              if (info.kind === "final") {
+                tryBroadcastDispatcherReply("post_settle_final");
+              } else {
+                scheduleDispatcherReplyFlush("post_settle_block");
+              }
+            }
+            return;
+          }
+          context.logGateway.info(`[webchat] skipping non-display kind: ${info.kind}`);
         },
       });
 
-      let agentRunStarted = false;
       void dispatchInboundMessage({
         ctx,
         cfg,
@@ -536,75 +708,19 @@ export const chatHandlers: GatewayRequestHandlers = {
         },
       })
         .then(() => {
+          dispatchSettled = true;
           context.logGateway.info(
-            `[webchat] dispatch settled: agentRunStarted=${agentRunStarted}, finalReplyParts count=${finalReplyParts.length}`,
+            `[webchat] dispatch settled: agentRunStarted=${agentRunStarted}, dispatcherReplyParts count=${dispatcherReplyParts.length}`,
           );
-          // Combine final reply parts from the dispatcher (for cases where agent didn't emit assistant events)
-          const combinedReply = finalReplyParts
-            .map((part) => part.trim())
-            .filter(Boolean)
-            .join("\n\n")
-            .trim();
-
-          // Broadcast final reply if we have content from dispatcher
-          // This handles both directive-only commands (agentRunStarted=false) and
-          // agent runs that didn't emit assistant events but have dispatcher replies
-          const sawAnyChatDelta =
-            context.chatDeltaSentAt.has(clientRunId) || context.chatRunBuffers.has(clientRunId);
-          context.logGateway.info(
-            `[webchat] dispatcher reply check: agentRunStarted=${agentRunStarted}, sawAnyChatDelta=${sawAnyChatDelta}, combinedReply.len=${combinedReply.length}`,
-          );
-          const shouldBroadcastDispatcherReply =
-            Boolean(combinedReply) &&
-            // Directive-only commands.
-            (!agentRunStarted ||
-              // Agent started but no chat deltas were emitted.
-              // In that case, the only user-visible output is the dispatcher reply; broadcast it.
-              !sawAnyChatDelta);
-
-          if (shouldBroadcastDispatcherReply) {
-            // Broadcast via dispatcher when we otherwise would not emit a chat final/error event.
+          const didBroadcast = tryBroadcastDispatcherReply("dispatch_settled");
+          if (!didBroadcast && !agentRunStarted) {
             context.logGateway.info(
-              `[webchat] broadcasting reply: chars=${combinedReply.length} (agentRunStarted=${agentRunStarted})`,
+              `[webchat] awaiting late dispatcher reply for queued/directive command`,
             );
-            let message: Record<string, unknown> | undefined;
-            const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
-              p.sessionKey,
-            );
-            const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
-            const appended = appendAssistantTranscriptMessage({
-              message: combinedReply,
-              sessionId,
-              storePath: latestStorePath,
-              sessionFile: latestEntry?.sessionFile,
-              createIfMissing: true,
-            });
-            if (appended.ok) {
-              message = appended.message;
-            } else {
-              context.logGateway.warn(
-                `webchat transcript append failed: ${appended.error ?? "unknown error"}`,
-              );
-              const now = Date.now();
-              message = {
-                role: "assistant",
-                content: [{ type: "text", text: combinedReply }],
-                timestamp: now,
-                stopReason: "injected",
-                usage: { input: 0, output: 0, totalTokens: 0 },
-              };
-            }
-            broadcastChatFinal({
-              context,
-              runId: clientRunId,
-              sessionKey: p.sessionKey,
-              message,
-            });
-          } else if (!agentRunStarted && !combinedReply) {
-            context.logGateway.warn(`[webchat] directive-only command produced no reply`);
+            scheduleNoReplyFallbackCheck("no_reply_grace_elapsed", noReplyFallbackGraceMs);
           }
           // If agentRunStarted=true, the response should have come through emitChatDelta/emitChatFinal (agent events)
-          // If agentRunStarted=false and combinedReply is empty, that's an error (directive-only command with no output)
+          // If agentRunStarted=false and no dispatcher reply is emitted, UI timeout handling will surface it.
           context.dedupe.set(`chat:${clientRunId}`, {
             ts: Date.now(),
             ok: true,
@@ -612,6 +728,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           });
         })
         .catch((err) => {
+          clearDispatcherReplyTimers();
           const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
           context.dedupe.set(`chat:${clientRunId}`, {
             ts: Date.now(),
@@ -631,6 +748,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           });
         })
         .finally(() => {
+          clearDispatcherReplyFlushTimer();
           context.chatAbortControllers.delete(clientRunId);
           context.neuroMetrics.clearRun(clientRunId);
         });

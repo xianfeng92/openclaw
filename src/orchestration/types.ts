@@ -6,6 +6,22 @@ export type TaskStatus = "pending" | "running" | "completed" | "failed" | "block
 
 export type AgentType = "claude" | "codex" | "gemini";
 
+// Re-export context types for convenience
+export type {
+  BusinessContext,
+  Customer,
+  Decision,
+  Meeting,
+  ObsidianConfig,
+  Pattern,
+  Project,
+} from "./context-schema.js";
+export type {
+  ContextInjectionOptions,
+  ContextualPrompt,
+  ContextSearchResult,
+} from "./context-schema.js";
+
 export interface DoDChecks {
   prCreated: boolean;
   branchSynced: boolean;

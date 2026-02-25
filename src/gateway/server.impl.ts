@@ -75,6 +75,7 @@ import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
+import { startBabysitLoop, stopBabysitLoop, getBabysitStatus } from "../orchestration/babysit-loop.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
 import {
@@ -603,6 +604,15 @@ export async function startGatewayServer(
     logBrowser,
   }));
 
+  // Start the babysit loop for monitoring and auto-retry of failed agents
+  startBabysitLoop({
+    intervalMs: 10 * 60 * 1000, // 10 minutes
+    maxRetriesPerTask: 3,
+    retryDelayMs: 30 * 1000, // 30 seconds
+    enabled: true,
+  });
+  log.info("gateway: babysit loop started for agent monitoring");
+
   const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers({
     deps,
     broadcast,
@@ -674,6 +684,8 @@ export async function startGatewayServer(
       if (diagnosticsEnabled) {
         stopDiagnosticHeartbeat();
       }
+      // Stop the babysit loop
+      stopBabysitLoop();
       if (skillsRefreshTimer) {
         clearTimeout(skillsRefreshTimer);
         skillsRefreshTimer = null;

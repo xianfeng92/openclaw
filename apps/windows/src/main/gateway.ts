@@ -293,6 +293,11 @@ export class GatewayManager extends EventEmitter {
       this.status = "running";
       this.emit("state-changed", this.getState());
 
+      // TODO: Start babysit loop for monitoring agents
+      // This would need to be implemented in the Node.js gateway process
+      // The babysit loop monitors running tasks and auto-retries failed agents
+      console.log("[Gateway] Started - babysit loop should be initialized in gateway process");
+
     } catch (err) {
       this.status = "error";
       this.error = err instanceof Error ? err.message : String(err);

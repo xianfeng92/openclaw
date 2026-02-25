@@ -21,11 +21,204 @@ export interface TerminalAPI {
     description: string;
     agent?: string;
     branch?: string;
+    useContext?: boolean;
+    relevantContext?: {
+      customers: Array<{ name: string; score: number }>;
+      projects: Array<{ name: string; score: number }>;
+      decisions: Array<{ title: string; score: number }>;
+      meetings: Array<{ title: string; score: number }>;
+      patterns: Array<{ name: string; score: number }>;
+    };
   }) => Promise<{ success: boolean; task?: any; error?: string }>;
 
   orchestralAgents: (action: string, args: string[]) => Promise<any>;
 
   orchestralTasks: (filters: Record<string, string>) => Promise<any>;
+
+  // Context commands
+  contextList: () => Promise<{
+    customers: Array<{ id: string; name: string; tags?: string[] }>;
+    projects: Array<{ id: string; name: string; status: string }>;
+    meetings: Array<{ id: string; title: string; date: string }>;
+    decisions: Array<{ id: string; title: string; status: string }>;
+    patterns: Array<{ id: string; name: string; category: string }>;
+  }>;
+
+  contextSearch: (query: string) => Promise<{
+    customers: Array<{ name: string; score: number }>;
+    projects: Array<{ name: string; score: number }>;
+    meetings: Array<{ title: string; score: number }>;
+    decisions: Array<{ title: string; score: number }>;
+    patterns: Array<{ name: string; score: number }>;
+  }>;
+
+  contextLoad: (vaultPath?: string) => Promise<{
+    success: boolean;
+    summary?: string;
+    error?: string;
+  }>;
+
+  contextClear: () => Promise<void>;
+
+  contextSummary: () => Promise<{
+    customers: number;
+    projects: number;
+    meetings: number;
+    decisions: number;
+    patterns: number;
+    lastSyncAt?: string;
+  }>;
+
+  // Pattern commands
+  patternList: () => Promise<{
+    patterns: Array<{
+      id: string;
+      name: string;
+      category: string;
+      description: string;
+      effectiveness?: number;
+      usageCount?: number;
+    }>;
+  }>;
+
+  patternSave: (pattern: {
+    name: string;
+    category: string;
+    description: string;
+    prompt: string;
+  }) => Promise<{ success: boolean; id?: string; error?: string }>;
+
+  patternApply: (patternId: string, taskDescription: string) => Promise<{
+    success: boolean;
+    enhancedPrompt?: string;
+    error?: string;
+  }>;
+
+  patternRate: (patternId: string, success: boolean) => Promise<{ success: boolean; error?: string }>;
+
+  patternRecommend: (description: string, limit?: number) => Promise<{
+    success: boolean;
+    patterns?: Array<{
+      id: string;
+      name: string;
+      category: string;
+      description: string;
+      effectiveness?: number;
+      usageCount?: number;
+      score: number;
+      reason: string;
+    }>;
+    error?: string;
+  }>;
+
+  reviewDiff: (options?: { branch?: string; maxFiles?: number }) => Promise<{
+    success: boolean;
+    review?: {
+      results: Array<{
+        model: string;
+        comments: Array<{
+          file: string;
+          line?: number;
+          severity: string;
+          message: string;
+          suggestion?: string;
+        }>;
+        summary: string;
+        passed: boolean;
+        duration: number;
+      }>;
+      allPassed: boolean;
+      totalComments: number;
+      errors: number;
+      warnings: number;
+      suggestions: number;
+      summary: string;
+      formatted: string;
+    };
+    error?: string;
+  }>;
+
+  // PR commands
+  prCreate: (options: { title: string; description?: string; baseBranch?: string; draft?: boolean }) => Promise<{
+    success: boolean;
+    prNumber?: number;
+    prUrl?: string;
+    error?: string;
+  }>;
+  prList: () => Promise<{
+    success: boolean;
+    prs?: Array<{
+      number: number;
+      title: string;
+      url: string;
+      state: string;
+      author: string;
+    }>;
+    error?: string;
+  }>;
+  prView: (prNumber: number) => Promise<{
+    success: boolean;
+    pr?: {
+      number: number;
+      title: string;
+      body: string;
+      state: string;
+      url: string;
+      mergeable?: boolean;
+    };
+    error?: string;
+  }>;
+  gitStatus: () => Promise<{
+    success: boolean;
+    branch?: string;
+    hasChanges?: boolean;
+    staged?: string[];
+    modified?: string[];
+    untracked?: string[];
+    error?: string;
+  }>;
+
+  // Workflow commands
+  workflowList: () => Promise<{
+    success: boolean;
+    workflows?: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      steps: Array<{ id: string; type: string; command: string; description?: string }>;
+      createdAt: number;
+      updatedAt: number;
+      runCount: number;
+      tags?: string[];
+    }>;
+    error?: string;
+  }>;
+  workflowCreate: (workflow: {
+    name: string;
+    description?: string;
+    steps: Array<{ id: string; type: string; command: string; description?: string }>;
+    tags?: string[];
+  }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  workflowRun: (name: string) => Promise<{
+    success: boolean;
+    result?: Array<{ step: { id: string; type: string; command: string; description?: string }; error?: string }>;
+    error?: string;
+  }>;
+  workflowShow: (name: string) => Promise<{
+    success: boolean;
+    workflow?: {
+      id: string;
+      name: string;
+      description?: string;
+      steps: Array<{ id: string; type: string; command: string; description?: string }>;
+      createdAt: number;
+      updatedAt: number;
+      runCount: number;
+      tags?: string[];
+    };
+    error?: string;
+  }>;
+  workflowDelete: (name: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const api: TerminalAPI = {
@@ -61,6 +254,34 @@ const api: TerminalAPI = {
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),
   orchestralAgents: (action, args) => ipcRenderer.invoke("terminal:orchestral-agents", action, args),
   orchestralTasks: (filters) => ipcRenderer.invoke("terminal:orchestral-tasks", filters),
+
+  // Context commands
+  contextList: () => ipcRenderer.invoke("terminal:context-list"),
+  contextSearch: (query) => ipcRenderer.invoke("terminal:context-search", query),
+  contextLoad: (vaultPath) => ipcRenderer.invoke("terminal:context-load", vaultPath),
+  contextClear: () => ipcRenderer.invoke("terminal:context-clear"),
+  contextSummary: () => ipcRenderer.invoke("terminal:context-summary"),
+
+  // Pattern commands
+  patternList: () => ipcRenderer.invoke("terminal:pattern-list"),
+  patternSave: (pattern) => ipcRenderer.invoke("terminal:pattern-save", pattern),
+  patternApply: (patternId, taskDescription) => ipcRenderer.invoke("terminal:pattern-apply", patternId, taskDescription),
+  patternRate: (patternId, success) => ipcRenderer.invoke("terminal:pattern-rate", patternId, success),
+  patternRecommend: (description, limit) => ipcRenderer.invoke("terminal:pattern-recommend", description, limit),
+  reviewDiff: (options) => ipcRenderer.invoke("terminal:review-diff", options),
+
+  // PR commands
+  prCreate: (options) => ipcRenderer.invoke("terminal:pr-create", options),
+  prList: () => ipcRenderer.invoke("terminal:pr-list"),
+  prView: (prNumber) => ipcRenderer.invoke("terminal:pr-view", prNumber),
+  gitStatus: () => ipcRenderer.invoke("terminal:git-status"),
+
+  // Workflow commands
+  workflowList: () => ipcRenderer.invoke("terminal:workflow-list"),
+  workflowCreate: (workflow) => ipcRenderer.invoke("terminal:workflow-create", workflow),
+  workflowRun: (name) => ipcRenderer.invoke("terminal:workflow-run", name),
+  workflowShow: (name) => ipcRenderer.invoke("terminal:workflow-show", name),
+  workflowDelete: (name) => ipcRenderer.invoke("terminal:workflow-delete", name),
 };
 
 contextBridge.exposeInMainWorld("terminalAPI", api);

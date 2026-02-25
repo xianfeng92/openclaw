@@ -3,6 +3,7 @@
  * Integrates with the orchestration system via IPC.
  */
 import type { TerminalAPI } from "../preload/terminal-api";
+import { formatContextForDisplay, generateContextSummary, type PromptContext } from "./prompt-injection.js";
 
 declare global {
   interface Window {
@@ -99,7 +100,7 @@ export async function handleSpawnCommand(
   }
 
   if (args.length === 0) {
-    writeHtml(terminal, `<span class="system-info">Usage: /spawn &lt;description&gt; [--agent &lt;claude|codex|gemini&gt;] [--branch &lt;name&gt;] [--no-code]</span>`);
+    writeHtml(terminal, `<span class="system-info">Usage: /spawn &lt;description&gt; [--agent &lt;claude|codex|gemini&gt;] [--branch &lt;name&gt;] [--no-code] [--no-context]</span>`);
     return;
   }
 
@@ -108,6 +109,7 @@ export async function handleSpawnCommand(
   let agent: string | undefined;
   let branch: string | undefined;
   let openVsCode = true;
+  let useContext = true;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -117,6 +119,8 @@ export async function handleSpawnCommand(
       branch = args[++i];
     } else if (arg === "--no-code") {
       openVsCode = false;
+    } else if (arg === "--no-context") {
+      useContext = false;
     } else {
       description.push(arg);
     }
@@ -134,11 +138,75 @@ export async function handleSpawnCommand(
   if (branch) writeLine(terminal, `Branch: ${branch}`);
   if (!openVsCode) writeLine(terminal, `VS Code: disabled`);
 
+  // Fetch and display relevant context
+  let relevantContext: any = null;
+  if (useContext) {
+    try {
+      writeLine(terminal, "");
+      writeHtml(terminal, `<span style="color: var(--accent-cyan);">[context]</span> Searching for relevant context...`);
+
+      const contextResult = await window.terminalAPI.contextSearch?.(desc);
+
+      if (contextResult) {
+        const hasContext =
+          (contextResult.customers?.length ?? 0) > 0 ||
+          (contextResult.projects?.length ?? 0) > 0 ||
+          (contextResult.decisions?.length ?? 0) > 0 ||
+          (contextResult.meetings?.length ?? 0) > 0;
+
+        if (hasContext) {
+          relevantContext = contextResult;
+
+          // Build PromptContext for display
+          const promptContext: PromptContext = {
+            description: desc,
+            customers: contextResult.customers || [],
+            projects: contextResult.projects || [],
+            decisions: contextResult.decisions || [],
+          };
+
+          // Use formatted display
+          const contextLines = formatContextForDisplay(promptContext);
+          for (const line of contextLines) {
+            writeHtml(terminal, `<span style="color: var(--text-muted);">  ${line}</span>`);
+          }
+
+          const summary = generateContextSummary(promptContext);
+          writeHtml(terminal, `<span class="system-info">  Context: ${summary}</span>`);
+          writeHtml(terminal, `<span class="system-info">  Context will be injected into agent prompt</span>`);
+
+          // Get smart pattern recommendations
+          try {
+            const patternResult = await window.terminalAPI.patternRecommend?.(desc, 2);
+            if (patternResult?.patterns && patternResult.patterns.length > 0) {
+              writeLine(terminal, "");
+              writeHtml(terminal, `<span style="color: var(--text-muted);">  Recommended patterns:</span>`);
+              for (const pattern of patternResult.patterns) {
+                const scoreTag = pattern.score > 20 ? "★ " : "";
+                const reason = pattern.reason ? ` <span style="color: var(--text-muted);">(${pattern.reason})</span>` : "";
+                writeHtml(terminal, `<span style="color: var(--accent-cyan);">    ${scoreTag}${escapeHtml(pattern.name)}</span>${reason}`);
+              }
+            }
+          } catch (patternError) {
+            console.error("[Orchestral] Pattern recommendation error:", patternError);
+          }
+        } else {
+          writeHtml(terminal, `<span style="color: var(--text-muted);">  No relevant context found</span>`);
+        }
+      }
+    } catch (ctxError) {
+      console.error("[Orchestral] Context search error:", ctxError);
+    }
+  }
+
   try {
+    writeLine(terminal, "");
     const result = await window.terminalAPI.orchestralSpawn!({
       description: desc,
       agent,
       branch,
+      useContext,
+      relevantContext,
     });
 
     console.log("[Orchestral] Spawn result:", result);

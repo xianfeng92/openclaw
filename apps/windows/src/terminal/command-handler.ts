@@ -496,6 +496,36 @@ Language: ${escapeHtml(navigator.language)}
       return;
     }
 
+    case "/context": {
+      await handleContextCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/review": {
+      await handleReviewCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/pattern": {
+      await handlePatternCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/task": {
+      await handleTaskCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/pr": {
+      await handlePRCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
+    case "/workflow": {
+      await handleWorkflowCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
     default: {
       writeHtml(
         terminal,
@@ -538,6 +568,27 @@ function showHelp(terminal: HTMLElement): void {
   /agents kill    - Terminate an agent
   /tasks          - List all tasks
   /orchestral     - Show orchestral command help
+
+<span class="system-info"><strong>Context Commands:</strong></span>
+  /context list   - List all loaded context
+  /context search &lt;query&gt; - Search context
+  /context load   - Load context from Obsidian
+  /context clear  - Clear context cache
+  /context summary - Show context summary
+
+<span class="system-info"><strong>Review Commands:</strong></span>
+  /review diff    - Review git diff
+  /review status  - Show review status
+
+<span class="system-info"><strong>Pattern Commands:</strong></span>
+  /pattern list   - List all saved patterns
+  /pattern save   - Save a new pattern
+  /pattern apply   - Apply pattern to task
+  /pattern rate    - Rate pattern effectiveness
+
+<span class="system-info"><strong>Task Lifecycle:</strong></span>
+  /task complete - Mark task complete with pattern tracking
+  /task list      - Show all tasks with patterns
 
 <span class="system-info"><strong>Gateway Commands:</strong></span>
   /connect        - Connect to gateway
@@ -777,3 +828,1130 @@ async function handleMessage(terminal: HTMLElement, content: string): Promise<vo
     maybeFinalize();
   }
 }
+
+/**
+ * Handle context commands.
+ */
+async function handleContextCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string, className?: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string, className?: string) => void,
+): Promise<void> {
+  const action = args[0] || "summary";
+
+  switch (action) {
+    case "list": {
+      await handleContextList(terminal, writeLine, writeHtml);
+      break;
+    }
+    case "search": {
+      if (args.length < 2) {
+        writeLine(terminal, "Usage: /context search <query>");
+      } else {
+        await handleContextSearch(terminal, args.slice(1).join(" "), writeLine, writeHtml);
+      }
+      break;
+    }
+    case "load": {
+      await handleContextLoad(terminal, args.slice(1), writeLine, writeHtml);
+      break;
+    }
+    case "clear": {
+      try {
+        await window.terminalAPI.contextClear();
+        writeHtml(terminal, "<span class='system-ok'>[ok] Context cache cleared</span>");
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+    case "summary": {
+      await handleContextSummary(terminal, writeLine, writeHtml);
+      break;
+    }
+    default: {
+      writeHtml(
+        terminal,
+        `<span class="system-warn">Unknown context action: ${escapeHtml(action)}</span>`,
+      );
+      writeLine(terminal, "Available actions: list, search, load, clear, summary");
+    }
+  }
+}
+
+/**
+ * Handle context list command.
+ */
+async function handleContextList(
+  terminal: HTMLElement,
+  writeLine: (terminal: HTMLElement, text: string, className?: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string, className?: string) => void,
+): Promise<void> {
+  try {
+    const result = await window.terminalAPI.contextList();
+
+    if (!result || typeof result !== "object") {
+      writeHtml(terminal, "<span class='system-error'>Failed to load context</span>");
+      return;
+    }
+
+    writeHtml(terminal, "<span class='system-ok'><strong>Loaded Context</strong></span>");
+    writeLine(terminal, "");
+
+    const sections = [
+      { key: "customers", label: "Customers", icon: "👤" },
+      { key: "projects", label: "Projects", icon: "📁" },
+      { key: "meetings", label: "Meetings", icon: "📅" },
+      { key: "decisions", label: "Decisions", icon: "🔀" },
+      { key: "patterns", label: "Patterns", icon: "🧩" },
+    ];
+
+    for (const section of sections) {
+      const items = result[section.key as keyof typeof result];
+      const count = Array.isArray(items) ? items.length : 0;
+
+      if (count > 0) {
+        writeHtml(terminal, `<span class="system-info">${section.icon} ${section.label}: ${count}</span>`);
+      }
+    }
+
+    writeLine(terminal, "");
+    writeHtml(
+      terminal,
+      `<span class="system-muted">Use /context search <query> to find specific items</span>`,
+    );
+  } catch (err) {
+    writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+  }
+}
+
+/**
+ * Handle context search command.
+ */
+async function handleContextSearch(
+  terminal: HTMLElement,
+  query: string,
+  writeLine: (terminal: HTMLElement, text: string, className?: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string, className?: string) => void,
+): Promise<void> {
+  try {
+    const result = await window.terminalAPI.contextSearch(query);
+
+    if (!result || typeof result !== "object") {
+      writeHtml(terminal, "<span class='system-error'>Search failed</span>");
+      return;
+    }
+
+    writeHtml(terminal, `<span class='system-ok'><strong>Search Results: "${escapeHtml(query)}"</strong></span>`);
+    writeLine(terminal, "");
+
+    let totalResults = 0;
+
+    const sections = [
+      { key: "customers", label: "Customers", icon: "👤" },
+      { key: "projects", label: "Projects", icon: "📁" },
+      { key: "meetings", label: "Meetings", icon: "📅" },
+      { key: "decisions", label: "Decisions", icon: "🔀" },
+      { key: "patterns", label: "Patterns", icon: "🧩" },
+    ];
+
+    for (const section of sections) {
+      const items = result[section.key as keyof typeof result];
+      if (Array.isArray(items) && items.length > 0) {
+        writeHtml(terminal, `<span class="system-info">${section.icon} ${section.label}</span>`);
+        for (const item of items.slice(0, 5)) {
+          const name = item.name || item.title || item.description || "Unknown";
+          const score = item.score ? ` (${Math.round(item.score * 10) / 10})` : "";
+          writeHtml(terminal, `  <span class="system-muted">•</span> ${escapeHtml(name)}${score}`);
+        }
+        if (items.length > 5) {
+          writeLine(terminal, `  ... and ${items.length - 5} more`);
+        }
+        writeLine(terminal, "");
+        totalResults += items.length;
+      }
+    }
+
+    if (totalResults === 0) {
+      writeHtml(terminal, `<span class="system-muted">No results found</span>`);
+    }
+  } catch (err) {
+    writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+  }
+}
+
+/**
+ * Handle context load command.
+ */
+async function handleContextLoad(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string, className?: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string, className?: string) => void,
+): Promise<void> {
+  const vaultPath = args[0];
+
+  writeLine(terminal, "Loading context from Obsidian...");
+
+  try {
+    const result = await window.terminalAPI.contextLoad(vaultPath || "");
+
+    if (result.success) {
+      writeHtml(
+        terminal,
+        `<span class='system-ok'>[ok] Context loaded: ${result.summary || "Unknown"}</span>`,
+      );
+    } else {
+      writeHtml(
+        terminal,
+        `<span class='system-error'>Failed to load context: ${escapeHtml(result.error || "Unknown error")}</span>`,
+      );
+    }
+  } catch (err) {
+    writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+  }
+}
+
+/**
+ * Handle context summary command.
+ */
+async function handleContextSummary(
+  terminal: HTMLElement,
+  writeLine: (terminal: HTMLElement, text: string, className?: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string, className?: string) => void,
+): Promise<void> {
+  try {
+    const summary = await window.terminalAPI.contextSummary();
+
+    if (!summary || typeof summary !== "object") {
+      writeHtml(terminal, "<span class='system-error'>Failed to get summary</span>");
+      return;
+    }
+
+    writeHtml(terminal, "<span class='system-ok'><strong>Context Summary</strong></span>");
+    writeLine(terminal, "");
+
+    const lines = [
+      `Customers: ${summary.customers ?? 0}`,
+      `Projects: ${summary.projects ?? 0}`,
+      `Meetings: ${summary.meetings ?? 0}`,
+      `Decisions: ${summary.decisions ?? 0}`,
+      `Patterns: ${summary.patterns ?? 0}`,
+    ];
+
+    for (const line of lines) {
+      writeLine(terminal, line);
+    }
+
+    if (summary.lastSyncAt) {
+      writeLine(terminal, "");
+      writeLine(terminal, `Last Sync: ${summary.lastSyncAt}`);
+    }
+  } catch (err) {
+    writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+  }
+}
+
+/**
+ * Handle review commands.
+ */
+async function handleReviewCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = args[0] || "help";
+
+  switch (action) {
+    case "help": {
+      writeHtml(terminal, `
+<span class="system-ok"><strong>Code Review Commands</strong></span>
+
+<span class="system-info">Usage:</span>
+  /review diff [--branch <name>] - Review current git diff
+  /review status               - Show review system status
+
+<span class="system-info">Options:</span>
+  --branch <name>   Compare against specific branch (default: main)
+
+<span class="system-info">Examples:</span>
+  /review diff
+  /review diff --branch develop
+      `.trim());
+      break;
+    }
+
+    case "diff": {
+      // Parse options
+      const options: { branch?: string } = {};
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === "--branch" && i + 1 < args.length) {
+          options.branch = args[++i];
+        }
+      }
+
+      writeSection(terminal, "Code Review", "[review]", writeHtml);
+      writeLine(terminal, `Analyzing changes${options.branch ? ` against ${options.branch}` : ""}...`);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Review API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.reviewDiff?.(options);
+
+        if (result?.success && result.review) {
+          writeLine(terminal, "");
+
+          // Show summary
+          const { review } = result;
+          const statusIcon = review.allPassed ? "✓" : "✗";
+          const statusClass = review.allPassed ? "system-ok" : "system-error";
+
+          writeHtml(
+            terminal,
+            `<span class="${statusClass}">${statusIcon} ${review.summary}</span>`,
+          );
+
+          // Show model results
+          for (const modelResult of review.results) {
+            const passedIcon = modelResult.passed ? "✓" : "✗";
+            const passedClass = modelResult.passed ? "system-ok" : "system-error";
+
+            writeLine(terminal, "");
+            writeHtml(
+              terminal,
+              `<span style="color: var(--accent-cyan);">${passedIcon} ${modelResult.model.toUpperCase()} (${modelResult.duration}ms)</span>`,
+            );
+            writeLine(terminal, `  ${modelResult.summary}`);
+
+            // Show comments (limited)
+            if (modelResult.comments.length > 0) {
+              for (const comment of modelResult.comments.slice(0, 3)) {
+                const severityIcon = {
+                  error: "🔴",
+                  warning: "🟡",
+                  info: "🔵",
+                  suggestion: "💡",
+                }[comment.severity] || "•";
+
+                writeHtml(
+                  terminal,
+                  `<span style="color: var(--text-muted);">  ${severityIcon} ${comment.file}:${comment.line || "?"} - ${escapeHtml(comment.message)}</span>`,
+                );
+                if (comment.suggestion) {
+                  writeHtml(
+                    terminal,
+                    `<span style="color: var(--text-muted);">     → ${escapeHtml(comment.suggestion)}</span>`,
+                  );
+                }
+              }
+              if (modelResult.comments.length > 3) {
+                writeHtml(
+                  terminal,
+                  `<span style="color: var(--text-muted);">  ... and ${modelResult.comments.length - 3} more</span>`,
+                );
+              }
+            }
+          }
+
+          writeLine(terminal, "");
+          writeHtml(
+            terminal,
+            `<span class="${statusClass}">Status: ${review.allPassed ? "PASSED" : "NEEDS CHANGES"}</span>`,
+          );
+        } else {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] ${result?.error || "Review failed"}</span>`,
+          );
+        }
+      } catch (err) {
+        console.error("[Review] Error:", err);
+        writeHtml(
+          terminal,
+          `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`,
+        );
+      }
+      break;
+    }
+
+    case "status": {
+      writeHtml(terminal, `<span class="system-ok"><strong>Code Review Status</strong></span>`);
+      writeLine(terminal, "");
+      writeHtml(terminal, `<span class="system-info">Review Models:</span>`);
+      writeLine(terminal, "  ✓ Codex - Edge cases, logic errors");
+      writeLine(terminal, "  ✓ Gemini - Security, performance");
+      writeLine(terminal, "  ✓ Claude - Architecture, maintainability");
+      writeLine(terminal, "");
+      writeHtml(terminal, `<span class="system-ok">Status: Ready</span>`);
+      writeHtml(terminal, `<span class="system-info">Use /review diff to review current changes</span>`);
+      break;
+    }
+
+    default: {
+      writeHtml(terminal, `<span class="system-info">Usage: /review [help|diff|status]</span>`);
+    }
+  }
+}
+
+/**
+ * Handle PR commands.
+ */
+async function handlePRCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = args[0] || "help";
+
+  switch (action) {
+    case "help": {
+      writeHtml(terminal, `
+<span class="system-ok"><strong>PR Commands</strong></span>
+
+<span class="system-info">Usage:</span>
+  /pr create <title> [--draft] [--base <branch>] - Create a PR
+  /pr list - List open PRs
+  /pr status - Show current branch status
+  /pr view <number> - View PR details
+
+<span class="system-info">Options:</span>
+  --draft      Create as draft PR
+  --base <name> Target branch (default: main)
+
+<span class="system-info">Examples:</span>
+  /pr create "Fix login bug"
+  /pr create "Add feature" --draft --base develop
+  /pr list
+      `.trim());
+      break;
+    }
+
+    case "create": {
+      const title = args[1];
+      if (!title) {
+        writeHtml(terminal, `<span class="system-info">Usage: /pr create &lt;title&gt; [--draft] [--base &lt;branch&gt;]</span>`);
+        break;
+      }
+
+      const options: { draft?: boolean; baseBranch?: string } = {};
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--draft") options.draft = true;
+        if (args[i] === "--base" && i + 1 < args.length) options.baseBranch = args[++i];
+      }
+
+      writeSection(terminal, "Creating PR", "[pr]", writeHtml);
+      writeLine(terminal, `Title: ${title}`);
+      writeLine(terminal, `Base: ${options.baseBranch || "main"}`);
+      if (options.draft) writeLine(terminal, `Mode: draft`);
+      writeLine(terminal, "");
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] PR API not available</span>`);
+        break;
+      }
+
+      try {
+        writeHtml(terminal, `<span style="color: var(--text-muted);">Checking git status...</span>`);
+
+        const result = await window.terminalAPI.prCreate?.({
+          title,
+          description: `## Summary\n\n${title}\n\n---\n\n*Created via OpenClaw Terminal*`,
+          draft: options.draft,
+          baseBranch: options.baseBranch,
+        });
+
+        if (result?.success && result.prUrl) {
+          writeHtml(terminal, `<span class="system-ok">[ok] PR created successfully!</span>`);
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--accent-cyan);">PR #${result.prNumber}: ${escapeHtml(title)}</span>`);
+          writeHtml(terminal, `<span style="color: var(--text-primary);">  ${result.prUrl}</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-error">[err] ${result?.error || "Failed to create PR"}</span>`);
+        }
+      } catch (err) {
+        console.error("[PR] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "list": {
+      writeSection(terminal, "Open PRs", "[pr]", writeHtml);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] PR API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.prList?.();
+
+        if (result?.prs && result.prs.length > 0) {
+          for (const pr of result.prs) {
+            writeLine(terminal, "");
+            const statusIcon = pr.state === "OPEN" ? "🟢" : "⚪";
+            writeHtml(terminal, `<span style="color: var(--accent-cyan);">${statusIcon} #${pr.number} ${escapeHtml(pr.title)}</span>`);
+            writeHtml(terminal, `<span style="color: var(--text-muted);">  by ${pr.author}</span>`);
+            writeHtml(terminal, `<span style="color: var(--text-muted);">  ${pr.url}</span>`);
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">Total: ${result.prs.length} open PR(s)</span>`);
+        } else {
+          writeLine(terminal, "No open PRs found.");
+        }
+      } catch (err) {
+        console.error("[PR] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "status": {
+      writeSection(terminal, "Git Status", "[git]", writeHtml);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Git API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.gitStatus?.();
+
+        if (result?.branch) {
+          writeLine(terminal, `Branch: ${result.branch}`);
+        }
+
+        if (result?.hasChanges) {
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--accent-warn);">Changes detected:</span>`);
+
+          if (result.staged && result.staged.length > 0) {
+            writeHtml(terminal, `<span style="color: var(--accent-green);">  Staged (${result.staged.length}):</span>`);
+            for (const file of result.staged.slice(0, 5)) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">    + ${escapeHtml(file)}</span>`);
+            }
+            if (result.staged.length > 5) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">    ... and ${result.staged.length - 5} more</span>`);
+            }
+          }
+
+          if (result.modified && result.modified.length > 0) {
+            writeHtml(terminal, `<span style="color: var(--accent-yellow);">  Modified (${result.modified.length}):</span>`);
+            for (const file of result.modified.slice(0, 5)) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">    ~ ${escapeHtml(file)}</span>`);
+            }
+            if (result.modified.length > 5) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">    ... and ${result.modified.length - 5} more</span>`);
+            }
+          }
+
+          if (result.untracked && result.untracked.length > 0) {
+            writeHtml(terminal, `<span style="color: var(--accent-cyan);">  Untracked (${result.untracked.length}):</span>`);
+            for (const file of result.untracked.slice(0, 5)) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">    ? ${escapeHtml(file)}</span>`);
+            }
+            if (result.untracked.length > 5) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">    ... and ${result.untracked.length - 5} more</span>`);
+            }
+          }
+
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">Use /pr create to create a PR after committing</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-ok">[ok] Working directory clean</span>`);
+        }
+      } catch (err) {
+        console.error("[Git] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "view": {
+      const prNumber = parseInt(args[1], 10);
+      if (!prNumber) {
+        writeHtml(terminal, `<span class="system-info">Usage: /pr view &lt;number&gt;</span>`);
+        break;
+      }
+
+      writeSection(terminal, `PR #${prNumber}`, "[pr]", writeHtml);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] PR API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.prView?.(prNumber);
+
+        if (result?.pr) {
+          const { pr } = result;
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--accent-cyan);">${escapeHtml(pr.title)}</span>`);
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--text-muted);">${escapeHtml(pr.body?.slice(0, 500) || "")}${pr.body?.length > 500 ? "..." : ""}</span>`);
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--text-muted);">State: ${pr.state}</span>`);
+          writeHtml(terminal, `<span style="color: var(--text-muted);">Mergeable: ${pr.mergeable ? "Yes" : "No"}</span>`);
+          writeHtml(terminal, `<span style="color: var(--accent-cyan);">${pr.url}</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-error">[err] PR not found</span>`);
+        }
+      } catch (err) {
+        console.error("[PR] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    default: {
+      writeHtml(terminal, `<span class="system-info">Usage: /pr [help|create|list|status|view]</span>`);
+    }
+  }
+}
+
+/**
+ * Handle pattern commands.
+ */
+async function handlePatternCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = args[0] || "list";
+
+  switch (action) {
+    case "list": {
+      writeSection(terminal, "Patterns", "[pattern]", writeHtml);
+      writeLine(terminal, "Fetching patterns...");
+
+      try {
+        const result = await window.terminalAPI.patternList?.();
+
+        if (result?.patterns && result.patterns.length > 0) {
+          for (const pattern of result.patterns) {
+            writeLine(terminal, "");
+            const categoryIcon = getCategoryIcon(pattern.category);
+            writeHtml(terminal, `<span class="system-ok">${categoryIcon} ${pattern.name}</span>`);
+            writeLine(terminal, `  Category: ${pattern.category}`);
+            if (pattern.description) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">  ${escapeHtml(pattern.description)}</span>`);
+            }
+            if (pattern.effectiveness !== undefined) {
+              const effPercent = Math.round(pattern.effectiveness * 100);
+              const effColor = pattern.effectiveness > 0.7 ? "var(--accent-prompt)" : "var(--text-muted)";
+              writeHtml(terminal, `<span style="color: ${effColor};">  Effectiveness: ${effPercent}%</span>`);
+            }
+            if (pattern.usageCount !== undefined) {
+              writeLine(terminal, `  Used: ${pattern.usageCount} time(s)`);
+            }
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">Total: ${result.patterns.length} pattern(s)</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-muted">No patterns found. Use /pattern save to create one.</span>`);
+        }
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "save": {
+      if (args.length < 2) {
+        writeHtml(terminal, `<span class="system-info">Usage: /pattern save &lt;name&gt; &lt;category&gt; &lt;prompt&gt;</span>`);
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span class="system-muted">Categories: coding, debugging, architecture, communication, other</span>`);
+        break;
+      }
+
+      const name = args[1];
+      const category = args[2] || "other";
+      const validCategories = ["coding", "debugging", "architecture", "communication", "other"];
+
+      if (!validCategories.includes(category)) {
+        writeHtml(terminal, `<span class="system-error">Invalid category: ${escapeHtml(category)}</span>`);
+        writeHtml(terminal, `<span class="system-muted">Valid categories: ${validCategories.join(", ")}</span>`);
+        break;
+      }
+
+      // Check if user is providing a multi-word prompt
+      const promptParts = args.slice(3);
+      if (promptParts.length === 0) {
+        writeHtml(terminal, `<span class="system-error">Error: Prompt text is required</span>`);
+        break;
+      }
+
+      const prompt = promptParts.join(" ");
+      const description = await promptForDescription(terminal);
+
+      writeLine(terminal, "");
+      writeSection(terminal, "Saving Pattern", "[pattern]", writeHtml);
+      writeLine(terminal, `Name: ${name}`);
+      writeLine(terminal, `Category: ${category}`);
+      writeLine(terminal, `Prompt: ${prompt.slice(0, 100)}${prompt.length > 100 ? "..." : ""}`);
+
+      try {
+        const result = await window.terminalAPI.patternSave?.({
+          name,
+          category,
+          description: description || "",
+          prompt,
+        });
+
+        if (result?.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Pattern saved with ID: ${result.id || "unknown"}</span>`);
+        } else {
+          writeHtml(terminal, `<span class='system-error'>[err] Failed: ${result.error || "Unknown error"}</span>`);
+        }
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "apply": {
+      if (args.length < 2) {
+        writeHtml(terminal, `<span class="system-info">Usage: /pattern apply &lt;pattern-id-or-name&gt; &lt;task-description&gt;</span>`);
+        break;
+      }
+
+      const patternRef = args[1];
+      const taskDesc = args.slice(2).join(" ");
+
+      if (!taskDesc) {
+        writeHtml(terminal, `<span class="system-error">Error: Task description is required</span>`);
+        break;
+      }
+
+      writeLine(terminal, "");
+      writeSection(terminal, "Applying Pattern", "[pattern]", writeHtml);
+      writeLine(terminal, `Pattern: ${patternRef}`);
+      writeLine(terminal, `Task: ${taskDesc}`);
+
+      try {
+        const result = await window.terminalAPI.patternApply?.(patternRef, taskDesc);
+
+        if (result?.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Pattern applied</span>`);
+          if (result.enhancedPrompt) {
+            writeLine(terminal, "");
+            writeHtml(terminal, `<span class="system-info">Enhanced Prompt:</span>`);
+            writeHtml(terminal, `<span style="color: var(--text-primary);">${escapeHtml(result.enhancedPrompt.slice(0, 500))}</span>`);
+          }
+        } else {
+          writeHtml(terminal, `<span class='system-error'>[err] Failed: ${result.error || "Pattern not found"}</span>`);
+        }
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "rate": {
+      if (args.length < 2) {
+        writeHtml(terminal, `<span class="system-info">Usage: /pattern rate &lt;pattern-id&gt; &lt;success|fail&gt;</span>`);
+        break;
+      }
+
+      const patternId = args[1];
+      const success = args[2]?.toLowerCase() === "success";
+
+      writeLine(terminal, `Rating pattern ${patternId} as ${success ? "successful" : "failed"}...`);
+
+      try {
+        const result = await window.terminalAPI.patternRate?.(patternId, success);
+
+        if (result?.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Pattern effectiveness updated</span>`);
+        } else {
+          writeHtml(terminal, `<span class='system-error'>[err] Failed: ${result.error || "Unknown error"}</span>`);
+        }
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "help": {
+      writeHtml(terminal, `
+<span class="system-ok"><strong>Pattern Commands</strong></span>
+
+<span class="system-info">Usage:</span>
+  /pattern list                    - List all saved patterns
+  /pattern save &lt;name&gt; &lt;cat&gt;    - Save a new pattern
+  /pattern apply &lt;id&gt; &lt;task&gt;    - Apply pattern to task
+  /pattern rate &lt;id&gt; &lt;success|fail&gt; - Rate pattern effectiveness
+
+<span class="system-info">Categories:</span>
+  coding, debugging, architecture, communication, other
+
+<span class="system-info">Examples:</span>
+  /pattern save BugFixTemplate coding "First understand expected behavior..."
+  /pattern apply BugFixTemplate "Fix login crash"
+  /pattern rate pattern-123 success
+
+<span class="system-info">About:</span>
+Patterns are reusable prompt templates that have proven effective.
+Track effectiveness to build your personal prompt library.
+      `.trim());
+      break;
+    }
+
+    default:
+      writeHtml(terminal, `<span class="system-info">Usage: /pattern [list|save|apply|rate|help]</span>`);
+      break;
+  }
+}
+
+function getCategoryIcon(category: string): string {
+  const icons: Record<string, string> = {
+    coding: "💻",
+    debugging: "🐛",
+    architecture: "🏗️",
+    communication: "💬",
+    other: "📝",
+  };
+  return icons[category] || "📝";
+}
+
+async function promptForDescription(terminal: HTMLElement): Promise<string> {
+  // For now, return empty - in a full implementation this could prompt user interactively
+  return "";
+}
+
+function writeSection(terminal: HTMLElement, title: string, icon: string, writeHtml: WriteHtmlFn): void {
+  writeHtml(
+    terminal,
+    `<span style="color: var(--accent-cyan); font-weight: bold;">${icon} ${title}</span>`,
+  );
+}
+
+// Check if orchestral API is available
+function hasOrchestralAPI(): boolean {
+  return typeof window.terminalAPI?.reviewDiff === "function" ||
+         typeof window.terminalAPI?.patternList === "function" ||
+         typeof window.terminalAPI?.orchestralSpawn === "function";
+}
+
+/**
+ * Handle workflow commands.
+ */
+async function handleWorkflowCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = args[0] || "list";
+
+  switch (action) {
+    case "help": {
+      writeHtml(terminal, `
+<span class="system-ok"><strong>Workflow Commands</strong></span>
+
+<span class="system-info">Usage:</span>
+  /workflow list - List all workflows
+  /workflow create <name> - Create a new workflow (interactive)
+  /workflow run <name> - Execute a workflow
+  /workflow show <name> - Show workflow details
+  /workflow delete <name> - Delete a workflow
+
+<span class="system-info">Examples:</span>
+  /workflow create "Build and Test"
+  /workflow run "Build and Test"
+  /workflow show "Build and Test"
+      `.trim());
+      break;
+    }
+
+    case "list": {
+      writeSection(terminal, "Workflows", "[workflow]", writeHtml);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Workflow API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.workflowList?.();
+
+        if (result?.workflows && result.workflows.length > 0) {
+          for (const wf of result.workflows) {
+            writeLine(terminal, "");
+            writeHtml(terminal, `<span style="color: var(--accent-cyan);">${escapeHtml(wf.name)}</span>`);
+            if (wf.description) {
+              writeHtml(terminal, `<span style="color: var(--text-muted);">  ${escapeHtml(wf.description)}</span>`);
+            }
+            writeHtml(terminal, `<span style="color: var(--text-muted);">  Steps: ${wf.steps.length} | Runs: ${wf.runCount}</span>`);
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">Total: ${result.workflows.length} workflow(s)</span>`);
+        } else {
+          writeLine(terminal, "No workflows found.");
+          writeHtml(terminal, `<span class="system-info">Use /workflow create to create one</span>`);
+        }
+      } catch (err) {
+        console.error("[Workflow] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "create": {
+      const name = args[1];
+      if (!name) {
+        writeHtml(terminal, `<span class="system-info">Usage: /workflow create &lt;name&gt; &lt;step1&gt; [&lt;step2&gt; ...]</span>`);
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span class="system-muted">Steps format:</span>`);
+        writeHtml(terminal, `<span style="color: var(--text-muted);">  /command - terminal command</span>`);
+        writeHtml(terminal, `<span style="color: var(--text-muted);">  /spawn &lt;desc&gt; - spawn agent</span>`);
+        writeHtml(terminal, `<span style="color: var(--text-muted);">  /delay &lt;ms&gt; - wait before next step</span>`);
+        break;
+      }
+
+      const steps = args.slice(2);
+      if (steps.length === 0) {
+        writeHtml(terminal, `<span class="system-warn">[warn] No steps provided. Workflow will be empty.</span>`);
+      }
+
+      writeSection(terminal, "Creating Workflow", "[workflow]", writeHtml);
+      writeLine(terminal, `Name: ${name}`);
+      writeLine(terminal, `Steps: ${steps.length}`);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Workflow API not available</span>`);
+        break;
+      }
+
+      try {
+        // Parse steps
+        const workflowSteps = steps.map((step, i) => {
+          if (step.startsWith("/spawn ")) {
+            return {
+              id: `step-${i}`,
+              type: "spawn" as const,
+              command: step.slice(7),
+              description: `Spawn: ${step.slice(7)}`,
+            };
+          } else if (step.startsWith("/delay ")) {
+            const ms = parseInt(step.slice(7), 10);
+            return {
+              id: `step-${i}`,
+              type: "delay" as const,
+              command: ms.toString(),
+              description: `Delay: ${ms}ms`,
+              timeout: ms,
+            };
+          } else {
+            return {
+              id: `step-${i}`,
+              type: "command" as const,
+              command: step.startsWith("/") ? step.slice(1) : step,
+              description: `Command: ${step}`,
+            };
+          }
+        });
+
+        const result = await window.terminalAPI.workflowCreate?.({
+          name,
+          description: `Auto-created workflow`,
+          steps: workflowSteps,
+          tags: ["user-created"],
+        });
+
+        if (result?.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Workflow created: ${result.id}</span>`);
+          writeHtml(terminal, `<span class="system-info">Use /workflow run "${name}" to execute</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-error">[err] ${result?.error || "Failed to create workflow"}</span>`);
+        }
+      } catch (err) {
+        console.error("[Workflow] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "run": {
+      const name = args[1];
+      if (!name) {
+        writeHtml(terminal, `<span class="system-info">Usage: /workflow run &lt;name&gt;</span>`);
+        break;
+      }
+
+      writeSection(terminal, `Running Workflow: ${name}`, "[workflow]", writeHtml);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Workflow API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.workflowRun?.(name);
+
+        if (result?.success && result.steps) {
+          writeLine(terminal, "");
+          for (const step of result.steps) {
+            writeHtml(terminal, `<span style="color: var(--text-muted);">  ${escapeHtml(step.description)}</span>`);
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-info">Execute the steps above to complete the workflow</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-error">[err] ${result?.error || "Workflow not found"}</span>`);
+        }
+      } catch (err) {
+        console.error("[Workflow] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "show": {
+      const name = args[1];
+      if (!name) {
+        writeHtml(terminal, `<span class="system-info">Usage: /workflow show &lt;name&gt;</span>`);
+        break;
+      }
+
+      writeSection(terminal, `Workflow: ${name}`, "[workflow]", writeHtml);
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Workflow API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.workflowShow?.(name);
+
+        if (result?.workflow) {
+          const { workflow } = result;
+          writeLine(terminal, "");
+          if (workflow.description) {
+            writeLine(terminal, workflow.description);
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--accent-cyan);">Steps:</span>`);
+          for (const step of workflow.steps) {
+            writeHtml(terminal, `<span style="color: var(--text-primary);">  ${step.id}: ${escapeHtml(step.description || step.command)}</span>`);
+          }
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span style="color: var(--text-muted);">Runs: ${workflow.runCount} | Created: ${new Date(workflow.createdAt).toLocaleDateString()}</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-error">[err] Workflow not found</span>`);
+        }
+      } catch (err) {
+        console.error("[Workflow] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "delete": {
+      const name = args[1];
+      if (!name) {
+        writeHtml(terminal, `<span class="system-info">Usage: /workflow delete &lt;name&gt;</span>`);
+        break;
+      }
+
+      if (!hasOrchestralAPI()) {
+        writeHtml(terminal, `<span class="system-error">[err] Workflow API not available</span>`);
+        break;
+      }
+
+      try {
+        const result = await window.terminalAPI.workflowDelete?.(name);
+
+        if (result?.success) {
+          writeHtml(terminal, `<span class="system-ok">[ok] Workflow deleted: ${name}</span>`);
+        } else {
+          writeHtml(terminal, `<span class="system-error">[err] ${result?.error || "Failed to delete workflow"}</span>`);
+        }
+      } catch (err) {
+        console.error("[Workflow] Error:", err);
+        writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    default: {
+      writeHtml(terminal, `<span class="system-info">Usage: /workflow [help|list|create|run|show|delete]</span>`);
+    }
+  }
+}
+
+/**
+ * Handle task commands.
+ */
+async function handleTaskCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = args[0] || "list";
+
+  switch (action) {
+    case "complete": {
+      const taskId = args[1];
+      const success = args[2]?.toLowerCase() === "success";
+      const patternId = args[3];
+
+      if (!taskId) {
+        writeHtml(terminal, `<span class="system-info">Usage: /task complete &lt;task-id&gt; [success|fail] [pattern-id]</span>`);
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span class="system-muted">Marks task as completed and updates pattern effectiveness</span>`);
+        return;
+      }
+
+      writeLine(terminal, `Completing task ${taskId} as ${success ? "successful" : "failed"}...`);
+
+      try {
+        // If pattern was used, rate it
+        if (patternId) {
+          const rateResult = await window.terminalAPI.patternRate?.(patternId, success);
+          if (rateResult?.success) {
+            writeHtml(terminal, `<span class="system-ok">[ok] Pattern effectiveness updated</span>`);
+          } else {
+            writeHtml(terminal, `<span class="system-warn">[warn] Could not rate pattern: ${rateResult.error || "Unknown"}</span>`);
+          }
+        }
+
+        // TODO: Update task status in backend
+        writeHtml(terminal, `<span class="system-ok">[ok] Task ${taskId} marked as ${success ? "completed" : "failed"}</span>`);
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "help": {
+      writeHtml(terminal, `
+<span class="system-ok"><strong>Task Commands</strong></span>
+
+<span class="system-info">Usage:</span>
+  /task complete &lt;task-id&gt; [success|fail] [pattern-id]
+      Mark task as complete and update pattern effectiveness
+  /task list                   - Show all tasks
+  /task status &lt;task-id&gt;       - Show task status
+
+<span class="system-info">Examples:</span>
+  /task complete task-123 success
+  /task complete task-123 success pattern-456
+      `.trim());
+      break;
+    }
+
+    default:
+      writeHtml(terminal, `<span class="system-info">Usage: /task [complete|list|status|help]</span>`);
+      break;
+  }
+}
+

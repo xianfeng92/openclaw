@@ -5,6 +5,61 @@ import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
 import type { GatewayManager } from "./gateway.js";
+// Note: Orchestration modules are imported dynamically via IPC or at runtime
+// Static imports are removed to avoid build issues
+
+// Helper to parse Obsidian vault (simplified implementation)
+async function parseObsidianVault(vaultPath: string): Promise<{
+  customers: Array<{ name: string; score: number }>;
+  projects: Array<{ name: string; score: number }>;
+  meetings: Array<{ title: string; score: number }>;
+  decisions: Array<{ title: string; score: number }>;
+  patterns: Array<{ name: string; category: string; effectiveness?: number; usageCount?: number }>;
+}> {
+  const context = {
+    customers: [] as Array<{ name: string; score: number }>,
+    projects: [] as Array<{ name: string; score: number }>,
+    meetings: [] as Array<{ title: string; score: number }>,
+    decisions: [] as Array<{ title: string; score: number }>,
+    patterns: [] as Array<{ name: string; category: string; effectiveness?: number; usageCount?: number }>,
+  };
+
+  try {
+    // Check for customer files
+    const customersDir = path.join(vaultPath, "Customers");
+    if (fs.existsSync(customersDir)) {
+      const files = fs.readdirSync(customersDir).filter(f => f.endsWith(".md"));
+      for (const file of files) {
+        const name = file.replace(".md", "");
+        context.customers.push({ name, score: 10 });
+      }
+    }
+
+    // Check for project files
+    const projectsDir = path.join(vaultPath, "Projects");
+    if (fs.existsSync(projectsDir)) {
+      const files = fs.readdirSync(projectsDir).filter(f => f.endsWith(".md"));
+      for (const file of files) {
+        const name = file.replace(".md", "");
+        context.projects.push({ name, score: 10 });
+      }
+    }
+
+    // Check for pattern files
+    const patternsDir = path.join(vaultPath, "Patterns");
+    if (fs.existsSync(patternsDir)) {
+      const files = fs.readdirSync(patternsDir).filter(f => f.endsWith(".md"));
+      for (const file of files) {
+        const name = file.replace(".md", "");
+        context.patterns.push({ name, category: "general", effectiveness: 0.5, usageCount: 0 });
+      }
+    }
+  } catch (err) {
+    console.error("[Context] Error parsing vault:", err);
+  }
+
+  return context;
+}
 
 const execAsync = promisify(exec);
 
@@ -41,6 +96,17 @@ interface OrchestralTask {
   status: "running" | "completed" | "failed" | "killed";
   process?: ChildProcess;
   pid?: number;
+  useContext?: boolean;
+  contextSummary?: {
+    customersCount: number;
+    projectsCount: number;
+    decisionsCount: number;
+  };
+  appliedPattern?: {
+    id: string;
+    name: string;
+    appliedAt: number;
+  };
 }
 
 const orchestralTasks = new Map<string, OrchestralTask>();
@@ -237,10 +303,31 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
     "terminal:orchestral-spawn",
     async (
       event,
-      opts: { description: string; agent?: string; branch?: string },
+      opts: {
+        description: string;
+        agent?: string;
+        branch?: string;
+        useContext?: boolean;
+        relevantContext?: {
+          customers: Array<{ name: string; score: number }>;
+          projects: Array<{ name: string; score: number }>;
+          decisions: Array<{ title: string; score: number }>;
+          meetings: Array<{ title: string; score: number }>;
+          patterns: Array<{ name: string; score: number }>;
+        };
+      },
     ): Promise<{ success: boolean; task?: any; error?: string }> => {
       try {
         console.log("[Orchestral] spawn called with:", opts);
+
+        // Log context if provided
+        if (opts.useContext && opts.relevantContext) {
+          console.log("[Orchestral] Context injection enabled:", {
+            customers: opts.relevantContext.customers?.length || 0,
+            projects: opts.relevantContext.projects?.length || 0,
+            decisions: opts.relevantContext.decisions?.length || 0,
+          });
+        }
 
         // Get current git repository
         const repoPath = await getGitRepo();
@@ -369,7 +456,16 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
           branch: branchName,
           startedAt: Date.now(),
           status: "running",
-        };
+          // Store context with task (as metadata)
+          useContext: opts.useContext ?? false,
+          contextSummary: opts.relevantContext ? {
+            customersCount: opts.relevantContext.customers?.length || 0,
+            projectsCount: opts.relevantContext.projects?.length || 0,
+            decisionsCount: opts.relevantContext.decisions?.length || 0,
+          } : undefined,
+          // Track applied patterns for effectiveness tracking
+          appliedPattern: opts.appliedPattern || undefined,
+        } as any;
 
         orchestralTasks.set(taskId, task);
         saveTasks();
@@ -385,6 +481,23 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
           details.push(`Branch: ${branchName}`);
         } else if (!repoPath) {
           details.push(`Working in: ${process.cwd()}`);
+        }
+
+        // Add context info to response
+        if (opts.useContext && opts.relevantContext) {
+          const contextItems: string[] = [];
+          if (opts.relevantContext.customers?.length) {
+            contextItems.push(`${opts.relevantContext.customers.length} customer(s)`);
+          }
+          if (opts.relevantContext.projects?.length) {
+            contextItems.push(`${opts.relevantContext.projects.length} project(s)`);
+          }
+          if (opts.relevantContext.decisions?.length) {
+            contextItems.push(`${opts.relevantContext.decisions.length} decision(s)`);
+          }
+          if (contextItems.length > 0) {
+            details.push(`Context: ${contextItems.join(", ")}`);
+          }
         }
 
         // Send completion notification
@@ -568,6 +681,243 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
     },
   );
 
+  // ===== Context Commands =====
+
+  // Context list - return all loaded context items
+  ipcMain.handle("terminal:context-list", async (): Promise<any> => {
+    try {
+      const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+      if (!fs.existsSync(contextPath)) {
+        return {
+          customers: [],
+          projects: [],
+          meetings: [],
+          decisions: [],
+          patterns: [],
+        };
+      }
+
+      const data = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
+
+      // Return simplified versions for UI display
+      return {
+        customers: (data.customers || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          tags: c.tags,
+        })),
+        projects: (data.projects || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          status: p.status,
+        })),
+        meetings: (data.meetings || []).map((m: any) => ({
+          id: m.id,
+          title: m.title,
+          date: m.date,
+        })),
+        decisions: (data.decisions || []).map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          status: d.status,
+        })),
+        patterns: (data.patterns || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+        })),
+      };
+    } catch (err) {
+      console.error("[Context] Failed to load context:", err);
+      return {
+        customers: [],
+        projects: [],
+        meetings: [],
+        decisions: [],
+        patterns: [],
+      };
+    }
+  });
+
+  // Context search - search for matching items
+  ipcMain.handle("terminal:context-search", async (_event, query: string): Promise<any> => {
+    try {
+      const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+      if (!fs.existsSync(contextPath)) {
+        return {
+          customers: [],
+          projects: [],
+          meetings: [],
+          decisions: [],
+          patterns: [],
+        };
+      }
+
+      const data = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
+      const lowerQuery = query.toLowerCase();
+
+      // Simple search function
+      const searchItems = (items: any[], fields: string[]) => {
+        return items
+          .map((item: any) => {
+            let score = 0;
+            for (const field of fields) {
+              const value = item[field];
+              if (value && String(value).toLowerCase().includes(lowerQuery)) {
+                score += 1;
+              }
+            }
+            return { item, score };
+          })
+          .filter((r) => r.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 5)
+          .map((r) => ({
+            name: r.item.name || r.item.title || "Unknown",
+            score: r.score,
+          }));
+      };
+
+      return {
+        customers: searchItems(data.customers || [], ["name", "notes", "tags"]),
+        projects: searchItems(data.projects || [], ["name", "description", "tags"]),
+        meetings: searchItems(data.meetings || [], ["title", "notes", "attendees"]),
+        decisions: searchItems(data.decisions || [], ["title", "decision", "context"]),
+        patterns: searchItems(data.patterns || [], ["name", "description", "prompt"]),
+      };
+    } catch (err) {
+      console.error("[Context] Search failed:", err);
+      return {
+        customers: [],
+        projects: [],
+        meetings: [],
+        decisions: [],
+        patterns: [],
+      };
+    }
+  });
+
+  // Context load - sync from Obsidian vault
+  ipcMain.handle("terminal:context-load", async (_event, vaultPath?: string): Promise<any> => {
+    try {
+      // Determine vault path
+      let actualVaultPath = vaultPath || "";
+
+      if (!actualVaultPath) {
+        // Try to find Obsidian vault automatically
+        actualVaultPath = findObsidianVault() || "";
+      }
+
+      if (!actualVaultPath) {
+        // Try common Obsidian vault locations as fallback
+        const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+        const commonPaths = [
+          path.join(homeDir, "Obsidian", "Vault"),
+          path.join(homeDir, "Documents", "Obsidian", "Vault"),
+          path.join(homeDir, "OneDrive", "Documents", "Obsidian", "Vault"),
+        ];
+
+        for (const p of commonPaths) {
+          if (fs.existsSync(p)) {
+            actualVaultPath = p;
+            break;
+          }
+        }
+      }
+
+      if (!actualVaultPath || !fs.existsSync(actualVaultPath)) {
+        return {
+          success: false,
+          error: "Vault path not found. Use /context load <vault-path> to specify.",
+        };
+      }
+
+      console.log(`[Context] Loading from Obsidian vault: ${actualVaultPath}`);
+
+      // Parse Obsidian markdown files
+      const context = await parseObsidianVault(actualVaultPath);
+
+      // Save the context
+      const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+      const contextDir = path.dirname(contextPath);
+      if (!fs.existsSync(contextDir)) {
+        fs.mkdirSync(contextDir, { recursive: true });
+      }
+      fs.writeFileSync(contextPath, JSON.stringify(context, null, 2));
+
+      const summary = `Customers: ${context.customers.length}, Projects: ${context.projects.length}, Meetings: ${context.meetings.length}, Decisions: ${context.decisions.length}, Patterns: ${context.patterns.length}`;
+
+      return {
+        success: true,
+        summary,
+        context: {
+          customers: context.customers.length,
+          projects: context.projects.length,
+          meetings: context.meetings.length,
+          decisions: context.decisions.length,
+          patterns: context.patterns.length,
+        },
+      };
+    } catch (err) {
+      console.error("[Context] Failed to load from Obsidian:", err);
+      return {
+        success: false,
+        error: String(err),
+      };
+    }
+  });
+
+  // Context clear - clear cached context
+  ipcMain.handle("terminal:context-clear", async (): Promise<void> => {
+    try {
+      const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+      if (fs.existsSync(contextPath)) {
+        fs.unlinkSync(contextPath);
+      }
+    } catch (err) {
+      console.error("[Context] Failed to clear context:", err);
+    }
+  });
+
+  // Context summary - get summary statistics
+  ipcMain.handle("terminal:context-summary", async (): Promise<any> => {
+    try {
+      const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+      if (!fs.existsSync(contextPath)) {
+        return {
+          customers: 0,
+          projects: 0,
+          meetings: 0,
+          decisions: 0,
+          patterns: 0,
+        };
+      }
+
+      const data = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
+
+      return {
+        customers: (data.customers || []).length,
+        projects: (data.projects || []).length,
+        meetings: (data.meetings || []).length,
+        decisions: (data.decisions || []).length,
+        patterns: (data.patterns || []).length,
+        lastSyncAt: data.lastSyncAt ? new Date(data.lastSyncAt).toISOString() : undefined,
+      };
+    } catch (err) {
+      console.error("[Context] Failed to get summary:", err);
+      return {
+        customers: 0,
+        projects: 0,
+        meetings: 0,
+        decisions: 0,
+        patterns: 0,
+      };
+    }
+  });
+
   // Clean up completed tasks periodically
   setInterval(() => {
     const now = Date.now();
@@ -585,6 +935,404 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
     saveTasks();
   }, 60 * 60 * 1000); // Every hour
 }
+
+// ===== Pattern Commands =====
+
+// Generate a simple ID for patterns
+function generatePatternId(): string {
+  return `pattern-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// List all patterns
+ipcMain.handle("terminal:pattern-list", async (): Promise<any> => {
+  try {
+    const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+    if (!fs.existsSync(contextPath)) {
+      return { success: true, patterns: [] };
+    }
+
+    const data = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
+    const patterns = data.patterns || [];
+
+    return {
+      success: true,
+      patterns: patterns.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        description: p.description,
+        effectiveness: p.effectiveness,
+        usageCount: p.usageCount || 0,
+      })),
+    };
+  } catch (err) {
+    console.error("[Pattern] Failed to list patterns:", err);
+    return { success: false, error: String(err), patterns: [] };
+  }
+});
+
+// Save a new pattern
+ipcMain.handle("terminal:pattern-save", async (_event, pattern: {
+  name,
+  category,
+  description,
+  prompt,
+}): Promise<any> => {
+  try {
+    const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+    // Load existing context or create new
+    let context = { customers: [], projects: [], meetings: [], decisions: [], patterns: [] };
+    if (fs.existsSync(contextPath)) {
+      context = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
+    }
+
+    // Create new pattern
+    const newPattern = {
+      id: generatePatternId(),
+      name,
+      category,
+      description,
+      prompt,
+      effectiveness: 0.5, // Start with neutral effectiveness
+      usageCount: 0,
+      sourceFile: "terminal",
+    };
+
+    context.patterns.push(newPattern);
+
+    // Save
+    const dir = path.dirname(contextPath);
+    await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(contextPath, JSON.stringify(context, null, 2));
+
+    return {
+      success: true,
+      id: newPattern.id,
+    };
+  } catch (err) {
+    console.error("[Pattern] Failed to save pattern:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// Apply a pattern to a task description
+ipcMain.handle("terminal:pattern-apply", async (_event, patternId: string, taskDescription: string): Promise<any> => {
+  try {
+    const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+    if (!fs.existsSync(contextPath)) {
+      return { success: false, error: "No patterns found" };
+    }
+
+    const context = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
+    const patterns = context.patterns || [];
+
+    // Find pattern by ID or name
+    const pattern = patterns.find((p: any) =>
+      p.id === patternId || p.name.toLowerCase() === patternId.toLowerCase()
+    );
+
+    if (!pattern) {
+      return { success: false, error: `Pattern "${patternId}" not found` };
+    }
+
+    // Build enhanced prompt
+    const enhancedPrompt = `Apply the following pattern to your task:
+
+## Pattern: ${pattern.name}
+
+${pattern.description}
+
+${pattern.prompt}
+
+---
+
+Task: ${taskDescription}`;
+
+    // Increment usage count
+    pattern.usageCount = (pattern.usageCount || 0) + 1;
+    fs.writeFileSync(contextPath, JSON.stringify(context, null, 2));
+
+    return {
+      success: true,
+      enhancedPrompt,
+      patternId: pattern.id,
+    };
+  } catch (err) {
+    console.error("[Pattern] Failed to apply pattern:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// Rate a pattern's effectiveness
+ipcMain.handle("terminal:pattern-rate", async (_event, patternId: string, success: boolean): Promise<any> => {
+  try {
+    const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
+
+    if (!fs.existsSync(contextPath)) {
+      return { success: false, error: "No patterns found" };
+    }
+
+    const context = JSON.parse(fs.readFileSync(contextPath, utf-8));
+    const patterns = context.patterns || [];
+
+    // Find pattern
+    const pattern = patterns.find((p: any) => p.id === patternId);
+
+    if (!pattern) {
+      return { success: false, error: `Pattern "${patternId}" not found` };
+    }
+
+    // Update effectiveness using exponential moving average
+    const alpha = 0.2;
+    const target = success ? 1 : 0;
+    const current = pattern.effectiveness || 0.5;
+    pattern.effectiveness = alpha * target + (1 - alpha) * current;
+
+    // Save
+    fs.writeFileSync(contextPath, JSON.stringify(context, null, 2));
+
+    console.log(`[Pattern] Rated ${patternId} as ${success ? "success" : "failure"}: ${pattern.effectiveness.toFixed(2)}`);
+
+    return { success: true };
+  } catch (err) {
+    console.error("[Pattern] Failed to rate pattern:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// Recommend patterns for a task description
+ipcMain.handle("terminal:pattern-recommend", async (_event, description: string, limit = 3): Promise<any> => {
+  try {
+    // Import at runtime to avoid circular dependency
+    const { recommendPatterns } = await import("../../../src/orchestration/index.js");
+
+    const recommendations = await recommendPatterns(description, limit);
+
+    return {
+      success: true,
+      patterns: recommendations.map((r) => ({
+        id: r.item.id,
+        name: r.item.name,
+        category: r.item.category,
+        description: r.item.description,
+        effectiveness: r.item.effectiveness,
+        usageCount: r.item.usageCount,
+        score: r.score,
+        reason: r.matchReason,
+      })),
+    };
+  } catch (err) {
+    console.error("[Pattern] Failed to recommend patterns:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// Run code review on current git changes
+ipcMain.handle("terminal:review-diff", async (_event, options: { branch?: string; maxFiles?: number } = {}): Promise<any> => {
+  try {
+    const { runCodeReview, formatReviewTerminal } = await import("../../../src/orchestration/index.js");
+    const projectPath = getProjectPath();
+
+    console.log("[Review] Starting code review for", projectPath);
+
+    const review = await runCodeReview(projectPath, {
+      branch: options.branch,
+      maxFiles: options.maxFiles,
+    });
+
+    const formatted = formatReviewTerminal(review);
+
+    return {
+      success: true,
+      review: {
+        ...review,
+        formatted,
+      },
+    };
+  } catch (err) {
+    console.error("[Review] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// PR Commands
+ipcMain.handle("terminal:pr-create", async (_event, options: {
+  title: string;
+  description?: string;
+  baseBranch?: string;
+  draft?: boolean;
+}): Promise<any> => {
+  try {
+    const { getGitStatus, commitChanges, getCurrentBranch, createPR } = await import("../../../src/orchestration/index.js");
+    const projectPath = getProjectPath();
+
+    // Check status
+    const status = await getGitStatus(projectPath);
+    if (!status.hasChanges) {
+      return { success: false, error: "No changes to commit. Make some changes first." };
+    }
+
+    // Commit changes
+    const commitMsg = options.description || options.title;
+    const commitResult = await commitChanges(projectPath, commitMsg);
+    if (!commitResult.success) {
+      return { success: false, error: `Commit failed: ${commitResult.error}` };
+    }
+
+    // Push to remote
+    const currentBranch = await getCurrentBranch(projectPath);
+    if (!currentBranch) {
+      return { success: false, error: "Could not determine current branch" };
+    }
+
+    const { runCommandWithTimeout, resolveCommand } = await import("../../process/exec.js");
+    const pushResult = await runCommandWithTimeout(
+      [resolveCommand("git"), "-C", projectPath, "push", "-u", "origin", currentBranch],
+      60_000,
+    );
+
+    if (pushResult.code !== 0) {
+      return { success: false, error: `Push failed: ${pushResult.stderr}` };
+    }
+
+    // Create PR
+    const prResult = await createPR(projectPath, {
+      title: options.title,
+      description: options.description || `## Summary\n\n${options.title}\n\n---\n\n*Created via OpenClaw*`,
+      baseBranch: options.baseBranch,
+      draft: options.draft,
+    });
+
+    return prResult;
+  } catch (err) {
+    console.error("[PR] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:pr-list", async (): Promise<any> => {
+  try {
+    const { listOpenPRs } = await import("../../../src/orchestration/index.js");
+    const projectPath = getProjectPath();
+
+    const prs = await listOpenPRs(projectPath);
+    return { success: true, prs };
+  } catch (err) {
+    console.error("[PR] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:pr-view", async (_event, prNumber: number): Promise<any> => {
+  try {
+    const { getPRDetails } = await import("../../../src/orchestration/index.js");
+    const projectPath = getProjectPath();
+
+    const pr = await getPRDetails(projectPath, prNumber);
+    return { success: true, pr };
+  } catch (err) {
+    console.error("[PR] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:git-status", async (): Promise<any> => {
+  try {
+    const { getGitStatus, getCurrentBranch } = await import("../../../src/orchestration/index.js");
+    const projectPath = getProjectPath();
+
+    const status = await getGitStatus(projectPath);
+    const branch = await getCurrentBranch(projectPath);
+
+    return { success: true, ...status, branch };
+  } catch (err) {
+    console.error("[Git] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// Workflow Commands
+ipcMain.handle("terminal:workflow-list", async (): Promise<any> => {
+  try {
+    const { listWorkflows } = await import("../../../src/orchestration/index.js");
+    const workflows = await listWorkflows();
+    return { success: true, workflows };
+  } catch (err) {
+    console.error("[Workflow] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:workflow-create", async (_event, workflow: {
+  name: string;
+  description?: string;
+  steps: Array<{ id: string; type: string; command: string; description?: string }>;
+  tags?: string[];
+}): Promise<any> => {
+  try {
+    const { createWorkflow } = await import("../../../src/orchestration/index.js");
+    const result = await createWorkflow(workflow);
+    return { success: true, id: result.id };
+  } catch (err) {
+    console.error("[Workflow] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:workflow-run", async (_event, name: string): Promise<any> => {
+  try {
+    const { dryRunWorkflow, getWorkflowByName } = await import("../../../src/orchestration/index.js");
+    const workflow = await getWorkflowByName(name);
+
+    if (!workflow) {
+      return { success: false, error: "Workflow not found" };
+    }
+
+    const result = await dryRunWorkflow(workflow.id);
+    await import("../../../src/orchestration/index.js").then((m) => m.incrementWorkflowRunCount(workflow.id));
+
+    return { success: true, steps: result.steps };
+  } catch (err) {
+    console.error("[Workflow] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:workflow-show", async (_event, name: string): Promise<any> => {
+  try {
+    const { getWorkflowByName } = await import("../../../src/orchestration/index.js");
+    const workflow = await getWorkflowByName(name);
+
+    if (workflow) {
+      return { success: true, workflow };
+    } else {
+      return { success: false, error: "Workflow not found" };
+    }
+  } catch (err) {
+    console.error("[Workflow] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("terminal:workflow-delete", async (_event, name: string): Promise<any> => {
+  try {
+    const { getWorkflowByName, deleteWorkflow } = await import("../../../src/orchestration/index.js");
+    const workflow = await getWorkflowByName(name);
+
+    if (!workflow) {
+      return { success: false, error: "Workflow not found" };
+    }
+
+    await deleteWorkflow(workflow.id);
+    return { success: true };
+  } catch (err) {
+    console.error("[Workflow] Failed:", err);
+    return { success: false, error: String(err) };
+  }
+});
 
 // Keep old signature for backward compatibility, but warn
 export function setupTerminalIpcLegacy(): void {

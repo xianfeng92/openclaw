@@ -338,6 +338,10 @@ export async function initSessionState(params: {
     sessionEntry.compactionCount = 0;
     sessionEntry.memoryFlushCompactionCount = undefined;
     sessionEntry.memoryFlushAt = undefined;
+    // Force fresh CLI provider sessions after /new or /reset.
+    // Reusing stale Claude/Codex CLI session ids can keep overgrown remote context alive.
+    sessionEntry.cliSessionIds = undefined;
+    sessionEntry.claudeCliSessionId = undefined;
     // Clear stale token metrics from previous session so /status doesn't
     // display the old session's context usage after /new or /reset.
     sessionEntry.totalTokens = undefined;

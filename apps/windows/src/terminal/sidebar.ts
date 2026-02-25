@@ -75,6 +75,7 @@ let agentsListEl: HTMLElement | null = null;
 let contextListEl: HTMLElement | null = null;
 let tasksCountEl: HTMLElement | null = null;
 let agentsCountEl: HTMLElement | null = null;
+let contextCountEl: HTMLElement | null = null;
 let statusTasksEl: HTMLElement | null = null;
 
 /**
@@ -87,6 +88,7 @@ export function initSidebar(): void {
   contextListEl = document.getElementById("context-list");
   tasksCountEl = document.getElementById("tasks-count");
   agentsCountEl = document.getElementById("agents-count");
+  contextCountEl = document.getElementById("context-count");
   statusTasksEl = document.getElementById("status-tasks");
 
   setupPanelToggle();
@@ -159,7 +161,7 @@ function setupActionButtons(): void {
  * Refresh all data from the backend
  */
 async function refreshData(): Promise<void> {
-  await Promise.all([refreshTasks(), refreshAgents()]);
+  await Promise.all([refreshTasks(), refreshAgents(), refreshContext()]);
 }
 
 /**
@@ -191,6 +193,67 @@ async function refreshAgents(): Promise<void> {
     }
   } catch (err) {
     console.error("[Sidebar] Failed to refresh agents:", err);
+  }
+}
+
+/**
+ * Refresh context list
+ */
+async function refreshContext(): Promise<void> {
+  try {
+    const result = await window.terminalAPI?.contextList?.();
+    if (result) {
+      // Convert API result to ContextItem format
+      const contextItems: ContextItem[] = [];
+
+      // Add customers
+      if (result.customers && Array.isArray(result.customers)) {
+        for (const customer of result.customers.slice(0, 5)) {
+          contextItems.push({
+            id: customer.id,
+            name: customer.name,
+            type: "customer",
+          });
+        }
+      }
+
+      // Add projects
+      if (result.projects && Array.isArray(result.projects)) {
+        for (const project of result.projects.slice(0, 5)) {
+          contextItems.push({
+            id: project.id,
+            name: project.name,
+            type: "project",
+          });
+        }
+      }
+
+      // Add decisions
+      if (result.decisions && Array.isArray(result.decisions)) {
+        for (const decision of result.decisions.slice(0, 3)) {
+          contextItems.push({
+            id: decision.id,
+            name: decision.title,
+            type: "decision",
+          });
+        }
+      }
+
+      contexts = contextItems;
+      renderContexts(contextItems);
+      updateContextCount();
+    }
+  } catch (err) {
+    console.error("[Sidebar] Failed to refresh context:", err);
+  }
+}
+
+/**
+ * Update context count display
+ */
+function updateContextCount(): void {
+  if (contextCountEl) {
+    contextCountEl.textContent = String(contexts.length);
   }
 }
 

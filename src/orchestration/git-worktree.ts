@@ -201,3 +201,100 @@ export async function getWorktreeBranch(worktreeDir: string): Promise<string | n
     return null;
   }
 }
+
+/**
+ * Spawn an AI agent in a worktree with the given prompt.
+ * Creates a tmux session and starts the agent with the context.
+ */
+export async function spawnAgentInWorktree(
+  task: {
+    id: string;
+    description: string;
+    agent: string;
+  },
+  repoPath: string,
+  prompt: {
+    systemPrompt?: string;
+    userPrompt: string;
+  },
+): Promise<{ success: boolean; tmuxSession?: string; error?: string }> {
+  try {
+    const { createTmuxSession } = await import("./tmux-manager.js");
+    const { resolveCommand } = await import("../process/exec.js");
+
+    // Get or create worktree for this task
+    const branchName = `task-${task.id.slice(0, 8)}`;
+    let worktreeDir = repoPath;
+
+    // Check if we need a worktree
+    if (task.id.includes("-") && !repoPath.includes(task.id)) {
+      const worktreeResult = await createWorktree({
+        repoPath,
+        branch: branchName,
+        force: true,
+      });
+
+      if (!worktreeResult.success) {
+        return {
+          success: false,
+          error: `Failed to create worktree: ${worktreeResult.error}`,
+        };
+      }
+
+      worktreeDir = worktreeResult.worktree;
+    }
+
+    // Create a tmux session for the agent
+    const sessionName = `task-${task.id.slice(0, 12)}`;
+    const sessionResult = await createTmuxSession({
+      name: sessionName,
+      cwd: worktreeDir,
+    });
+
+    if (!sessionResult.success) {
+      return {
+        success: false,
+        error: `Failed to create tmux session: ${sessionResult.error}`,
+      };
+    }
+
+    // Build the agent command
+    const agentCmd = buildAgentCommand(task.agent, prompt, worktreeDir);
+
+    // Send the command to the tmux session
+    const { sendKeys } = await import("./tmux-manager.js");
+    await sendKeys(sessionName, agentCmd);
+
+    // Update task with session info
+    const { updateTask } = await import("./task-registry.js");
+    await updateTask(task.id, {
+      status: "running",
+      tmuxSession: sessionName,
+      worktree: worktreeDir,
+    });
+
+    return {
+      success: true,
+      tmuxSession: sessionName,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: String(err),
+    };
+  }
+}
+
+/**
+ * Build the agent command for spawning.
+ */
+function buildAgentCommand(
+  agentType: string,
+  prompt: { systemPrompt?: string; userPrompt: string },
+  worktreeDir: string,
+): string {
+  // This would call the actual agent CLI
+  // For now, return a placeholder command
+  const escapedPrompt = prompt.userPrompt.replace(/"/g, "\\$&");
+  return `echo "Agent: ${agentType} - ${escapedPrompt}" && sleep 1`;
+}

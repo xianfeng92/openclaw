@@ -37,8 +37,12 @@ const commands = [
   "spawn",
   "agents",
   "tasks",
+  "task",
   "orchestral",
   "orch",
+  "context",
+  "review",
+  "pattern",
 ];
 
 const shellCommandsWindows = [

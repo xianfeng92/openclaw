@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
-import { saveSessionStore } from "../../config/sessions.js";
+import { loadSessionStore, saveSessionStore } from "../../config/sessions.js";
 import { initSessionState } from "./session.js";
 
 describe("initSessionState thread forking", () => {
@@ -147,6 +147,46 @@ describe("initSessionState RawBody", () => {
 
     expect(result.isNewSession).toBe(true);
     expect(result.bodyStripped).toBe("");
+  });
+
+  it("clears persisted CLI session ids on /new so Claude/Codex sessions restart fresh", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-rawbody-reset-cli-session-"));
+    const storePath = path.join(root, "sessions.json");
+    const sessionKey = "agent:main:whatsapp:group:g1";
+    const existingSessionId = "existing-session";
+    const cfg = { session: { store: storePath } } as OpenClawConfig;
+
+    await saveSessionStore(storePath, {
+      [sessionKey]: {
+        sessionId: existingSessionId,
+        updatedAt: Date.now(),
+        cliSessionIds: {
+          "claude-cli": "cli-session-old",
+          "codex-cli": "thread-old",
+        },
+        claudeCliSessionId: "legacy-claude-session-old",
+      },
+    });
+
+    const result = await initSessionState({
+      ctx: {
+        Body: `[Context]\nJake: /new\n[from: Jake]`,
+        RawBody: "/new",
+        ChatType: "group",
+        SessionKey: sessionKey,
+      },
+      cfg,
+      commandAuthorized: true,
+    });
+
+    expect(result.isNewSession).toBe(true);
+    expect(result.sessionId).not.toBe(existingSessionId);
+    expect(result.sessionEntry.cliSessionIds).toBeUndefined();
+    expect(result.sessionEntry.claudeCliSessionId).toBeUndefined();
+
+    const stored = loadSessionStore(storePath);
+    expect(stored[sessionKey]?.cliSessionIds).toBeUndefined();
+    expect(stored[sessionKey]?.claudeCliSessionId).toBeUndefined();
   });
 
   it("preserves argument casing while still matching reset triggers case-insensitively", async () => {

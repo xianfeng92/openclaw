@@ -13,6 +13,11 @@ let historyIndex = -1;
 let isProcessing = false;
 let latestPingMs: number | null = null;
 
+// Command Palette state
+let paletteVisible = false;
+let selectedIndex = 0;
+let paletteItems: HTMLElement[] = [];
+
 const terminalDiv = document.getElementById("terminal")!;
 const statusAgent = document.getElementById("status-agent");
 const statusPing = document.getElementById("status-ping");
@@ -211,20 +216,66 @@ function renderStatusBar(): void {
   const mem = getMemoryUsageMb();
   const now = new Date().toLocaleTimeString();
   const pingText = latestPingMs === null ? "--ms" : `${latestPingMs}ms`;
-  const memoryText = mem === null ? "--MB" : `${mem}MB`;
+  const memoryText = mem === null ? "--M" : `${mem}M`;
 
   if (statusAgent) {
     statusAgent.textContent = `[Agent: ${snapshot.agent}]`;
   }
   if (statusPing) {
-    statusPing.textContent = `[Ping: ${pingText}]`;
+    statusPing.innerHTML = `[Ping: ${pingText}<span class="ping-graph">${getPingGraph()}</span>]`;
   }
   if (statusMemory) {
-    statusMemory.textContent = `[Memory: ${memoryText}]`;
+    const memGraph = getMemoryGraph(mem);
+    const memClass = mem === null ? "" : getMemoryLevelClass(mem);
+    statusMemory.innerHTML = `[Mem: ${memoryText}<span class="mem-graph ${memClass}">${memGraph}</span>]`;
   }
   if (statusTime) {
-    statusTime.textContent = `[Current Time: ${now}]`;
+    statusTime.textContent = `[${now}]`;
   }
+}
+
+/**
+ * Generate ping visualization using Braille patterns
+ * Simulates a waveform based on ping value
+ */
+function getPingGraph(): string {
+  if (latestPingMs === null) return "";
+
+  // Braille patterns for wave visualization
+  const waves = ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠒"];
+  const waveIndex = Math.min(
+    Math.floor((latestPingMs || 0) / 20),
+    waves.length - 1
+  );
+  return waves[waveIndex] + "⢄" + waves[Math.max(0, waveIndex - 2)];
+}
+
+/**
+ * Generate memory visualization using block elements
+ * Shows memory level as a bar
+ */
+function getMemoryGraph(memMb: number | null): string {
+  if (memMb === null) return "";
+
+  // Assume 200MB as "full" for visualization
+  const maxMb = 200;
+  const ratio = Math.min(memMb / maxMb, 1);
+  const blocks = Math.ceil(ratio * 4);
+
+  // Block elements: ▁ ▂ ▃ ▄ ▅ ▆ ▇ █
+  const blockChars = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+  const blockIndex = Math.min(Math.floor(ratio * 8), blockChars.length - 1);
+
+  return "▁" + blockChars[blockIndex] + "█";
+}
+
+/**
+ * Get CSS class for memory level coloring
+ */
+function getMemoryLevelClass(memMb: number): string {
+  if (memMb < 50) return "mem-low";
+  if (memMb < 120) return "mem-med";
+  return "mem-high";
 }
 
 function startStatusBarLoop(): void {
@@ -239,22 +290,26 @@ function startStatusBarLoop(): void {
 function initTerminal(): void {
   terminalDiv.innerHTML = "";
 
-  writeHtml(
-    `
-<span class="system-ok"><strong>
-╔═══════════════════════════════════════════════════════════╗
-║                    OPENCLAW TERMINAL                     ║
-╠═══════════════════════════════════════════════════════════╣
-║  /help for commands                                      ║
-║  !cmd for local shell execution                          ║
-║  /spawn /agents /tasks for orchestration                 ║
-║  Ctrl+B toggles sidebar                                  ║
-║  Use --no-code to skip VS Code auto-open                ║
-╚═══════════════════════════════════════════════════════════╝
-</strong></span>
-<span class="system-info">Ctrl+Shift+T toggles this terminal window</span>
-`.trim(),
-  );
+  // Rigid ASCII block - 59 chars wide, perfectly aligned
+  const bannerEl = document.createElement("pre");
+  bannerEl.className = "tui-banner";
+  bannerEl.textContent =
+`╔═════════════════════════════════════════════════════════╗
+║                    OPENCLAW TERMINAL                    ║
+╠═════════════════════════════════════════════════════════╣
+║ /help for commands                                      ║
+║ !cmd for local shell execution                          ║
+║ /spawn /agents /tasks for orchestration                 ║
+║ Ctrl+B toggles sidebar                                  ║
+║ Use --no-code to skip VS Code auto-open                 ║
+╚═════════════════════════════════════════════════════════╝`;
+
+  terminalDiv.appendChild(bannerEl);
+
+  const infoLine = document.createElement("div");
+  infoLine.className = "system-info";
+  infoLine.textContent = "Ctrl+Shift+T toggles this terminal window";
+  terminalDiv.appendChild(infoLine);
 
   const { container, input, ghost } = createInputLine();
   terminalDiv.appendChild(container);
@@ -382,7 +437,190 @@ function initTerminal(): void {
   });
 }
 
+/**
+ * Initialize Command Palette
+ */
+function initCommandPalette(): void {
+  const palette = document.getElementById("command-palette");
+  const paletteInput = document.getElementById("palette-input") as HTMLInputElement;
+  const resultsContainer = document.getElementById("palette-results");
+
+  if (!palette || !paletteInput || !resultsContainer) return;
+
+  // Get all palette items
+  paletteItems = Array.from(resultsContainer.querySelectorAll(".palette-item"));
+
+  /**
+   * Toggle command palette visibility
+   */
+  function togglePalette(show?: boolean): void {
+    const shouldShow = show ?? !paletteVisible;
+    if (shouldShow) {
+      palette.classList.remove("hidden");
+      paletteInput.value = "";
+      selectedIndex = 0;
+      paletteInput.focus();
+      updatePaletteSelection();
+      paletteVisible = true;
+    } else {
+      palette.classList.add("hidden");
+      paletteVisible = false;
+      // Return focus to terminal input
+      const terminalInput = document.getElementById("input") as HTMLInputElement;
+      terminalInput?.focus();
+    }
+  }
+
+  /**
+   * Update visual selection in palette
+   */
+  function updatePaletteSelection(): void {
+    paletteItems.forEach((item, index) => {
+      const checkbox = item.querySelector(".palette-checkbox");
+      if (index === selectedIndex) {
+        item.classList.add("selected");
+        if (checkbox) checkbox.textContent = "[x]";
+        // Scroll into view if needed
+        item.scrollIntoView({ block: "nearest" });
+      } else {
+        item.classList.remove("selected");
+        if (checkbox) checkbox.textContent = "[ ]";
+      }
+    });
+  }
+
+  /**
+   * Filter palette items based on search query
+   */
+  function filterPaletteItems(query: string): void {
+    const lowerQuery = query.toLowerCase();
+    let visibleCount = 0;
+
+    paletteItems.forEach((item) => {
+      const command = item.dataset.command || "";
+      const desc = item.querySelector(".palette-item-desc")?.textContent || "";
+      const matches = command.includes(lowerQuery) || desc.toLowerCase().includes(lowerQuery);
+
+      if (matches) {
+        item.style.display = "flex";
+        visibleCount++;
+      } else {
+        item.style.display = "none";
+      }
+    });
+
+    // Reset selection if needed
+    const visibleItems = paletteItems.filter((item) => item.style.display !== "none");
+    if (selectedIndex >= visibleItems.length) {
+      selectedIndex = Math.max(0, visibleItems.length - 1);
+    }
+
+    updatePaletteSelection();
+  }
+
+  /**
+   * Execute selected command
+   */
+  function executeSelectedCommand(): void {
+    const visibleItems = paletteItems.filter((item) => item.style.display !== "none");
+    const selectedItem = visibleItems[selectedIndex];
+
+    if (selectedItem) {
+      const command = selectedItem.dataset.command || "";
+      togglePalette(false);
+
+      // Insert command into terminal input and execute
+      const terminalInput = document.getElementById("input") as HTMLInputElement;
+      if (terminalInput) {
+        terminalInput.value = command + " ";
+        terminalInput.focus();
+        terminalInput.dispatchEvent(new Event("input"));
+      }
+    }
+  }
+
+  // Palette input keyboard events
+  paletteInput.addEventListener("keydown", (event) => {
+    const visibleItems = paletteItems.filter((item) => item.style.display !== "none");
+
+    switch (event.key) {
+      case "Escape": {
+        event.preventDefault();
+        togglePalette(false);
+        break;
+      }
+
+      case "ArrowDown": {
+        event.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, visibleItems.length - 1);
+        updatePaletteSelection();
+        break;
+      }
+
+      case "ArrowUp": {
+        event.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        updatePaletteSelection();
+        break;
+      }
+
+      case "Enter": {
+        event.preventDefault();
+        executeSelectedCommand();
+        break;
+      }
+
+      case "Tab": {
+        event.preventDefault();
+        // Cycle through items
+        selectedIndex = (selectedIndex + 1) % visibleItems.length;
+        updatePaletteSelection();
+        break;
+      }
+    }
+  });
+
+  // Palette input filter
+  paletteInput.addEventListener("input", () => {
+    selectedIndex = 0;
+    filterPaletteItems(paletteInput.value);
+  });
+
+  // Click on palette items
+  paletteItems.forEach((item) => {
+    item.addEventListener("click", () => {
+      const index = paletteItems.indexOf(item);
+      selectedIndex = index;
+      executeSelectedCommand();
+    });
+  });
+
+  // Close on overlay click (outside modal)
+  palette.addEventListener("click", (event) => {
+    if (event.target === palette) {
+      togglePalette(false);
+    }
+  });
+
+  // Global keyboard shortcut to open palette (Ctrl+P or Alt+P)
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.altKey) && event.key === "p") {
+      event.preventDefault();
+      togglePalette(true);
+    }
+  });
+
+  // Also support Cmd+P on macOS
+  document.addEventListener("keydown", (event) => {
+    if (event.metaKey && event.key === "p") {
+      event.preventDefault();
+      togglePalette(true);
+    }
+  });
+}
+
 // Initialize sidebar first, then terminal
 initSidebar();
 initTerminal();
+initCommandPalette();
 startStatusBarLoop();

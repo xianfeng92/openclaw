@@ -91,6 +91,15 @@ export function initSidebar(): void {
   contextCountEl = document.getElementById("context-count");
   statusTasksEl = document.getElementById("status-tasks");
 
+  // Set panel icons using Nerd Font
+  const tasksIconEl = document.querySelector("#panel-tasks .sidebar-panel-icon");
+  const agentsIconEl = document.querySelector("#panel-agents .sidebar-panel-icon");
+  const contextIconEl = document.querySelector("#panel-context .sidebar-panel-icon");
+
+  if (tasksIconEl) tasksIconEl.textContent = ""; // Nerd Font
+  if (agentsIconEl) agentsIconEl.textContent = ""; // Nerd Font
+  if (contextIconEl) contextIconEl.textContent = ""; // Nerd Font
+
   setupPanelToggle();
   setupSidebarCollapse();
   setupActionButtons();
@@ -284,7 +293,7 @@ function renderTasks(): void {
   if (tasks.length === 0) {
     tasksListEl.innerHTML = `
       <div class="sidebar-empty">
-        <div class="sidebar-empty-icon">📋</div>
+        <div class="sidebar-empty-icon"></div>
         No tasks yet
       </div>
     `;
@@ -314,9 +323,12 @@ function renderTaskItem(task: TaskInfo): string {
   const shortId = task.id.split("-").pop() || task.id.slice(-8);
   const shortDesc = truncateDescription(task.description, 40);
 
+  // TUI ASCII state indicator
+  const statusIcon = task.status === "running" ? "[●]" : "[○]";
+
   return `
     <div class="sidebar-item" data-task-id="${task.id}" title="${escapeHtml(task.description)}">
-      <span class="sidebar-item-status ${statusClass}"></span>
+      <span class="sidebar-item-status ${statusClass}">${statusIcon}</span>
       <span>${escapeHtml(shortDesc)}</span>
       <div class="sidebar-item-meta">
         ${agentIcon} ${shortId} • ${timeAgo}
@@ -334,7 +346,7 @@ function renderAgents(): void {
   if (agents.length === 0) {
     agentsListEl.innerHTML = `
       <div class="sidebar-empty">
-        <div class="sidebar-empty-icon">🤖</div>
+        <div class="sidebar-empty-icon"></div>
         No agents running
       </div>
     `;
@@ -353,9 +365,12 @@ function renderAgentItem(agent: AgentInfo): string {
   const shortId = agent.id.split("-").pop() || agent.id.slice(-8);
   const shortDesc = truncateDescription(agent.description, 35);
 
+  // TUI ASCII state indicator - agents are always running when shown
+  const statusIcon = "[●]";
+
   return `
     <div class="sidebar-item" data-agent-id="${agent.id}" title="${escapeHtml(agent.description)}">
-      <span class="sidebar-item-status running"></span>
+      <span class="sidebar-item-status running">${statusIcon}</span>
       <span>${escapeHtml(shortDesc)}</span>
       <div class="sidebar-item-meta">
         ${agentIcon} ${shortId} • ${timeAgo}
@@ -374,7 +389,7 @@ export function renderContexts(contextItems: ContextItem[]): void {
   if (contextItems.length === 0) {
     contextListEl.innerHTML = `
       <div class="sidebar-empty">
-        <div class="sidebar-empty-icon">📚</div>
+        <div class="sidebar-empty-icon"></div>
         No context loaded
       </div>
     `;
@@ -400,33 +415,49 @@ function renderContextItem(ctx: ContextItem): string {
 }
 
 /**
- * Get agent icon/emoji
+ * Get agent icon (Nerd Font)
  */
 function getAgentIcon(agent: string): string {
   const lower = agent.toLowerCase();
-  if (lower.includes("claude")) return "🤖";
-  if (lower.includes("codex")) return "⚡";
-  if (lower.includes("gemini")) return "✨";
-  return "🔷";
+  if (lower.includes("claude")) return ""; //  or use Nerd Font: ""
+  if (lower.includes("codex")) return "";
+  if (lower.includes("gemini")) return "";
+  return "";
 }
 
 /**
- * Get context icon
+ * Get context icon (Nerd Font)
  */
 function getContextIcon(type: ContextItem["type"]): string {
   switch (type) {
     case "customer":
-      return "👤";
+      return ""; // Nerd Font  or similar
     case "project":
-      return "📁";
+      return ""; // Nerd Font
     case "meeting":
-      return "📅";
+      return ""; // Nerd Font
     case "decision":
-      return "🔀";
+      return ""; // Nerd Font
     case "pattern":
-      return "🧩";
+      return ""; // Nerd Font
     default:
-      return "📄";
+      return ""; // Nerd Font
+  }
+}
+
+/**
+ * Get panel icon (Nerd Font)
+ */
+function getPanelIcon(panelType: "tasks" | "agents" | "context"): string {
+  switch (panelType) {
+    case "tasks":
+      return ""; // Nerd Font
+    case "agents":
+      return ""; // Nerd Font
+    case "context":
+      return ""; // Nerd Font
+    default:
+      return "";
   }
 }
 

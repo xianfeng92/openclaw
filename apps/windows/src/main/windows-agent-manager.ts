@@ -141,17 +141,8 @@ export class WindowsAgentProcessManager {
         relevantContext,
       });
 
-      // Send initial output
-      this.sendOutput(taskId, `[agent] Starting agent process...\n`);
-      this.sendOutput(taskId, `[agent] Working directory: ${workingDir}\n`);
-      if (launch.cwd !== workingDir) {
-        this.sendOutput(taskId, `[agent] Runner cwd: ${launch.cwd}\n`);
-      }
-      if (launch.note) {
-        this.sendOutput(taskId, `[agent] ${launch.note}\n`);
-      }
-      this.sendOutput(taskId, `[agent] Command: ${launch.commandForDisplay}\n`);
-      this.sendOutput(taskId, "\n");
+      // Send minimal initial output - don't send anything yet, wait for agent to be ready
+      // Build happens silently in background
 
       const proc = spawn(launch.command, launch.args, {
         cwd: launch.cwd,
@@ -159,6 +150,8 @@ export class WindowsAgentProcessManager {
           ...process.env,
           // Ensure openclaw can find its config
           OPENCLAW_PROFILE: "desktop",
+          // Suppress noisy build logs
+          OPENCLAW_QUIET_BUILD: "1",
         },
         shell: false,
         windowsHide: true, // Hide the console window on Windows
@@ -178,8 +171,12 @@ export class WindowsAgentProcessManager {
 
       proc.stderr?.on("data", (data: Buffer) => {
         const output = data.toString();
-        this.addToBuffer(taskId, output);
-        this.sendOutput(taskId, `[stderr] ${output}`);
+        // Filter out noisy build logs
+        const filtered = this.filterBuildLogs(output);
+        if (filtered) {
+          this.addToBuffer(taskId, filtered);
+          this.sendOutput(taskId, `[stderr] ${filtered}`);
+        }
       });
 
       // Handle exit
@@ -387,6 +384,56 @@ export class WindowsAgentProcessManager {
         process.outputBuffer.shift();
       }
     }
+  }
+
+  /**
+   * Filter out noisy build logs from stderr
+   */
+  private filterBuildLogs(output: string): string | null {
+    const lines = output.split(/\r?\n/);
+    const filtered: string[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip tsdown build output lines
+      if (trimmed.startsWith("ℹ dist\\") || trimmed.startsWith("ℹ dist/")) {
+        continue;
+      }
+      // Skip tsdown version info
+      if (trimmed.startsWith("ℹ tsdown") || trimmed.startsWith("ℹ config file:")) {
+        continue;
+      }
+      // Skip entry/target/tsconfig info
+      if (trimmed.startsWith("ℹ entry:") || trimmed.startsWith("ℹ target:") ||
+          trimmed.startsWith("ℹ tsconfig:")) {
+        continue;
+      }
+      // Skip build start/complete messages
+      if (trimmed === "ℹ Build start" || trimmed.startsWith("✔ Build complete")) {
+        continue;
+      }
+      // Skip file size info (contains │, kB, gzip)
+      if (trimmed.includes("│") && (trimmed.includes("kB") || trimmed.includes("gzip"))) {
+        continue;
+      }
+      // Skip "x files, total:" summary
+      if (/\d+\s+files,\s+total:/.test(trimmed)) {
+        continue;
+      }
+      // Skip "Granting execute permission" messages
+      if (trimmed.includes("Granting execute permission")) {
+        continue;
+      }
+      // Keep everything else
+      filtered.push(line);
+    }
+
+    const result = filtered.join("\n");
+    // Return null if all content was filtered
+    if (filtered.length === 0 || result.trim() === "") {
+      return null;
+    }
+    return result;
   }
 
   /**

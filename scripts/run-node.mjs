@@ -107,6 +107,34 @@ const logRunner = (message) => {
   process.stderr.write(`[openclaw] ${message}\n`);
 };
 
+// Filter out noisy build logs
+const shouldFilterBuildLine = (line) => {
+  const trimmed = line.trim();
+  if (trimmed.startsWith("ℹ dist\\") || trimmed.startsWith("ℹ dist/")) {
+    return true;
+  }
+  if (trimmed.startsWith("ℹ tsdown") || trimmed.startsWith("ℹ config file:")) {
+    return true;
+  }
+  if (trimmed.startsWith("ℹ entry:") || trimmed.startsWith("ℹ target:") ||
+      trimmed.startsWith("ℹ tsconfig:")) {
+    return true;
+  }
+  if (trimmed === "ℹ Build start" || trimmed.startsWith("✔ Build complete")) {
+    return true;
+  }
+  if (trimmed.includes("│") && (trimmed.includes("kB") || trimmed.includes("gzip"))) {
+    return true;
+  }
+  if (/\d+\s+files,\s+total:/.test(trimmed)) {
+    return true;
+  }
+  if (trimmed.includes("Granting execute permission")) {
+    return true;
+  }
+  return false;
+};
+
 const which = (cmd) => {
   try {
     const key = process.platform === "win32" ? "Path" : "PATH";
@@ -190,7 +218,8 @@ const writeBuildStamp = () => {
 if (!shouldBuild()) {
   runNode();
 } else {
-  logRunner("Building TypeScript (dist is stale).");
+  const quietBuild = env.OPENCLAW_QUIET_BUILD === "1";
+
   const runner = resolvePackageRunner();
   if (!runner) {
     process.stderr.write("Missing package runner: install pnpm or corepack.\n");
@@ -198,12 +227,36 @@ if (!shouldBuild()) {
   }
   const buildCmd = runner.cmd;
   const buildArgs = [...runner.args, ...compilerArgs];
+
   const build = spawn(buildCmd, buildArgs, {
     cwd,
     env,
-    stdio: "inherit",
+    // Use pipe for quiet build to filter output, otherwise inherit
+    stdio: quietBuild ? ["ignore", "pipe", "pipe"] : "inherit",
     shell: process.platform === "win32",
   });
+
+  // Handle quiet build output filtering - completely suppress build output
+  if (quietBuild) {
+    build.stdout?.on("data", (data) => {
+      // Filter out all build output, only pass through non-build lines
+      const lines = data.toString().split(/\r?\n/);
+      for (const line of lines) {
+        if (line.trim() && !shouldFilterBuildLine(line)) {
+          process.stdout.write(line + "\n");
+        }
+      }
+    });
+    build.stderr?.on("data", (data) => {
+      // Filter out all build output, only pass through non-build lines
+      const lines = data.toString().split(/\r?\n/);
+      for (const line of lines) {
+        if (line.trim() && !shouldFilterBuildLine(line)) {
+          process.stderr.write(line + "\n");
+        }
+      }
+    });
+  }
 
   build.on("exit", (code, signal) => {
     if (signal) {

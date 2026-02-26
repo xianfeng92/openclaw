@@ -48,6 +48,7 @@ const commands = [
   "context",
   "review",
   "pattern",
+  "test-agent-output",
 ];
 
 const shellCommandsWindows = [

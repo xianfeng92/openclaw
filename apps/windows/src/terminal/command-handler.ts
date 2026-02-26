@@ -526,6 +526,11 @@ Language: ${escapeHtml(navigator.language)}
       return;
     }
 
+    case "/test-agent-output": {
+      await showMockAgentOutput(terminal, writeLine, writeHtml);
+      return;
+    }
+
     default: {
       writeHtml(
         terminal,
@@ -589,6 +594,9 @@ function showHelp(terminal: HTMLElement): void {
 <span class="system-info"><strong>Task Lifecycle:</strong></span>
   /task complete - Mark task complete with pattern tracking
   /task list      - Show all tasks with patterns
+
+<span class="system-info"><strong>Testing:</strong></span>
+  /test-agent-output - Show mock AI agent output for visual testing
 
 <span class="system-info"><strong>Gateway Commands:</strong></span>
   /connect        - Connect to gateway
@@ -1627,6 +1635,8 @@ async function promptForDescription(terminal: HTMLElement): Promise<string> {
   return "";
 }
 
+type WriteHtmlFn = (terminal: HTMLElement, html: string, className?: string) => void;
+
 function writeSection(terminal: HTMLElement, title: string, icon: string, writeHtml: WriteHtmlFn): void {
   writeHtml(
     terminal,
@@ -1953,5 +1963,67 @@ async function handleTaskCommand(
       writeHtml(terminal, `<span class="system-info">Usage: /task [complete|list|status|help]</span>`);
       break;
   }
+}
+
+/**
+ * Show mock AI agent output for visual testing
+ */
+async function showMockAgentOutput(
+  terminal: HTMLElement,
+  writeLine: (terminal: HTMLElement, text: string, className?: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string, className?: string) => void,
+): Promise<void> {
+  // 1. System dispatch message (bright cyan/yellow)
+  writeHtml(
+    terminal,
+    `<span style="color: var(--accent-cyan);">[SYSTEM] Spawning Agent: WebSearch (PID: 90210)...</span>`,
+  );
+  writeLine(terminal, "");
+
+  // 2. Thought & Action Stream (muted color, left padding, border)
+  writeHtml(
+    terminal,
+    `<div style="padding-left: 1.5rem; border-left: 2px solid #30363d; color: var(--text-muted); margin: 0.25rem 0 0.5rem;">
+      <div style="margin-bottom: 0.25rem;">&gt; Thought: I need to fetch the latest tech news.</div>
+      <div style="margin-bottom: 0.25rem;">&gt; Action: [execute_shell] curl -s https://api.news.com/v1/tech</div>
+      <div>&gt; Observation: 3 articles found.</div>
+    </div>`,
+  );
+
+  // 3. Final Markdown Result
+  const assistantBody = document.createElement("div");
+  assistantBody.className = "assistant-output";
+  appendBeforeInput(terminal, assistantBody);
+
+  const outputNode = document.createElement("div");
+  outputNode.className = "assistant-body";
+  outputNode.innerHTML = renderAssistantMarkdown(`**Tech News Summary**
+
+Here are the latest articles from the tech world:
+
+- **AI Breakthrough**: New model achieves 99% accuracy on reasoning tasks
+- **Quantum Leap**: IBM announces 1000-qubit processor milestone
+- **Open Source Victory**: Major frameworks adopt permissive licensing
+
+\`\`\`python
+# Example: Fetching news programmatically
+import requests
+
+def fetch_tech_news():
+    url = "https://api.news.com/v1/tech"
+    response = requests.get(url)
+    return response.json()
+
+articles = fetch_tech_news()
+for article in articles[:3]:
+    print(f"- {article['title']}")
+\`\`\`
+`);
+  assistantBody.appendChild(outputNode);
+
+  // Add separator
+  const separator = document.createElement("div");
+  separator.className = "turn-separator";
+  appendBeforeInput(terminal, separator);
 }
 

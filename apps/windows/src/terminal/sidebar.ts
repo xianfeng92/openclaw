@@ -176,7 +176,7 @@ async function refreshData(): Promise<void> {
 /**
  * Refresh tasks list
  */
-async function refreshTasks(): Promise<void> {
+export async function refreshTasks(): Promise<void> {
   try {
     const result = await window.terminalAPI?.orchestralTasks?.({});
     if (result?.tasks) {
@@ -192,7 +192,7 @@ async function refreshTasks(): Promise<void> {
 /**
  * Refresh agents list
  */
-async function refreshAgents(): Promise<void> {
+export async function refreshAgents(): Promise<void> {
   try {
     const result = await window.terminalAPI?.orchestralAgents?.("list", []);
     if (result?.tasks) {

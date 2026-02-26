@@ -302,7 +302,7 @@ function initTerminal(): void {
 ║ !cmd for local shell execution                          ║
 ║ /spawn /agents /tasks for orchestration                 ║
 ║ Ctrl+B toggles sidebar                                  ║
-║ Use --no-code to skip VS Code auto-open                 ║
+║ Use --code to auto-open VS Code after /spawn            ║
 ╚═════════════════════════════════════════════════════════╝`;
 
   terminalDiv.appendChild(bannerEl);
@@ -436,6 +436,17 @@ function initTerminal(): void {
       input.focus();
     }
   });
+
+  // Set up agent output listener for real-time agent output
+  if (window.terminalAPI?.onAgentOutput) {
+    window.terminalAPI.onAgentOutput((data) => {
+      // Write agent output directly to terminal
+      // Don't HTML escape - let the agent output control its own formatting
+      // But escape to prevent XSS
+      writeHtml(`<span class="agent-output">${escapeHtml(data.data)}</span>`);
+      scrollToBottom();
+    });
+  }
 }
 
 /**

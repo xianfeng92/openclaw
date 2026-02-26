@@ -35,6 +35,31 @@ export interface TerminalAPI {
 
   orchestralTasks: (filters: Record<string, string>) => Promise<any>;
 
+  // Agent process management
+  agentStart: (opts: {
+    taskId: string;
+    description: string;
+    worktree?: string;
+    agent?: string;
+    branch?: string;
+    useContext?: boolean;
+    relevantContext?: {
+      customers: Array<{ name: string; score: number }>;
+      projects: Array<{ name: string; score: number }>;
+      decisions: Array<{ title: string; score: number }>;
+      meetings: Array<{ title: string; score: number }>;
+      patterns: Array<{ name: string; score: number }>;
+    };
+  }) => Promise<{ success: boolean; pid?: number; error?: string }>;
+
+  agentKill: (taskId: string) => Promise<{ success: boolean; error?: string }>;
+
+  agentGetOutput: (taskId: string, lines?: number) => Promise<{ success: boolean; output?: string; error?: string }>;
+
+  onAgentOutput: (
+    callback: (data: { taskId: string; type: string; data: string }) => void,
+  ) => () => void;
+
   // Context commands
   contextList: () => Promise<{
     customers: Array<{ id: string; name: string; tags?: string[] }>;
@@ -254,6 +279,18 @@ const api: TerminalAPI = {
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),
   orchestralAgents: (action, args) => ipcRenderer.invoke("terminal:orchestral-agents", action, args),
   orchestralTasks: (filters) => ipcRenderer.invoke("terminal:orchestral-tasks", filters),
+
+  // Agent process management
+  agentStart: (opts) => ipcRenderer.invoke("terminal:agent-start", opts),
+  agentKill: (taskId) => ipcRenderer.invoke("terminal:agent-kill", taskId),
+  agentGetOutput: (taskId, lines) => ipcRenderer.invoke("terminal:agent-get-output", taskId, lines),
+  onAgentOutput: (callback) => {
+    const listener = (_event: unknown, data: unknown) => callback(data as { taskId: string; type: string; data: string });
+    ipcRenderer.on("terminal:agent-output", listener);
+    return () => {
+      ipcRenderer.removeListener("terminal:agent-output", listener);
+    };
+  },
 
   // Context commands
   contextList: () => ipcRenderer.invoke("terminal:context-list"),

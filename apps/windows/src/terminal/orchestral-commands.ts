@@ -4,6 +4,7 @@
  */
 import type { TerminalAPI } from "../preload/terminal-api";
 import { formatContextForDisplay, generateContextSummary, type PromptContext } from "./prompt-injection.js";
+import { refreshAgents as refreshSidebarAgents, refreshTasks as refreshSidebarTasks } from "./sidebar.js";
 
 declare global {
   interface Window {
@@ -52,9 +53,9 @@ function showOrchestralHelp(terminal: HTMLElement, writeHtml: WriteHtmlFn): void
 </span>
 
 <span style="font-weight: bold; color: var(--accent-cyan);">Task Management:</span>
-  /spawn &lt;description&gt; [--agent &lt;type&gt;] [--branch &lt;name&gt;] [--no-code]
+  /spawn &lt;description&gt; [--agent &lt;type&gt;] [--branch &lt;name&gt;] [--code] [--no-context]
       Spawn a new agent task in an isolated environment
-      --no-code: Skip automatic VS Code opening
+      --code: Automatically open VS Code after task creation (default: off)
 
   /tasks [--status &lt;running|completed|failed&gt;] [--agent &lt;type&gt;]
       List tasks with optional filters
@@ -72,8 +73,11 @@ function showOrchestralHelp(terminal: HTMLElement, writeHtml: WriteHtmlFn): void
   /agents redirect &lt;task-id&gt; &lt;message&gt;
       Send a message to redirect an agent
 
-  /agents output &lt;task-id&gt;
+  /agents output &lt;task-id&gt; [lines]
       Show recent output from an agent's session
+
+  /agents watch &lt;task-id&gt;
+      Stream real-time output from an agent
 
 <span style="font-weight: bold; color: var(--accent-cyan);">Examples:</span>
   /spawn "Add user authentication"
@@ -100,7 +104,7 @@ export async function handleSpawnCommand(
   }
 
   if (args.length === 0) {
-    writeHtml(terminal, `<span class="system-info">Usage: /spawn &lt;description&gt; [--agent &lt;claude|codex|gemini&gt;] [--branch &lt;name&gt;] [--no-code] [--no-context]</span>`);
+    writeHtml(terminal, `<span class="system-info">Usage: /spawn &lt;description&gt; [--agent &lt;claude|codex|gemini&gt;] [--branch &lt;name&gt;] [--code] [--no-context]</span>`);
     return;
   }
 
@@ -108,7 +112,7 @@ export async function handleSpawnCommand(
   const description: string[] = [];
   let agent: string | undefined;
   let branch: string | undefined;
-  let openVsCode = true;
+  let openVsCode = false;
   let useContext = true;
 
   for (let i = 0; i < args.length; i++) {
@@ -117,6 +121,8 @@ export async function handleSpawnCommand(
       agent = args[++i];
     } else if (arg === "--branch" && i + 1 < args.length) {
       branch = args[++i];
+    } else if (arg === "--code") {
+      openVsCode = true;
     } else if (arg === "--no-code") {
       openVsCode = false;
     } else if (arg === "--no-context") {
@@ -136,7 +142,7 @@ export async function handleSpawnCommand(
   writeLine(terminal, `Description: ${desc}`);
   if (agent) writeLine(terminal, `Agent: ${agent}`);
   if (branch) writeLine(terminal, `Branch: ${branch}`);
-  if (!openVsCode) writeLine(terminal, `VS Code: disabled`);
+  if (openVsCode) writeLine(terminal, `VS Code: auto-open enabled`);
 
   // Fetch and display relevant context
   let relevantContext: any = null;
@@ -214,6 +220,7 @@ export async function handleSpawnCommand(
     if (result.success && result.task) {
       writeLine(terminal, "");
       writeHtml(terminal, `<span class="system-ok">${result.task.message || "Task created"}</span>`);
+      const spawnedTaskId = typeof result.task.id === "string" ? result.task.id : "";
 
       if (result.task.details) {
         writeLine(terminal, "");
@@ -227,35 +234,60 @@ export async function handleSpawnCommand(
         }
       }
 
+      if (typeof result.task.pid === "number" && result.task.pid > 0 && spawnedTaskId) {
+        writeLine(terminal, "");
+        writeHtml(
+          terminal,
+          `<span class="system-ok">[run] Agent is running (PID: ${result.task.pid})</span>`,
+        );
+        writeHtml(
+          terminal,
+          `<span class="system-info">Track progress: /agents output ${spawnedTaskId} 80</span>`,
+        );
+      }
+
       if (result.task.worktreeCreated && result.task.worktree) {
         writeLine(terminal, "");
-        writeSection(terminal, "Next Steps", "[next]", writeHtml);
-        writeHtml(terminal, `<span style="color: var(--text-primary);">1. Open VS Code:</span>`);
+        writeSection(terminal, "Workspace Shortcuts", "[next]", writeHtml);
+        if (spawnedTaskId) {
+          writeHtml(terminal, `<span style="color: var(--text-primary);">1. Watch agent output:</span>`);
+          writeHtml(
+            terminal,
+            `<span class="system-info">   /agents output ${spawnedTaskId} 80</span>`,
+          );
+          writeLine(terminal, "");
+        }
+        writeHtml(terminal, `<span style="color: var(--text-primary);">2. Open VS Code:</span>`);
         writeHtml(
           terminal,
           `<span class="system-info">   code --add "${result.task.worktree}"</span>`,
         );
         writeLine(terminal, "");
-        writeHtml(terminal, `<span style="color: var(--text-primary);">2. Or navigate in terminal:</span>`);
+        writeHtml(terminal, `<span style="color: var(--text-primary);">3. Or navigate in terminal:</span>`);
         writeHtml(
           terminal,
           `<span class="system-info">   cd "${result.task.worktree}"</span>`,
         );
-        writeLine(terminal, "");
-        writeHtml(terminal, `<span style="color: var(--text-primary);">3. Implement: ${desc}</span>`);
 
-        // Try to open VS Code automatically (unless --no-code flag)
+        // Try to open VS Code automatically only when explicitly requested.
         if (openVsCode) {
           writeLine(terminal, "");
           writeHtml(terminal, `<span style="color: var(--accent-cyan);">Opening VS Code...</span>`);
           try {
             await window.terminalAPI.execShell(`code --add "${result.task.worktree}"`);
-            writeHtml(terminal, `<span class="system-ok">[ok] VS Code opened</span>`);
+            writeHtml(terminal, `<span class="system-ok">[ok] VS Code launch command sent</span>`);
           } catch (codeError) {
             console.error("[Orchestral] VS Code error:", codeError);
             writeHtml(terminal, `<span class="system-warn">[warn] Could not open VS Code automatically</span>`);
           }
         }
+      }
+
+      // Refresh the sidebar to show the new task/agent
+      try {
+        await Promise.all([refreshSidebarAgents(), refreshSidebarTasks()]);
+      } catch {
+        // Ignore refresh errors
       }
 
       writeLine(terminal, "");
@@ -344,6 +376,12 @@ export async function handleAgentsCommand(
         const result = await window.terminalAPI.orchestralAgents!("kill", [taskId]);
         if (result.success) {
           writeHtml(terminal, `<span class="system-ok">[ok] Task ${taskId} terminated</span>`);
+          // Refresh the sidebar agents list to remove the killed task
+          try {
+            await refreshSidebarAgents();
+          } catch {
+            // Ignore refresh errors
+          }
         } else {
           writeHtml(
             terminal,
@@ -421,26 +459,43 @@ export async function handleAgentsCommand(
 
     case "output": {
       const taskId = args[1];
+      const linesArg = args[2];
+      const lines = linesArg ? parseInt(linesArg, 10) : 50;
+
       if (!taskId) {
-        writeHtml(terminal, `<span class="system-info">Usage: /agents output &lt;task-id&gt;</span>`);
+        writeHtml(terminal, `<span class="system-info">Usage: /agents output &lt;task-id&gt; [lines]</span>`);
         return;
       }
 
       writeSection(terminal, `Agent Output: ${taskId}`, "[out]", writeHtml);
 
       try {
-        const result = await window.terminalAPI.orchestralAgents!("output", [taskId]);
-        if (result.success && result.output) {
-          const lines = result.output.split("\n");
-          const preview = lines.slice(-20).join("\n"); // Show last 20 lines
-          writeHtml(terminal, `<span style="color: var(--text-primary);">${escapeHtml(preview)}</span>`);
-        } else if (result.success) {
-          writeHtml(terminal, `<span class="system-info">No output available or session is not active</span>`);
+        // Try the new API first
+        if (window.terminalAPI.agentGetOutput) {
+          const result = await window.terminalAPI.agentGetOutput!(taskId, lines);
+          if (result.success && result.output) {
+            writeHtml(terminal, `<pre style="color: var(--text-primary); white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(result.output)}</pre>`);
+          } else if (result.success) {
+            writeHtml(terminal, `<span class="system-info">No output available yet</span>`);
+          } else {
+            writeHtml(
+              terminal,
+              `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
+            );
+          }
         } else {
-          writeHtml(
-            terminal,
-            `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
-          );
+          // Fall back to legacy API
+          const result = await window.terminalAPI.orchestralAgents!("output", [taskId, String(lines)]);
+          if (result.success && result.output) {
+            writeHtml(terminal, `<pre style="color: var(--text-primary); white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(result.output)}</pre>`);
+          } else if (result.success) {
+            writeHtml(terminal, `<span class="system-info">No output available or session is not active</span>`);
+          } else {
+            writeHtml(
+              terminal,
+              `<span class="system-error">[err] Failed: ${result.error || "Unknown error"}</span>`,
+            );
+          }
         }
       } catch (err) {
         writeHtml(
@@ -451,8 +506,49 @@ export async function handleAgentsCommand(
       break;
     }
 
+    case "watch": {
+      const taskId = args[1];
+      if (!taskId) {
+        writeHtml(terminal, `<span class="system-info">Usage: /agents watch &lt;task-id&gt;</span>`);
+        return;
+      }
+
+      writeSection(terminal, `Watching Agent: ${taskId}`, "[watch]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Streaming output... (Ctrl+C to stop)</span>`);
+
+      // Subscribe to agent output
+      if (window.terminalAPI.onAgentOutput) {
+        const unsubscribe = window.terminalAPI.onAgentOutput!((data) => {
+          if (data.taskId === taskId) {
+            // Write output directly to terminal
+            writeHtml(terminal, `<span style="color: var(--text-primary);">${escapeHtml(data.data)}</span>`);
+            // Auto-scroll to bottom
+            terminal.scrollTop = terminal.scrollHeight;
+          }
+        });
+
+        // Store unsubscribe function for cleanup (in a real implementation)
+        (terminal as any)._agentOutputUnsubscribe = unsubscribe;
+
+        // Also show recent output
+        try {
+          const result = await window.terminalAPI.agentGetOutput!(taskId, 20);
+          if (result.success && result.output) {
+            writeHtml(terminal, `<span style="color: var(--text-muted);">--- Recent output ---</span>`);
+            writeHtml(terminal, `<span style="color: var(--text-primary);">${escapeHtml(result.output)}</span>`);
+            writeHtml(terminal, `<span style="color: var(--text-muted);">--- Live output ---</span>`);
+          }
+        } catch {
+          // Ignore errors getting initial output
+        }
+      } else {
+        writeHtml(terminal, `<span class="system-warn">[warn] Real-time output not available in this version</span>`);
+      }
+      break;
+    }
+
     default:
-      writeHtml(terminal, `<span class="system-info">Usage: /agents [list|kill|attach|redirect|output] [args]</span>`);
+      writeHtml(terminal, `<span class="system-info">Usage: /agents [list|kill|attach|redirect|output|watch] [args]</span>`);
       break;
   }
 }
@@ -513,6 +609,15 @@ export async function handleTasksCommand(
         if (task.completedAt) {
           const duration = Math.round((task.completedAt - task.startedAt) / 1000);
           writeLine(terminal, `  Duration: ${duration}s`);
+        }
+        if (task.exitCode !== undefined && task.exitCode !== null) {
+          writeLine(terminal, `  Exit code: ${task.exitCode}`);
+        }
+        if (task.failureReason) {
+          writeHtml(
+            terminal,
+            `  <span style="color: var(--accent-warning);">Failure: ${escapeHtml(String(task.failureReason))}</span>`,
+          );
         }
         writeLine(terminal, "");
       }

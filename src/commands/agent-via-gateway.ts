@@ -33,6 +33,7 @@ type GatewayAgentResponse = {
 
 export type AgentCliOpts = {
   message: string;
+  workspace?: string;
   agent?: string;
   to?: string;
   sessionId?: string;
@@ -176,6 +177,7 @@ export async function agentCliCommand(opts: AgentCliOpts, runtime: RuntimeEnv, d
   const localOpts = {
     ...opts,
     agentId: opts.agent,
+    workspaceDir: opts.workspace,
     replyAccountId: opts.replyAccount,
   };
   if (opts.local === true) {

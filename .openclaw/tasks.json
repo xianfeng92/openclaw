@@ -7,7 +7,7 @@
     "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772003670592",
     "branch": "orchestral/task-17720036705",
     "startedAt": 1772003693736,
-    "status": "running"
+    "status": "killed"
   },
   {
     "id": "task-1772005860429",
@@ -17,6 +17,148 @@
     "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772005860429",
     "branch": "orchestral/task-17720058604",
     "startedAt": 1772005883882,
-    "status": "running"
+    "status": "killed"
+  },
+  {
+    "id": "task-1772108510998",
+    "agent": "claude",
+    "description": "帮我写个脚本抓取今天 X 上关于 AI 的热点讨论",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772108510998",
+    "branch": "orchestral/task-17721085109",
+    "startedAt": 1772108539601,
+    "status": "killed",
+    "useContext": true
+  },
+  {
+    "id": "task-1772110052268",
+    "agent": "claude",
+    "description": "帮我看看今天 X 上 3 条热门的帖子",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772110052268",
+    "branch": "orchestral/task-17721100522",
+    "startedAt": 1772110078438,
+    "status": "running",
+    "useContext": true
+  },
+  {
+    "id": "task-1772110425421",
+    "agent": "claude",
+    "description": "蔚来汽车 3 条新闻",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772110425421",
+    "branch": "orchestral/task-17721104254",
+    "startedAt": 1772110453710,
+    "status": "running",
+    "useContext": true
+  },
+  {
+    "id": "task-1772110606502",
+    "agent": "claude",
+    "description": "小鹏汽车股票",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772110606502",
+    "branch": "orchestral/task-17721106065",
+    "startedAt": 1772110636092,
+    "status": "running",
+    "useContext": true
+  },
+  {
+    "id": "task-1772111466178",
+    "agent": "claude",
+    "description": "蔚来汽车股价分析",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772111466178",
+    "branch": "orchestral/task-17721114661",
+    "startedAt": 1772111493651,
+    "status": "running",
+    "useContext": true
+  },
+  {
+    "id": "task-1772112297145",
+    "agent": "claude",
+    "description": "推荐上海好吃的餐厅",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772112297145",
+    "branch": "orchestral/task-17721122971",
+    "startedAt": 1772112324820,
+    "status": "completed",
+    "useContext": true,
+    "pid": 17800
+  },
+  {
+    "id": "task-1772113404308",
+    "agent": "claude",
+    "description": "macbook 电脑推荐",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772113404308",
+    "branch": "orchestral/task-17721134043",
+    "startedAt": 1772113431971,
+    "status": "failed",
+    "useContext": true,
+    "pid": 3680
+  },
+  {
+    "id": "task-1772114448986",
+    "agent": "claude",
+    "description": "Macbook 最近有优惠吗",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772114448986",
+    "branch": "orchestral/task-17721144489",
+    "startedAt": 1772114477528,
+    "status": "failed",
+    "useContext": true,
+    "pid": 13764,
+    "completedAt": 1772114486786,
+    "exitCode": 1,
+    "failureReason": "Agent exited with code 1",
+    "lastOutput": ":   1.07 kB\nℹ dist\\node-service-Djhm74Rf.js               2.09 kB │ gzip:   0.61 kB\nℹ dist\\channel-selection-CoPG34j2.js          2.06 kB │ gzip:   0.73 kB\nℹ dist\\daemon-cli-DxlDILSa.js                 1.91 kB │ gzip:   0.85 kB\nℹ dist\\brew-DlQQMJ3n.js                       1.65 kB │ gzip:   0.58 kB\nℹ dist\\command-format-CMdN3Umv.js             1.60 kB │ gzip:   0.65 kB\nℹ dist\\agent-events-Dliktfeh.js               1.59 kB │ gzip:   0.57 kB\n\nℹ dist\\usage-format-Bhl_WCWP.js               1.50 kB │ gzip:   0.58 kB\nℹ dist\\format-DrGI57pR.js                     1.28 kB │ gzip:   0.61 kB\nℹ dist\\parse-log-line-CfVgwy6x.js             1.23 kB │ gzip:   0.52 kB\nℹ dist\\channel-options-CEuf_NsG.js            1.22 kB │ gzip:   0.58 kB\nℹ dist\\env-wgiF7f-u.js                        1.21 kB │ gzip:   0.58 kB\nℹ dist\\tailnet-DGRSvYuQ.js                    1.21 kB │ gzip:   0.55 kB\n\nℹ dist\\config-Buums38R.js                     1.20 kB │ gzip:   0.57 kB\nℹ dist\\gateway-rpc-DkjeksKS.js                1.17 kB │ gzip:   0.63 kB\nℹ dist\\command-options-C2OHnkd1.js            1.15 kB │ gzip:   0.52 kB\nℹ dist\\systemd-hints-D6lu1ch-.js              1.11 kB │ gzip:   0.55 kB\nℹ dist\\is-main-CdrpeWDh.js                    1.00 kB │ gzip:   0.40 kB\nℹ dist\\auth-profiles-C7Zu-9U-.js              0.99 kB │ gzip:   0.49 kB\nℹ dist\\cli-utils-BpfYfZQ6.js                  0.98 kB │ gzip:   0.47 kB\nℹ dist\\status-DDj9tDgx.js                     0.97 kB │ gzip:   0.44 kB\n\nℹ dist\\image-C3MW0up9.js                      0.93 kB │ gzip:   0.47 kB\nℹ dist\\boolean-CYQfHIEb.js                    0.86 kB │ gzip:   0.38 kB\nℹ dist\\deliver-DWsBw2GA.js                    0.86 kB │ gzip:   0.44 kB\nℹ dist\\warnings-CFYfkNK8.js                   0.85 kB │ gzip:   0.41 kB\nℹ dist\\status-DCkF_L3U.js                     0.82 kB │ gzip:   0.35 kB\nℹ dist\\deps-Vp17N36I.js                       0.81 kB │ gzip:   0.32 kB\nℹ dist\\helpers-CUVSCDJV.js                    0.79 kB │ gzip:   0.39 kB\nℹ dist\\parse-DOybnFJK.js                      0.70 kB │ gzip:   0.36 kB\n\nℹ dist\\help-format-CEZAC-PC.js                0.67 kB │ gzip:   0.30 kB\nℹ dist\\transcript-events-Bk96BvHo.js          0.59 kB │ gzip:   0.29 kB\nℹ dist\\login-qr-BWFyhJgz.js                   0.58 kB │ gzip:   0.32 kB\nℹ dist\\pi-model-discovery-F9aO3LVq.js         0.56 kB │ gzip:   0.27 kB\nℹ dist\\channels-status-issues-BSPp9VHE.js     0.55 kB │ gzip:   0.30 kB\nℹ dist\\logging-D2EPUB3t.js                    0.50 kB │ gzip:   0.30 kB\nℹ dist\\links-B5WqCudN.js                      0.49 kB │ gzip:   0.31 kB\nℹ dist\\manager-CUQg46Bu.js                    0.49 kB │ gzip:   0.28 kB\nℹ dist\\profile-utils-BGLlgHib.js              0.49 kB │ gzip:   0.28 kB\nℹ dist\\ws-odwH8aKX.js                         0.47 kB │ gzip:   0.24 kB\n\nℹ dist\\parse-timeout-R8SiSP1t.js              0.46 kB │ gzip:   0.26 kB\nℹ dist\\prompt-style-jRF2QX0N.js               0.45 kB │ gzip:   0.25 kB\nℹ dist\\completion-cli-DwMdyop_.js             0.45 kB │ gzip:   0.26 kB\nℹ dist\\helpers-C6lpEYIe.js                    0.41 kB │ gzip:   0.26 kB\nℹ dist\\systemd-linger-B_oQ8qYO.js             0.37 kB │ gzip:   0.21 kB\nℹ dist\\register.subclis-DKDFOMHu.js           0.28 kB │ gzip:   0.19 kB\nℹ dist\\session-cost-usage-D8NHYh0L.js         0.28 kB │ gzip:   0.18 kB\nℹ dist\\tmux-manager-Fp6gAoWP.js               0.28 kB │ gzip:   0.20 kB\nℹ dist\\git-worktree-DHG_Efi4.js               0.27 kB │ gzip:   0.19 kB\nℹ dist\\pairing-labels-Cgs4o20d.js             0.26 kB │ gzip:   0.19 kB\n\nℹ dist\\prompts-C7Aj6Uyl.js                    0.24 kB │ gzip:   0.17 kB\nℹ dist\\github-copilot-token-Dm9ayIxQ.js       0.22 kB │ gzip:   0.18 kB\nℹ dist\\task-registry-CgNi8uaH.js              0.22 kB │ gzip:   0.17 kB\nℹ dist\\pi-model-discovery-CDBw54C4.js         0.21 kB │ gzip:   0.14 kB\nℹ dist\\exec-C3c483Qo.js                       0.18 kB │ gzip:   0.15 kB\nℹ dist\\logging-CcxUDNcI.js                    0.01 kB │ gzip:   0.03 kB\nℹ 170 files, total: 6301.99 kB\n\n✔ Build complete in 855ms\n\nerror: unknown option '--workspace'"
+  },
+  {
+    "id": "task-1772115062820",
+    "agent": "claude",
+    "description": "上海天气",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772115062820",
+    "branch": "orchestral/task-17721150628",
+    "startedAt": 1772115090169,
+    "status": "failed",
+    "useContext": true,
+    "pid": 28016,
+    "completedAt": 1772115099639,
+    "exitCode": 1,
+    "failureReason": "Agent exited with code 1",
+    "lastOutput": "gzip:   1.07 kB\nℹ dist\\node-service-Djhm74Rf.js               2.09 kB │ gzip:   0.61 kB\nℹ dist\\channel-selection-CoPG34j2.js          2.06 kB │ gzip:   0.73 kB\nℹ dist\\daemon-cli-DxlDILSa.js                 1.91 kB │ gzip:   0.85 kB\nℹ dist\\brew-DlQQMJ3n.js                       1.65 kB │ gzip:   0.58 kB\nℹ dist\\command-format-CMdN3Umv.js             1.60 kB │ gzip:   0.65 kB\nℹ dist\\agent-events-Dliktfeh.js               1.59 kB │ gzip:   0.57 kB\nℹ dist\\usage-format-Bhl_WCWP.js               1.50 kB │ gzip:   0.58 kB\nℹ dist\\format-DrGI57pR.js                     1.28 kB │ gzip:   0.61 kB\nℹ dist\\parse-log-line-CfVgwy6x.js             1.23 kB │ gzip:   0.52 kB\nℹ dist\\channel-options-CEuf_NsG.js            1.22 kB │ gzip:   0.58 kB\nℹ dist\\env-wgiF7f-u.js                        1.21 kB │ gzip:   0.58 kB\nℹ dist\\tailnet-DGRSvYuQ.js                    1.21 kB │ gzip:   0.55 kB\nℹ dist\\config-Buums38R.js                     1.20 kB │ gzip:   0.57 kB\nℹ dist\\gateway-rpc-DkjeksKS.js                1.17 kB │ gzip:   0.63 kB\nℹ dist\\command-options-C2OHnkd1.js            1.15 kB │ gzip:   0.52 kB\nℹ dist\\systemd-hints-D6lu1ch-.js              1.11 kB │ gzip:   0.55 kB\nℹ dist\\is-main-CdrpeWDh.js                    1.00 kB │ gzip:   0.40 kB\nℹ dist\\auth-profiles-C7Zu-9U-.js              0.99 kB │ gzip:   0.49 kB\nℹ dist\\cli-utils-BpfYfZQ6.js                  0.98 kB │ gzip:   0.47 kB\nℹ dist\\status-DDj9tDgx.js                     0.97 kB │ gzip:   0.44 kB\nℹ dist\\image-C3MW0up9.js                      0.93 kB │ gzip:   0.47 kB\nℹ dist\\boolean-CYQfHIEb.js                    0.86 kB │ gzip:   0.38 kB\nℹ dist\\deliver-DWsBw2GA.js                    0.86 kB │ gzip:   0.44 kB\nℹ dist\\warnings-CFYfkNK8.js                   0.85 kB │ gzip:   0.41 kB\nℹ dist\\status-DCkF_L3U.js                     0.82 kB │ gzip:   0.35 kB\nℹ dist\\deps-Vp17N36I.js                       0.81 kB │ gzip:   0.32 kB\nℹ dist\\helpers-CUVSCDJV.js                    0.79 kB │ gzip:   0.39 kB\nℹ dist\\parse-DOybnFJK.js                      0.70 kB │ gzip:   0.36 kB\nℹ dist\\help-format-CEZAC-PC.js                0.67 kB │ gzip:   0.30 kB\nℹ dist\\transcript-events-Bk96BvHo.js          0.59 kB │ gzip:   0.29 kB\nℹ dist\\login-qr-BWFyhJgz.js                   0.58 kB │ gzip:   0.32 kB\nℹ dist\\pi-model-discovery-F9aO3LVq.js         0.56 kB │ gzip:   0.27 kB\nℹ dist\\channels-status-issues-BSPp9VHE.js     0.55 kB │ gzip:   0.30 kB\n\nℹ dist\\logging-D2EPUB3t.js                    0.50 kB │ gzip:   0.30 kB\nℹ dist\\links-B5WqCudN.js                      0.49 kB │ gzip:   0.31 kB\nℹ dist\\manager-CUQg46Bu.js                    0.49 kB │ gzip:   0.28 kB\nℹ dist\\profile-utils-BGLlgHib.js              0.49 kB │ gzip:   0.28 kB\nℹ dist\\ws-odwH8aKX.js                         0.47 kB │ gzip:   0.24 kB\nℹ dist\\parse-timeout-R8SiSP1t.js              0.46 kB │ gzip:   0.26 kB\nℹ dist\\prompt-style-jRF2QX0N.js               0.45 kB │ gzip:   0.25 kB\nℹ dist\\completion-cli-DwMdyop_.js             0.45 kB │ gzip:   0.26 kB\nℹ dist\\helpers-C6lpEYIe.js                    0.41 kB │ gzip:   0.26 kB\nℹ dist\\systemd-linger-B_oQ8qYO.js             0.37 kB │ gzip:   0.21 kB\nℹ dist\\register.subclis-DKDFOMHu.js           0.28 kB │ gzip:   0.19 kB\nℹ dist\\session-cost-usage-D8NHYh0L.js         0.28 kB │ gzip:   0.18 kB\nℹ dist\\tmux-manager-Fp6gAoWP.js               0.28 kB │ gzip:   0.20 kB\nℹ dist\\git-worktree-DHG_Efi4.js               0.27 kB │ gzip:   0.19 kB\nℹ dist\\pairing-labels-Cgs4o20d.js             0.26 kB │ gzip:   0.19 kB\nℹ dist\\prompts-C7Aj6Uyl.js                    0.24 kB │ gzip:   0.17 kB\nℹ dist\\github-copilot-token-Dm9ayIxQ.js       0.22 kB │ gzip:   0.18 kB\nℹ dist\\task-registry-CgNi8uaH.js              0.22 kB │ gzip:   0.17 kB\nℹ dist\\pi-model-discovery-CDBw54C4.js         0.21 kB │ gzip:   0.14 kB\nℹ dist\\exec-C3c483Qo.js                       0.18 kB │ gzip:   0.15 kB\n\nℹ dist\\logging-CcxUDNcI.js                    0.01 kB │ gzip:   0.03 kB\nℹ 170 files, total: 6301.99 kB\n\n✔ Build complete in 984ms\n\nerror: unknown option '--workspace'"
+  },
+  {
+    "id": "task-1772115610897",
+    "agent": "claude",
+    "description": "上海天气",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772115610897",
+    "branch": "orchestral/task-17721156108",
+    "startedAt": 1772115638440,
+    "status": "failed",
+    "useContext": true,
+    "pid": 14204,
+    "completedAt": 1772115647885,
+    "exitCode": 1,
+    "failureReason": "Agent exited with code 1",
+    "lastOutput": "1.07 kB\nℹ dist\\node-service-Djhm74Rf.js               2.09 kB │ gzip:   0.61 kB\nℹ dist\\channel-selection-CoPG34j2.js          2.06 kB │ gzip:   0.73 kB\nℹ dist\\daemon-cli-DxlDILSa.js                 1.91 kB │ gzip:   0.85 kB\nℹ dist\\brew-DlQQMJ3n.js                       1.65 kB │ gzip:   0.58 kB\n\nℹ dist\\command-format-CMdN3Umv.js             1.60 kB │ gzip:   0.65 kB\nℹ dist\\agent-events-Dliktfeh.js               1.59 kB │ gzip:   0.57 kB\nℹ dist\\usage-format-Bhl_WCWP.js               1.50 kB │ gzip:   0.58 kB\nℹ dist\\format-DrGI57pR.js                     1.28 kB │ gzip:   0.61 kB\nℹ dist\\parse-log-line-CfVgwy6x.js             1.23 kB │ gzip:   0.52 kB\nℹ dist\\channel-options-CEuf_NsG.js            1.22 kB │ gzip:   0.58 kB\nℹ dist\\env-wgiF7f-u.js                        1.21 kB │ gzip:   0.58 kB\n\nℹ dist\\tailnet-DGRSvYuQ.js                    1.21 kB │ gzip:   0.55 kB\nℹ dist\\config-Buums38R.js                     1.20 kB │ gzip:   0.57 kB\nℹ dist\\gateway-rpc-DkjeksKS.js                1.17 kB │ gzip:   0.63 kB\nℹ dist\\command-options-C2OHnkd1.js            1.15 kB │ gzip:   0.52 kB\nℹ dist\\systemd-hints-D6lu1ch-.js              1.11 kB │ gzip:   0.55 kB\nℹ dist\\is-main-CdrpeWDh.js                    1.00 kB │ gzip:   0.40 kB\nℹ dist\\auth-profiles-C7Zu-9U-.js              0.99 kB │ gzip:   0.49 kB\n\nℹ dist\\cli-utils-BpfYfZQ6.js                  0.98 kB │ gzip:   0.47 kB\nℹ dist\\status-DDj9tDgx.js                     0.97 kB │ gzip:   0.44 kB\nℹ dist\\image-C3MW0up9.js                      0.93 kB │ gzip:   0.47 kB\nℹ dist\\boolean-CYQfHIEb.js                    0.86 kB │ gzip:   0.38 kB\nℹ dist\\deliver-DWsBw2GA.js                    0.86 kB │ gzip:   0.44 kB\nℹ dist\\warnings-CFYfkNK8.js                   0.85 kB │ gzip:   0.41 kB\nℹ dist\\status-DCkF_L3U.js                     0.82 kB │ gzip:   0.35 kB\n\nℹ dist\\deps-Vp17N36I.js                       0.81 kB │ gzip:   0.32 kB\nℹ dist\\helpers-CUVSCDJV.js                    0.79 kB │ gzip:   0.39 kB\nℹ dist\\parse-DOybnFJK.js                      0.70 kB │ gzip:   0.36 kB\nℹ dist\\help-format-CEZAC-PC.js                0.67 kB │ gzip:   0.30 kB\nℹ dist\\transcript-events-Bk96BvHo.js          0.59 kB │ gzip:   0.29 kB\nℹ dist\\login-qr-BWFyhJgz.js                   0.58 kB │ gzip:   0.32 kB\nℹ dist\\pi-model-discovery-F9aO3LVq.js         0.56 kB │ gzip:   0.27 kB\nℹ dist\\channels-status-issues-BSPp9VHE.js     0.55 kB │ gzip:   0.30 kB\n\nℹ dist\\logging-D2EPUB3t.js                    0.50 kB │ gzip:   0.30 kB\nℹ dist\\links-B5WqCudN.js                      0.49 kB │ gzip:   0.31 kB\nℹ dist\\manager-CUQg46Bu.js                    0.49 kB │ gzip:   0.28 kB\nℹ dist\\profile-utils-BGLlgHib.js              0.49 kB │ gzip:   0.28 kB\nℹ dist\\ws-odwH8aKX.js                         0.47 kB │ gzip:   0.24 kB\nℹ dist\\parse-timeout-R8SiSP1t.js              0.46 kB │ gzip:   0.26 kB\nℹ dist\\prompt-style-jRF2QX0N.js               0.45 kB │ gzip:   0.25 kB\nℹ dist\\completion-cli-DwMdyop_.js             0.45 kB │ gzip:   0.26 kB\nℹ dist\\helpers-C6lpEYIe.js                    0.41 kB │ gzip:   0.26 kB\n\nℹ dist\\systemd-linger-B_oQ8qYO.js             0.37 kB │ gzip:   0.21 kB\nℹ dist\\register.subclis-DKDFOMHu.js           0.28 kB │ gzip:   0.19 kB\nℹ dist\\session-cost-usage-D8NHYh0L.js         0.28 kB │ gzip:   0.18 kB\nℹ dist\\tmux-manager-Fp6gAoWP.js               0.28 kB │ gzip:   0.20 kB\nℹ dist\\git-worktree-DHG_Efi4.js               0.27 kB │ gzip:   0.19 kB\nℹ dist\\pairing-labels-Cgs4o20d.js             0.26 kB │ gzip:   0.19 kB\nℹ dist\\prompts-C7Aj6Uyl.js                    0.24 kB │ gzip:   0.17 kB\n\nℹ dist\\github-copilot-token-Dm9ayIxQ.js       0.22 kB │ gzip:   0.18 kB\nℹ dist\\task-registry-CgNi8uaH.js              0.22 kB │ gzip:   0.17 kB\nℹ dist\\pi-model-discovery-CDBw54C4.js         0.21 kB │ gzip:   0.14 kB\nℹ dist\\exec-C3c483Qo.js                       0.18 kB │ gzip:   0.15 kB\nℹ dist\\logging-CcxUDNcI.js                    0.01 kB │ gzip:   0.03 kB\nℹ 170 files, total: 6301.99 kB\n\n✔ Build complete in 849ms\n\nerror: unknown option '--workspace'"
+  },
+  {
+    "id": "task-1772115967211",
+    "agent": "claude",
+    "description": "北京好玩的地方",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772115967211",
+    "branch": "orchestral/task-17721159672",
+    "startedAt": 1772115995437,
+    "status": "completed",
+    "useContext": true,
+    "pid": 8588,
+    "completedAt": 1772116011416,
+    "exitCode": 0,
+    "lastOutput": "[agent/embedded] workspace bootstrap file AGENTS.md is 23354 chars (limit 20000); truncating in injected context (sessionKey=task-1772115967211)\n\n北京好玩的地方非常多，根据不同的兴趣爱好，可以分为以下几大类：\n\n### 1. 必打卡的皇城经典（初次来京首选）\n*   **故宫博物院**：世界上保存最完整的木质结构古建筑群。记得提前在小程序预约！\n*   **天安门广场**：观旗仪式非常震撼，也是北京的心脏。\n*   **天坛**：明清两代皇帝祭天的地方，祈年殿极其精美。\n*   **颐和园**：中国现存规模最大、保存最完整的皇家园林，漫步昆明湖畔非常惬意。\n\n### 2. 长城之巅（不到非好汉）\n*   **八达岭长城**：开发最完善，交通最方便（高铁直达）。\n*   **慕田峪长城**：外国人比较多，人相对少一些，还可以坐滑道下山。\n\n### 3. 老北京烟火气（胡同与古建）\n*   **什刹海（后海）**：可以划船、逛胡同，晚上酒吧街很热闹。\n*   **南锣鼓巷**：著名的商业胡同，虽然人多，但周边的北兵马司、黑芝麻胡同很有味道。\n*   **雍和宫**：北京最灵验的藏传佛教寺院。\n*   **国子监/五道营胡同**：就在雍和宫旁边，文艺小店很多，适合拍照。\n\n### 4. 现代与艺术（文艺青年最爱）\n*   **798艺术区**：旧工厂改建的艺术空间，很多画展和涂鸦。\n*   **国家大剧院**：天安门旁的“水上巨蛋”，建筑本身就是艺术品。\n*   **朝阳公园/亮马河**：现在的“北京塞纳河”，晚上坐船看夜景非常浪漫。\n\n### 5. 博物馆与科教\n*   **中国国家博物馆**：展品极其丰富，可以看一整天。\n*   **北京环球度假区（Universal Studios）**：如果你喜欢电影和主题公园，这里必去。\n\n### 🍜 顺便尝尝美食：\n*   **北京烤鸭**（四季民福、全聚德、大董等）\n*   **老北京涮肉**（铜锅、麻酱是灵魂）\n*   **炒肝、豆汁儿**（豆汁儿需谨慎尝试😅）\n*   **糖葫芦、驴打滚**\n\n**小贴士：**\n1.  **预约**：北京大部分景点（尤其是故宫、国博、天安门）都需要**提前3-7天**在微信小程序预约，千万别直接跑过去。\n2.  **交通**：北京地铁极其发达，建议下载“亿通行”APP或直接用支付宝/微信乘车码，不建议打车（容易堵车）。\n\n你想去哪一类地方？我可以帮你规划具体的路线。"
   }
 ]

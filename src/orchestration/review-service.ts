@@ -90,7 +90,7 @@ async function runAgentReview(
     const prompt = buildReviewPrompt(model, diff, files, context, focus);
 
     // Run actual agent review with rule-based fallback
-    const comments = await runAgentReview(model, files, diff, prompt);
+    const comments = await performAgentReview(model, files, diff, prompt);
 
     return {
       model,
@@ -164,7 +164,7 @@ If no issues found, return {"comments": []}.`;
  * Run an actual agent review via the gateway.
  * This connects to the OpenAI API or other AI providers.
  */
-async function runAgentReview(
+async function performAgentReview(
   model: string,
   files: string[],
   diff: string,

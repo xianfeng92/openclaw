@@ -167,7 +167,6 @@ export {
 // Workflow service
 export {
   loadWorkflows,
-  saveWorkflows,
   clearWorkflowsCache,
   getWorkflow,
   getWorkflowByName,
@@ -187,7 +186,6 @@ export {
 // Alias service
 export {
   loadAliases,
-  saveAliases,
   clearAliasesCache,
   getAlias,
   createAlias,

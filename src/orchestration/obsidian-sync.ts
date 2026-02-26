@@ -16,7 +16,7 @@ import type {
   Project,
 } from "./context-schema.js";
 
-const DEFAULT_FOLDERS = ["Customers", "Meetings", "Decisions", "Patterns"];
+const DEFAULT_FOLDERS = ["Customers", "Projects", "Meetings", "Decisions", "Patterns"];
 
 /**
  * Extract body content after frontmatter.
@@ -34,6 +34,32 @@ function extractBody(content: string): string {
 }
 
 /**
+ * Parse an array field from frontmatter.
+ * Handles both JSON string arrays and YAML-style arrays.
+ */
+function parseArrayField(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(String);
+  }
+  if (typeof value === "string") {
+    // Try to parse as JSON array
+    if (value.startsWith("[") && value.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map(String);
+        }
+      } catch {
+        // Fall through to split by comma
+      }
+    }
+    // Split by comma
+    return value.split(",").map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+/**
  * Parse a customer note from Markdown.
  */
 function parseCustomerNote(filePath: string, content: string): Customer | null {
@@ -45,7 +71,7 @@ function parseCustomerNote(filePath: string, content: string): Customer | null {
   const contact = frontmatter?.contact || frontmatter?.email || undefined;
   const email = frontmatter?.email || undefined;
   const config = frontmatter?.config || frontmatter?.configuration;
-  const tags = frontmatter?.tags || [];
+  const tags = parseArrayField(frontmatter?.tags);
 
   // Extract ID from filename or use slugified name
   const id = frontmatter?.id || toSlug(name);
@@ -302,7 +328,7 @@ function parseProjectNote(filePath: string, content: string): Project | null {
   const startDateStr = frontmatter?.startDate || frontmatter?.["start-date"];
   const startDate = startDateStr ? new Date(startDateStr) : undefined;
 
-  const tags = frontmatter?.tags || [];
+  const tags = parseArrayField(frontmatter?.tags);
 
   const id = frontmatter?.id || toSlug(name);
 

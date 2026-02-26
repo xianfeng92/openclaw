@@ -94,18 +94,14 @@ pnpm openclaw models auth paste-token --provider anthropic
 # 在仓库根目录安装依赖（推荐）
 pnpm install
 
-# 构建 Control UI 静态资源（首次必需；产物在 dist/control-ui）
-pnpm ui:build
-
-# 进入桌面应用目录
-cd apps/windows
-
-# 开发模式
-pnpm dev
+# 一键启动（自动构建 UI 并启动 Electron）
+pnpm dev:desktop
 
 # 生产构建
-pnpm build:prod
+cd apps/windows && pnpm build:prod
 ```
+
+> **提示**：修改代码后重新运行 `pnpm dev:desktop` 即可。
 
 #### 桌面应用功能
 

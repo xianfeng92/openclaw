@@ -5,6 +5,7 @@ import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
 import type { GatewayManager } from "./gateway.js";
+import { getAgentManager } from "./windows-agent-manager.js";
 // Note: Orchestration modules are imported dynamically via IPC or at runtime
 // Static imports are removed to avoid build issues
 
@@ -94,6 +95,10 @@ interface OrchestralTask {
   branch?: string;
   startedAt: number;
   status: "running" | "completed" | "failed" | "killed";
+  completedAt?: number;
+  exitCode?: number | null;
+  failureReason?: string;
+  lastOutput?: string;
   process?: ChildProcess;
   pid?: number;
   useContext?: boolean;
@@ -266,6 +271,102 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
   });
 
   // ===== Orchestral Commands =====
+
+  function trimOutputTail(output: string, maxChars = 4000): string {
+    const trimmed = output.trim();
+    if (!trimmed) {
+      return "";
+    }
+    if (trimmed.length <= maxChars) {
+      return trimmed;
+    }
+    return trimmed.slice(trimmed.length - maxChars);
+  }
+
+  function formatTaskOutput(task: OrchestralTask, lines = 50): string {
+    const header = [
+      `Task ${task.id}: ${task.description}`,
+      `Worktree: ${task.worktree || "N/A"}`,
+      `Branch: ${task.branch || "N/A"}`,
+      `Status: ${task.status}`,
+    ];
+
+    if (task.exitCode !== undefined && task.exitCode !== null) {
+      header.push(`Exit code: ${task.exitCode}`);
+    }
+    if (task.failureReason) {
+      header.push(`Failure: ${task.failureReason}`);
+    }
+
+    if (!task.lastOutput || !task.lastOutput.trim()) {
+      return `${header.join("\n")}\n\nNo session output available`;
+    }
+
+    const outputLines = task.lastOutput.split(/\r?\n/u);
+    const tail = outputLines.slice(Math.max(0, outputLines.length - Math.max(1, lines))).join("\n").trim();
+    return `${header.join("\n")}\n\nLast output:\n${tail}`;
+  }
+
+  function syncTaskStatusesFromAgentManager(): void {
+    const agentMgr = getAgentManager(getProjectPath());
+    let changed = false;
+
+    for (const [taskId, task] of orchestralTasks.entries()) {
+      const agentProcess = agentMgr.getAgent(taskId);
+      if (!agentProcess) {
+        continue;
+      }
+
+      let nextStatus: OrchestralTask["status"] = task.status;
+      if (agentProcess.status === "running" || agentProcess.status === "starting") {
+        nextStatus = "running";
+      } else if (agentProcess.status === "killed") {
+        nextStatus = "killed";
+      } else if (agentProcess.status === "exited") {
+        const failed =
+          !!agentProcess.failureReason ||
+          (agentProcess.exitCode !== undefined &&
+            agentProcess.exitCode !== null &&
+            agentProcess.exitCode !== 0);
+        nextStatus = failed ? "failed" : "completed";
+      }
+
+      const nextPid = agentProcess.pid || task.pid;
+      const nextCompletedAt =
+        nextStatus === "running" ? task.completedAt : task.completedAt ?? agentProcess.completedAt ?? Date.now();
+      const nextExitCode = agentProcess.exitCode ?? task.exitCode;
+      const nextFailureReason = agentProcess.failureReason ?? task.failureReason;
+      const nextLastOutput =
+        trimOutputTail(agentProcess.lastOutput ?? "") ||
+        (nextStatus === "failed" || nextStatus === "completed"
+          ? trimOutputTail(agentMgr.getOutput(taskId, 80))
+          : task.lastOutput);
+
+      if (
+        task.status !== nextStatus ||
+        task.pid !== nextPid ||
+        task.completedAt !== nextCompletedAt ||
+        task.exitCode !== nextExitCode ||
+        task.failureReason !== nextFailureReason ||
+        task.lastOutput !== nextLastOutput
+      ) {
+        orchestralTasks.set(taskId, {
+          ...task,
+          status: nextStatus,
+          pid: nextPid,
+          completedAt: nextCompletedAt,
+          exitCode: nextExitCode,
+          failureReason: nextFailureReason,
+          lastOutput: nextLastOutput,
+        });
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      saveTasks();
+    }
+  }
 
   // Helper to execute shell command and get output
   async function execShell(command: string): Promise<ShellResult> {
@@ -463,8 +564,6 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
             projectsCount: opts.relevantContext.projects?.length || 0,
             decisionsCount: opts.relevantContext.decisions?.length || 0,
           } : undefined,
-          // Track applied patterns for effectiveness tracking
-          appliedPattern: opts.appliedPattern || undefined,
         } as any;
 
         orchestralTasks.set(taskId, task);
@@ -500,6 +599,43 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
           }
         }
 
+        // Start the agent process
+        const agentMgr = getAgentManager(getProjectPath());
+        const agentResult = await agentMgr.startAgent({
+          taskId,
+          description: opts.description,
+          worktree: worktreePath,
+          agent,
+          branch: branchName,
+          webContents: event.sender,
+          useContext: opts.useContext,
+          relevantContext: opts.relevantContext,
+        });
+
+        if (agentResult.success) {
+          task.pid = agentResult.pid;
+          orchestralTasks.set(taskId, task);
+          details.push(`PID: ${agentResult.pid}`);
+        } else {
+          // Agent failed to start but worktree was created
+          task.status = "failed";
+          task.completedAt = Date.now();
+          task.exitCode = agentResult.exitCode ?? null;
+          task.failureReason = agentResult.error || "Agent failed to start";
+          task.lastOutput = trimOutputTail(agentResult.lastOutput ?? "");
+          orchestralTasks.set(taskId, task);
+          details.push(`Agent start failed: ${task.failureReason}`);
+          if (task.exitCode !== null && task.exitCode !== undefined) {
+            details.push(`Exit code: ${task.exitCode}`);
+          }
+          if (task.lastOutput) {
+            const preview = task.lastOutput.replace(/\r?\n/gu, " ").slice(0, 240);
+            details.push(`Last output: ${preview}`);
+          }
+        }
+        syncTaskStatusesFromAgentManager();
+        saveTasks();
+
         // Send completion notification
         event.sender.send("terminal:shell-output", {
           runId: taskId,
@@ -515,7 +651,8 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
             message,
             details: details.join("\n"),
             worktreeCreated,
-            mode: "lightweight",
+            mode: "full",
+            pid: agentResult.pid,
           },
         };
       } catch (err) {
@@ -527,13 +664,17 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
   // Agents command (list, kill, attach, redirect, output)
   ipcMain.handle(
     "terminal:orchestral-agents",
-    async (_event, action: string, args: string[]): Promise<any> => {
+    async (event, action: string, args: string[]): Promise<any> => {
       try {
+        const agentMgr = getAgentManager(getProjectPath());
+
         switch (action) {
           case "list": {
-            // Return all tracked orchestral tasks
-            const tasks = Array.from(orchestralTasks.values())
-              .filter(t => t.status === "running")
+            syncTaskStatusesFromAgentManager();
+            // Get agents from both old and new system
+            const agentProcesses = agentMgr.listAgents();
+            const legacyTasks = Array.from(orchestralTasks.values())
+              .filter(t => t.status === "running" && !agentProcesses.some(ap => ap.id === t.id))
               .map(task => ({
                 id: task.id,
                 agent: task.agent,
@@ -545,11 +686,28 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
                 hasSession: !!task.process || !!task.pid,
               }));
 
-            return { success: true, tasks };
+            return { success: true, tasks: [...agentProcesses, ...legacyTasks] };
           }
 
           case "kill": {
             const taskId = args[0];
+
+            // Try agent manager first
+            const agentKillResult = await agentMgr.killAgent(taskId);
+            if (agentKillResult.success) {
+              // Update legacy task status
+              const task = orchestralTasks.get(taskId);
+              if (task) {
+                task.status = "killed";
+                task.completedAt = Date.now();
+                task.failureReason = "Task was terminated by user";
+                orchestralTasks.set(taskId, task);
+                saveTasks();
+              }
+              return agentKillResult;
+            }
+
+            // Fall back to legacy method
             const task = orchestralTasks.get(taskId);
 
             if (!task) {
@@ -572,6 +730,8 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
 
             // Update task status
             task.status = "killed";
+            task.completedAt = Date.now();
+            task.failureReason = "Task was terminated by user";
             orchestralTasks.set(taskId, task);
             saveTasks();
 
@@ -580,6 +740,28 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
 
           case "attach": {
             const taskId = args[0];
+
+            // Try agent manager first
+            const agentProcess = agentMgr.getAgent(taskId);
+            if (agentProcess) {
+              if (!agentProcess.worktree) {
+                return {
+                  success: true,
+                  message: `Task ${taskId} (no worktree - work in current directory)`,
+                  taskId,
+                  description: agentProcess.description,
+                };
+              }
+              return {
+                success: true,
+                message: `Navigate to the worktree directory:`,
+                worktree: agentProcess.worktree,
+                command: `cd "${agentProcess.worktree}"`,
+                taskId,
+              };
+            }
+
+            // Fall back to legacy method
             const task = orchestralTasks.get(taskId);
 
             if (!task) {
@@ -607,6 +789,17 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
           case "redirect": {
             const taskId = args[0];
             const message = args.slice(1).join(" ");
+
+            // Try agent manager first
+            const agentProcess = agentMgr.getAgent(taskId);
+            if (agentProcess) {
+              if (agentMgr.sendMessage(taskId, message)) {
+                return { success: true, message: `Message sent to ${taskId}` };
+              }
+              return { success: false, error: "Could not send message (process not running)" };
+            }
+
+            // Fall back to legacy method
             const task = orchestralTasks.get(taskId);
 
             if (!task) {
@@ -623,16 +816,38 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
 
           case "output": {
             const taskId = args[0];
+            const linesArg = args[1];
+            const lines = linesArg ? parseInt(linesArg, 10) : 50;
+
+            // Try agent manager first
+            const agentProcess = agentMgr.getAgent(taskId);
+            if (agentProcess) {
+              const output = agentMgr.getOutput(taskId, lines);
+              const task = orchestralTasks.get(taskId);
+              if (!output.trim() && task) {
+                return {
+                  success: true,
+                  output: formatTaskOutput(task, lines),
+                  hasOutput: !!task.lastOutput,
+                };
+              }
+              return {
+                success: true,
+                output,
+                hasOutput: output.length > 0,
+              };
+            }
+
+            // Fall back to legacy method
             const task = orchestralTasks.get(taskId);
 
             if (!task) {
               return { success: false, error: "Task not found" };
             }
 
-            // For lightweight tasks, we don't have stored output
             return {
               success: true,
-              output: `Task ${taskId}: ${task.description}\nWorktree: ${task.worktree || "N/A"}\nBranch: ${task.branch || "N/A"}\n\nNo session output available (lightweight mode)`,
+              output: formatTaskOutput(task, lines),
             };
           }
 
@@ -645,12 +860,76 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
     },
   );
 
+  // Agent output subscription - allow frontend to subscribe to agent output
+  ipcMain.on("terminal:subscribe-agent-output", (event, taskId: string) => {
+    const agentMgr = getAgentManager(getProjectPath());
+    const agentProcess = agentMgr.getAgent(taskId);
+
+    if (agentProcess) {
+      // Update the webContents for this agent
+      agentProcess.webContents = event.sender;
+    }
+  });
+
+  // Agent process management IPC handlers
+  ipcMain.handle("terminal:agent-start", async (event, opts: {
+    taskId: string;
+    description: string;
+    worktree?: string;
+    agent?: string;
+    branch?: string;
+    useContext?: boolean;
+    relevantContext?: {
+      customers: Array<{ name: string; score: number }>;
+      projects: Array<{ name: string; score: number }>;
+      decisions: Array<{ title: string; score: number }>;
+      meetings: Array<{ title: string; score: number }>;
+      patterns: Array<{ name: string; score: number }>;
+    };
+  }) => {
+    const agentMgr = getAgentManager(getProjectPath());
+    return await agentMgr.startAgent({
+      ...opts,
+      webContents: event.sender,
+    });
+  });
+
+  ipcMain.handle("terminal:agent-kill", async (_event, taskId: string) => {
+    const agentMgr = getAgentManager(getProjectPath());
+    return await agentMgr.killAgent(taskId);
+  });
+
+  ipcMain.handle("terminal:agent-get-output", async (_event, taskId: string, lines = 50) => {
+    const agentMgr = getAgentManager(getProjectPath());
+    const agentProcess = agentMgr.getAgent(taskId);
+
+    if (agentProcess) {
+      const output = agentMgr.getOutput(taskId, lines);
+      return {
+        success: true,
+        output,
+      };
+    }
+
+    const task = orchestralTasks.get(taskId);
+    if (!task) {
+      return { success: false, error: "Task not found" };
+    }
+
+    return {
+      success: true,
+      output: formatTaskOutput(task, lines),
+    };
+  });
+
   // Tasks command
   ipcMain.handle(
     "terminal:orchestral-tasks",
     async (_event, filters: Record<string, string>): Promise<any> => {
       try {
-        let tasks = Array.from(orchestralTasks.values());
+        syncTaskStatusesFromAgentManager();
+        let tasks = Array.from(orchestralTasks.values())
+          .filter(t => t.status !== "killed");
 
         // Apply filters
         if (filters.status) {

@@ -116,7 +116,7 @@ openclaw doctor                         # Troubleshooting
 ```bash
 openclaw tui                            # Launch Super Terminal
 openclaw agent                          # Run AI agents
-openclaw agent spawn                    # Spawn new agent
+openclaw agents list                    # List configured agents
 ```
 
 ### Messaging
@@ -129,7 +129,6 @@ openclaw message send                   # Send message
 ```bash
 openclaw config set <key> <value>       # Set configuration
 openclaw config get <key>               # Get configuration
-openclaw profile                        # Manage profiles
 ```
 
 ### Development

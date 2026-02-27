@@ -1,4 +1,4 @@
-# OpenClaw - Super AI Terminal
+# Super AI Terminal
 
 > EXFOLIATE! EXFOLIATE!
 
@@ -9,7 +9,9 @@
 · [Getting Started](https://docs.openclaw.ai/start/getting-started)
 · [Chinese Docs](https://docs.openclaw.ai/zh-CN)
 
-A **Multi-Model Agent Orchestration** platform with a built-in Super AI Terminal. Each task is routed to the best AI model for the job—planning to Claude, design to Gemini, implementation to GPT—all working together through shared context.
+A **Multi-Model Agent Orchestration** platform with a built-in Super AI Terminal. Part of the [OpenClaw](https://github.com/openclaw/openclaw) project.
+
+Each task is routed to the best AI model for the job—planning to Claude, design to Gemini, implementation to GPT—all working together through shared context.
 
 - **Multi-Model Orchestration**: Route tasks by type—planning to Claude, design to Gemini, implementation to GPT
 - **Super Terminal**: Terminal UI (Ctrl+Shift+T) with markdown rendering, Dracula theme, and sidebar panels

@@ -9,14 +9,14 @@
 · [Getting Started](https://docs.openclaw.ai/start/getting-started)
 · [Chinese Docs](https://docs.openclaw.ai/zh-CN)
 
-**OpenClaw** is a multi-platform messaging gateway with a built-in Super AI Terminal. Connect to 20+ messaging platforms (WhatsApp, Telegram, Discord, Slack, and more), orchestrate AI agents with context awareness, manage workflows, and automate—all from your terminal.
+A **Multi-Model Agent Orchestration** platform with a built-in Super AI Terminal. Each task is routed to the best AI model for the job—planning to Claude, design to Gemini, implementation to GPT—all working together through shared context.
 
-- **Multi-Platform Gateway**: Single WebSocket gateway managing all messaging channels
+- **Multi-Model Orchestration**: Route tasks by type—planning to Claude, design to Gemini, implementation to GPT
 - **Super Terminal**: Terminal UI (Ctrl+Shift+T) with markdown rendering, Dracula theme, and sidebar panels
-- **AI Orchestration**: Agent spawning, context management, pattern tracking, and workflow automation
+- **Agent Coordination**: Multiple agents working in parallel with shared context and workflow coordination
 - **Desktop Apps**: Native macOS and Windows applications
 
-**Project Focus:** Building a **Super AI Terminal** with intelligent orchestration capabilities.
+**Project Focus:** Building a **Multi-Model Agent Orchestration** system that intelligently routes tasks to the best AI model for each job.
 
 **Requirements:** Node.js 22+ (package baseline: `>=22.22.0`)
 
@@ -76,13 +76,84 @@ Alternative installers:
 - **Sidebar Panels**: Tasks, Agents, and Context management
 - **Command Palette**: Quick access to all commands and workflows
 
-### AI Orchestration
+### Multi-Model AI Orchestration (TODO)
+- **Model Routing**: Intelligently assign tasks to the best AI model for the job
 - **Agent Spawning**: Dynamic agent creation with tmux integration
-- **Context Management**: Obsidian sync for business context, customers, projects, meetings, and decisions
-- **Pattern Tracking**: Recognize and recommend effective patterns
+- **Context Management**: Shared context across all models and agents
 - **Workflow Management**: Parameterized command templates and automation
-- **Code Review**: Multi-model code review with PR integration
 - **Babysit Loop**: Automatic agent monitoring and recovery
+
+#### Task → Model Routing (TODO)
+
+| Task Type | Recommended Model | Why |
+|-----------|-------------------|-----|
+| **Requirements / Planning** | Claude | Deep reasoning, structured thinking |
+| **System Design / Architecture** | Claude | Long context, careful analysis |
+| **UI / Visual Design** | Gemini | Multimodal, image understanding |
+| **Code Implementation** | GPT | Fast generation, ecosystem |
+| **Code Review** | Claude | Thorough, conservative feedback |
+| **Documentation / Content** | Gemini | Creative writing, content generation |
+| **Tests / Debugging** | GPT | Quick iteration, pattern matching |
+| **Refactoring** | GPT | Code transformation, edits |
+
+> **Note**: Model routing system is under development. Currently using basic agent selection via `agent-selector.ts`.
+
+## Multi-Model Workflow Examples (TODO)
+
+### Example: Build a Blog Website
+
+```
+User: "Help me build a blog website"
+
+┌─────────────────────────────────────────────────────────────┐
+│ Step 1: Requirements & Architecture (Claude)               │
+│ • Analyze requirements                                      │
+│ • Design system architecture                                │
+│ • Plan database schema                                      │
+│ • Define API endpoints                                      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 2: UI/UX Design (Gemini)                              │
+│ • Design page layouts                                       │
+│ • Create color scheme & typography                          │
+│ • Design component library                                  │
+│ • Generate mockups                                          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 3: Implementation (GPT)                               │
+│ • Generate boilerplate code                                 │
+│ • Implement API endpoints                                   │
+│ • Build frontend components                                 │
+│ • Write unit tests                                          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 4: Review & Refine (Claude + GPT)                     │
+│ • Code review (Claude)                                      │
+│ • Bug fixes (GPT)                                           │
+│ • Final polish                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Example: Debug a Production Issue
+
+```
+User: "Investigate the slow API response times"
+
+┌─────────────────────────────────────────────────────────────┐
+│ Claude: Analyze logs, identify root cause                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ GPT: Generate fix code, write tests                        │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Claude: Review the fix, verify correctness                 │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### Architecture
 - **Plugin System**: Extensible architecture for channels and capabilities
@@ -92,7 +163,7 @@ Alternative installers:
 
 ## System Architecture
 
-OpenClaw is evolving into a **Super AI Terminal** while maintaining backward compatibility with its messaging gateway roots.
+The platform is a **Multi-Model Agent Orchestration** system with a Super AI Terminal interface. Tasks are routed by type—planning/review to Claude, design/content to Gemini, implementation/tests to GPT—all sharing context through unified workflows.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -104,7 +175,13 @@ OpenClaw is evolving into a **Super AI Terminal** while maintaining backward com
 │  │  - Command Palette, Block commands                        │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Orchestration System                                    │  │
+│  │  Multi-Model Orchestration System                        │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │ Task Router (TODO: Task Type → Best Model)         │  │  │
+│  │  │ • Planning / Review → Claude                       │  │  │
+│  │  │ • Design / Content → Gemini                        │  │  │
+│  │  │ • Implementation / Tests → GPT                     │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
 │  │  - Context Manager (Obsidian sync)                       │  │
 │  │  - Task Registry + Babysit Loop                          │  │
 │  │  - Workflow Service + Command Palette                    │  │
@@ -134,7 +211,8 @@ OpenClaw is evolving into a **Super AI Terminal** while maintaining backward com
 
 | Layer | Purpose | Status |
 |-------|---------|--------|
-| **Super AI Terminal** | TUI + Orchestration + Context-aware AI | 🚧 In active development |
+| **Multi-Model Orchestration** | Model routing + Workflow coordination + Context sharing | TODO |
+| **Super AI Terminal** | TUI + Agent spawning + Task management | 🚧 In active development |
 | **Shared Core** | Config, Protocol, Infrastructure | ✅ Stable |
 | **Gateway** | Multi-channel messaging + Agent coordination | ✅ Stable |
 
@@ -318,4 +396,4 @@ Before marking a feature complete:
 
 ## License
 
-MIT © [OpenClaw contributors](https://github.com/openclaw/openclaw/graphs/contributors)
+MIT © Contributors

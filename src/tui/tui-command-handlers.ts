@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { SessionsPatchResult } from "../gateway/protocol/index.js";
 import type { ChatLog } from "./components/chat-log.js";
 import type { GatewayChatClient } from "./gateway-chat.js";
+import type { TuiAdapterClient } from "../terminal/tui-adapter-client.js";
 import type {
   AgentSummary,
   GatewayStatusSummary,
@@ -29,8 +30,11 @@ import {
   handleTasksCommand,
 } from "./orchestral-commands.js";
 
+// Client type that supports both GatewayChatClient and TuiAdapterClient
+type TuiClient = GatewayChatClient | TuiAdapterClient;
+
 type CommandHandlerContext = {
-  client: GatewayChatClient;
+  client: TuiClient;
   chatLog: ChatLog;
   tui: TUI;
   opts: TuiOptions;

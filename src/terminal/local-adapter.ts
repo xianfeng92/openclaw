@@ -30,6 +30,7 @@ import type {
   AdapterStatus,
   AdapterEvent,
   EventListener,
+  AdapterConnection,
 } from "./adapter-types.js";
 import { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
@@ -109,6 +110,11 @@ export class LocalAdapter implements TerminalAdapter {
   private disconnectedCallback?: (reason: string) => void;
   private activeRuns = new Map<string, AbortController>();
   private config = loadConfig();
+
+  // Expose connection info for TUI compatibility
+  readonly connection: AdapterConnection = {
+    url: "local://embedded",
+  };
 
   constructor() {
     // Pre-resolve agents directory

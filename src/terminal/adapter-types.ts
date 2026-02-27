@@ -7,6 +7,15 @@
  */
 
 /**
+ * Connection info for TUI compatibility
+ */
+export type AdapterConnection = {
+  url: string;
+  token?: string;
+  password?: string;
+};
+
+/**
  * Chat send options - shared between adapters
  */
 export type ChatSendOptions = {

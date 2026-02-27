@@ -34,6 +34,12 @@ import { createOverlayHandlers } from "./tui-overlays.js";
 import { createSessionActions } from "./tui-session-actions.js";
 import { buildWaitingStatusMessage, defaultWaitingPhrases } from "./tui-waiting.js";
 
+// Adapter support
+import type { TerminalAdapter } from "../terminal/adapter-types.js";
+import { createAdapter } from "../terminal/adapter-factory.js";
+import { handleFallback } from "../terminal/tui-fallback.js";
+import { TuiAdapterClient } from "../terminal/tui-adapter-client.js";
+
 export { resolveFinalAssistantText } from "./tui-formatters.js";
 export type { TuiOptions } from "./tui-types.js";
 
@@ -78,6 +84,30 @@ export function createEditorSubmitHandler(params: {
 }
 
 export async function runTui(opts: TuiOptions) {
+  // Create adapter with fallback logic
+  console.log("🦞 Connecting to Gateway...");
+  const adapter = await createAdapter({
+    localMode: opts.localMode,
+    url: opts.url,
+    token: opts.token,
+    password: opts.password,
+    connectionTimeoutMs: 5000,
+    maxRetries: 1,
+    onFallback: async (reason) => {
+      return await handleFallback({ reason });
+    },
+    onConnecting: () => {
+      console.log("  → Connecting...");
+    },
+    onConnected: (mode) => {
+      if (mode === "gateway") {
+        console.log("  ✓ Connected (Gateway mode)\n");
+      } else {
+        console.log("  ✓ Ready (Local mode - offline)\n");
+      }
+    },
+  });
+
   const config = loadConfig();
   const initialSessionInput = (opts.session ?? "").trim();
   let sessionScope: SessionScope = (config.session?.scope ?? "per-sender") as SessionScope;
@@ -249,11 +279,8 @@ export async function runTui(opts: TuiOptions) {
     localRunIds.clear();
   };
 
-  const client = new GatewayChatClient({
-    url: opts.url,
-    token: opts.token,
-    password: opts.password,
-  });
+  // Wrap adapter in TUI-compatible client
+  const client = new TuiAdapterClient(adapter);
 
   const tui = new TUI(new ProcessTerminal());
   const header = new Text("", 1, 0);
@@ -322,9 +349,11 @@ export async function runTui(opts: TuiOptions) {
   const updateHeader = () => {
     const sessionLabel = formatSessionKey(currentSessionKey);
     const agentLabel = formatAgentLabel(currentAgentId);
+    // Show mode indicator and connection info
+    const modeInfo = client.mode === "local" ? "LOCAL" : client.connection.url;
     header.setText(
       theme.header(
-        ` ⚡ OPENCLAW TUI │ ${client.connection.url} │ Agent: ${agentLabel} │ Session: ${sessionLabel} `,
+        ` ⚡ OPENCLAW TUI │ ${modeInfo} │ Agent: ${agentLabel} │ Session: ${sessionLabel} `,
       ),
     );
   };
@@ -668,7 +697,8 @@ export async function runTui(opts: TuiOptions) {
       await refreshAgents();
       updateHeader();
       await loadHistory();
-      setConnectionStatus(reconnected ? "gateway reconnected" : "gateway connected", 4000);
+      const modeLabel = client.mode === "local" ? "local" : "gateway";
+      setConnectionStatus(reconnected ? `${modeLabel} reconnected` : `${modeLabel} connected`, 4000);
       tui.requestRender();
       if (!autoMessageSent && autoMessage) {
         autoMessageSent = true;
@@ -684,7 +714,8 @@ export async function runTui(opts: TuiOptions) {
     wasDisconnected = true;
     historyLoaded = false;
     const reasonLabel = reason?.trim() ? reason.trim() : "closed";
-    setConnectionStatus(`gateway disconnected: ${reasonLabel}`, 5000);
+    const modeLabel = client.mode === "local" ? "local" : "gateway";
+    setConnectionStatus(`${modeLabel} disconnected: ${reasonLabel}`, 5000);
     setActivityStatus("idle");
     updateFooter();
     tui.requestRender();

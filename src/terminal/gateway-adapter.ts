@@ -21,6 +21,7 @@ import type {
   AdapterStatus,
   AdapterEvent,
   EventListener,
+  AdapterConnection,
 } from "./adapter-types.js";
 import type {
   GatewaySessionList,
@@ -38,8 +39,16 @@ export class GatewayAdapter implements TerminalAdapter {
   private client: GatewayChatClient;
   private eventListeners: Set<EventListener> = new Set();
 
+  // Expose connection info for TUI compatibility
+  readonly connection: AdapterConnection;
+
   constructor(opts: { url?: string; token?: string; password?: string }) {
     this.client = new GatewayChatClient(opts);
+    this.connection = {
+      url: opts.url ?? "ws://localhost:18789",
+      token: opts.token,
+      password: opts.password,
+    };
 
     // Forward gateway events to adapter listeners
     this.client.onEvent((event) => {

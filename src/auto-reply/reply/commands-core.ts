@@ -31,6 +31,10 @@ import {
 } from "./commands-session.js";
 import { handleSubagentsCommand } from "./commands-subagents.js";
 import { handleTtsCommands } from "./commands-tts.js";
+import {
+  handleInitAgentsMdCommand,
+  handleSaveRuleCommand,
+} from "./commands-agents-md.js";
 import { routeReply } from "./route-reply.js";
 
 let HANDLERS: CommandHandler[] | null = null;
@@ -60,6 +64,9 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleStopCommand,
       handleCompactCommand,
       handleAbortTrigger,
+      // AGENTS.md commands
+      handleSaveRuleCommand,
+      handleInitAgentsMdCommand,
     ];
   }
   const resetMatch = params.command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);

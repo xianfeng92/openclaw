@@ -222,3 +222,60 @@ export {
   type FailureCategory,
   type RetryAction,
 } from "./retry-strategy.js";
+
+// Command palette
+export {
+  fuzzyMatch,
+  scoreMatch,
+  loadPaletteItems,
+  searchPalette,
+  executePaletteItem,
+  getPaletteCategories,
+  getItemsByCategory,
+  getPopularItems,
+  type PaletteItem,
+  type PaletteItemType,
+  type PaletteExecuteResult,
+  type PaletteSearchOptions,
+  type PaletteSearchResult,
+} from "./command-palette.js";
+
+// Workflows (parameterized command templates - distinct from workflow-service)
+export {
+  loadWorkflows as loadCommandWorkflows,
+  executeWorkflow,
+  listWorkflowNames,
+  completeWorkflowName,
+  type Workflow as CommandWorkflow,
+  type WorkflowParameter,
+  type WorkflowExecuteResult,
+} from "./workflows.js";
+
+// Blocks UI
+export {
+  createBlock,
+  addBlockOutput,
+  finalizeBlock,
+  cancelBlock,
+  toggleBlockCollapsed,
+  computeBlockStats,
+  formatBlock,
+  getStatusIcon,
+  formatDuration,
+  searchInBlock,
+  getBlockOutputAsText,
+  getBlockOutputAsJSON,
+  createBlockShareLink,
+  parseBlockShareLink,
+  filterBlocks,
+  sortBlocks,
+  getBlockSummary,
+  type CommandBlock,
+  type BlockStatus,
+  type BlockOutputLine,
+  type CommandBlockMetadata,
+  type CommandBlockStats,
+  type BlockCreateOptions,
+  type BlockSearchOptions,
+  type BlockSearchResult,
+} from "./blocks.js";

@@ -9,12 +9,16 @@
 · [Getting Started](https://docs.openclaw.ai/start/getting-started)
 · [Chinese Docs](https://docs.openclaw.ai/zh-CN)
 
-**OpenClaw Super Terminal** is a personal AI terminal with orchestration capabilities.
-Manage context from Obsidian, orchestrate AI agents, track effective patterns, and automate workflows—all from your terminal.
+**OpenClaw** is a multi-platform messaging gateway with a built-in Super AI Terminal. Connect to 20+ messaging platforms (WhatsApp, Telegram, Discord, Slack, and more), orchestrate AI agents with context awareness, manage workflows, and automate—all from your terminal.
 
-**Project Focus:** Building a **Super AI Terminal** with Zoe-style orchestration.
+- **Multi-Platform Gateway**: Single WebSocket gateway managing all messaging channels
+- **Super Terminal**: Terminal UI (Ctrl+Shift+T) with markdown rendering, Dracula theme, and sidebar panels
+- **AI Orchestration**: Agent spawning, context management, pattern tracking, and workflow automation
+- **Desktop Apps**: Native macOS and Windows applications
 
-**Requirements:** Node.js 22+ (package baseline: `>=22.12.0`)
+**Project Focus:** Building a **Super AI Terminal** with intelligent orchestration capabilities.
+
+**Requirements:** Node.js 22+ (package baseline: `>=22.22.0`)
 
 ## Quick Start
 
@@ -62,12 +66,80 @@ Alternative installers:
 
 ## Key Features
 
-- Single gateway, multi-channel routing
-- WebSocket-based control plane (CLI, desktop apps, web UI)
-- Multi-agent sessions and workspace isolation
-- Tooling and automation support (`exec`, browser/canvas, cron, nodes, approvals)
-- Plugin architecture for extra channels and integrations
-- Desktop apps (macOS, Windows) and mobile node support
+### Messaging Gateway
+- **20+ Platforms**: WhatsApp (primary), Telegram, Discord, Slack, Signal, LINE, Matrix, Microsoft Teams, iMessage, and more
+- **Single WebSocket Gateway**: Unified control plane on port 18789
+- **Multi-Channel Routing**: Intelligent message routing and session management
+
+### Super Terminal
+- **Terminal UI** (Ctrl+Shift+T): xterm-based with markdown rendering and Dracula theme
+- **Sidebar Panels**: Tasks, Agents, and Context management
+- **Command Palette**: Quick access to all commands and workflows
+
+### AI Orchestration
+- **Agent Spawning**: Dynamic agent creation with tmux integration
+- **Context Management**: Obsidian sync for business context, customers, projects, meetings, and decisions
+- **Pattern Tracking**: Recognize and recommend effective patterns
+- **Workflow Management**: Parameterized command templates and automation
+- **Code Review**: Multi-model code review with PR integration
+- **Babysit Loop**: Automatic agent monitoring and recovery
+
+### Architecture
+- **Plugin System**: Extensible architecture for channels and capabilities
+- **Desktop Apps**: Native macOS and Windows applications
+- **Profile-Based Runtime**: Multiple runtime profiles (default, dev, custom)
+- **Memory Storage**: LanceDB integration for vector embeddings
+
+## Technology Stack
+
+- **TypeScript** (ESM modules, ES2023 target)
+- **Node.js** 22+ runtime
+- **Pi Agent Framework** (@mariozechner/pi-*) for AI interactions
+- **xterm** for terminal UI
+- **Hono** for web framework
+- **Baileys** for WhatsApp Web API
+- **sqlite-vec** for vector database
+- **Vitest** for testing (70% coverage threshold)
+
+## Core Commands
+
+### Setup & Management
+```bash
+openclaw onboard [--install-daemon]    # First-run setup
+openclaw gateway status                 # Check gateway status
+openclaw dashboard                      # Open web dashboard
+openclaw status [--all]                 # System status check
+openclaw doctor                         # Troubleshooting
+```
+
+### Agent & Terminal
+```bash
+openclaw tui                            # Launch Super Terminal
+openclaw agent                          # Run AI agents
+openclaw agent spawn                    # Spawn new agent
+```
+
+### Messaging
+```bash
+openclaw channels status                # List all channels
+openclaw message send                   # Send message
+```
+
+### Configuration
+```bash
+openclaw config set <key> <value>       # Set configuration
+openclaw config get <key>               # Get configuration
+openclaw profile                        # Manage profiles
+```
+
+### Development
+```bash
+pnpm dev                                # Development mode
+pnpm build                              # Build project
+pnpm check                              # TypeScript + lint + format
+pnpm test                               # Run tests
+pnpm test:coverage                      # Coverage report
+```
 
 ## Development
 

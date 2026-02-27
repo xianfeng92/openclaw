@@ -54,6 +54,7 @@ Alternative installers:
 | **Super Terminal Core**  | **All backend features complete**         | Context Management, Pattern Management, Workflow, Code Review, Git/PR operations, Babysit Loop.                                                       |
 | **Super Terminal UI**   | **Sidebar + Terminal complete**           | Terminal with Dracula theme, sidebar with Tasks/Agents/Context panels.                                                                                  |
 | Next focus               | Agent spawning & tmux integration         | Connecting backend orchestration to terminal UI.                                                                                                       |
+| **TODO**                 | 高效交互打磨                               | 优化人机交互体验，提升操作效率。                                                                                                                           |
 
 ### Implemented Features (All Tested ✅)
 
@@ -77,6 +78,7 @@ Alternative installers:
 - **Terminal UI** (Ctrl+Shift+T): xterm-based with markdown rendering and Dracula theme
 - **Sidebar Panels**: Tasks, Agents, and Context management
 - **Command Palette**: Quick access to all commands and workflows
+- **TODO**: 高效交互打磨 — 优化人机交互体验，提升操作效率
 
 ### Multi-Model AI Orchestration (TODO)
 - **Model Routing**: Intelligently assign tasks to the best AI model for the job

@@ -90,6 +90,81 @@ Alternative installers:
 - **Profile-Based Runtime**: Multiple runtime profiles (default, dev, custom)
 - **Memory Storage**: LanceDB integration for vector embeddings
 
+## System Architecture
+
+OpenClaw is evolving into a **Super AI Terminal** while maintaining backward compatibility with its messaging gateway roots.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Super AI Terminal                        │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  TUI (Terminal UI)                                       │  │
+│  │  - xterm + markdown + Dracula theme                      │  │
+│  │  - Sidebar: Tasks/Agents/Context                         │  │
+│  │  - Command Palette, Block commands                        │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Orchestration System                                    │  │
+│  │  - Context Manager (Obsidian sync)                       │  │
+│  │  - Task Registry + Babysit Loop                          │  │
+│  │  - Workflow Service + Command Palette                    │  │
+│  │  - Code Review + Git/PR Integration                      │  │
+│  │  - Agent Spawning (tmux)                                 │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                          ↕ WebSocket                           │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    Shared Core (复用层)                         │
+│  - Config (schema, paths, sessions)                           │
+│  - Protocol (WebSocket client, types)                         │
+│  - Infra (runtime, logging, networking, device pairing)       │
+│  - Gateway Client (connection, events)                        │
+└─────────────────────────────────────────────────────────────────┘
+                          ↕ WebSocket
+┌─────────────────────────────────────────────────────────────────┐
+│                    Gateway (Port 18789)                         │
+│  - Session Management                                         │
+│  - Agent Coordination                                         │
+│  - Multi-channel Routing (WhatsApp, Telegram, Discord...)     │
+│  - Plugin System                                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Architecture Layers
+
+| Layer | Purpose | Status |
+|-------|---------|--------|
+| **Super AI Terminal** | TUI + Orchestration + Context-aware AI | 🚧 In active development |
+| **Shared Core** | Config, Protocol, Infrastructure | ✅ Stable |
+| **Gateway** | Multi-channel messaging + Agent coordination | ✅ Stable |
+
+### Module Organization
+
+```
+src/
+├── terminal/           # Terminal UI components (TUI)
+├── orchestration/      # Orchestration system (Super Terminal)
+│   ├── context-manager.ts    # Context management
+│   ├── task-registry.ts      # Task lifecycle
+│   ├── workflow-service.ts   # Workflow automation
+│   ├── code-reviewer.ts      # Code review
+│   ├── babysit-loop.ts       # Agent monitoring
+│   └── tmux-manager.ts       # Agent spawning
+├── cli/                # CLI commands
+├── config/             # Configuration (shared)
+├── infra/              # Infrastructure (shared)
+├── gateway/            # Gateway protocol & client
+└── channels/           # Channel implementations
+```
+
+### Design Principles
+
+1. **Layered Architecture**: Super Terminal → Shared Core → Gateway
+2. **WebSocket Communication**: All layers communicate via WebSocket protocol
+3. **Shared Foundation**: Terminal and Gateway both reuse core modules
+4. **Desktop MVP Slim Mode**: Runtime feature gating for minimal surface area
+5. **Plugin Extensibility**: Both Terminal and Gateway support plugins
+
 ## Technology Stack
 
 - **TypeScript** (ESM modules, ES2023 target)

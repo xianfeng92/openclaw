@@ -134,6 +134,14 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "tui-local",
+    description: "Terminal UI (standalone local mode)",
+    register: async (program) => {
+      const mod = await import("../tui-local-cli.js");
+      mod.registerTuiLocalCli(program);
+    },
+  },
+  {
     name: "cron",
     description: "Cron scheduler",
     register: async (program) => {

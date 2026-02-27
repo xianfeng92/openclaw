@@ -8,6 +8,7 @@ export type TuiOptions = {
   timeoutMs?: number;
   historyLimit?: number;
   message?: string;
+  localMode?: boolean;  // Enable standalone local mode (no Gateway)
 };
 
 export type ChatEvent = {

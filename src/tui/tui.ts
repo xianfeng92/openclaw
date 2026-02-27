@@ -36,7 +36,11 @@ import { buildWaitingStatusMessage, defaultWaitingPhrases } from "./tui-waiting.
 
 // Adapter support
 import type { TerminalAdapter } from "../terminal/adapter-types.js";
-import { createAdapter } from "../terminal/adapter-factory.js";
+import {
+  createAdapter,
+  switchToLocalMode,
+  type SessionSyncResult,
+} from "../terminal/adapter-factory.js";
 import { handleFallback } from "../terminal/tui-fallback.js";
 import { TuiAdapterClient } from "../terminal/tui-adapter-client.js";
 

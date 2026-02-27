@@ -182,5 +182,25 @@ export function createTuiFallbackHandler() {
       }
       return `⚠️  Degraded: ${reason}`;
     },
+
+    /**
+     * 格式化切换通知消息
+     */
+    formatSwitchMessage(toMode: "gateway" | "local"): string {
+      if (toMode === "local") {
+        return `Switching to local mode (offline)...`;
+      }
+      return `Reconnecting to Gateway...`;
+    },
+
+    /**
+     * 格式化会话同步结果
+     */
+    formatSyncResult(entriesTransferred: number): string {
+      if (entriesTransferred > 0) {
+        return `Session synced: ${entriesTransferred} messages preserved`;
+      }
+      return `Session synced (empty)`;
+    },
   };
 }

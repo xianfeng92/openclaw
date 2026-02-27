@@ -9,8 +9,10 @@
  */
 
 import type { TerminalAdapter } from "./adapter-types.js";
+import type { HistoryEntry, SessionInfo } from "./adapter-types.js";
 import { GatewayAdapter } from "./gateway-adapter.js";
 import { LocalAdapter } from "./local-adapter.js";
+import { syncSessionToAdapter } from "./session-sync.js";
 
 export type AdapterFallbackChoice = "gateway" | "local" | "exit";
 
@@ -189,4 +191,115 @@ export async function testGatewayConnection(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/**
+ * 适配器切换参数
+ */
+export type AdapterSwitchOptions = {
+  from: TerminalAdapter;
+  toMode: "gateway" | "local";
+  sessionKey: string;
+  currentHistory: HistoryEntry[];
+  sessionInfo: SessionInfo;
+  gatewayOptions?: {
+    url?: string;
+    token?: string;
+    password?: string;
+  };
+  onSyncComplete?: (result: SessionSyncResult) => void;
+};
+
+/**
+ * 会话同步结果
+ */
+export type SessionSyncResult = {
+  success: boolean;
+  entriesTransferred: number;
+  error?: string;
+};
+
+/**
+ * 切换适配器（带会话同步）
+ *
+ * 在运行时从一种模式切换到另一种模式时调用
+ */
+export async function switchAdapter(
+  options: AdapterSwitchOptions
+): Promise<{ adapter: TerminalAdapter; syncResult: SessionSyncResult }> {
+  const {
+    from,
+    toMode,
+    sessionKey,
+    currentHistory,
+    sessionInfo,
+    gatewayOptions = {},
+    onSyncComplete,
+  } = options;
+
+  // 1. 创建新适配器
+  let newAdapter: TerminalAdapter;
+
+  if (toMode === "gateway") {
+    // 切换到 Gateway 模式
+    newAdapter = new GatewayAdapter(gatewayOptions);
+    await newAdapter.start();
+  } else {
+    // 切换到本地模式
+    newAdapter = new LocalAdapter();
+    await newAdapter.start();
+  }
+
+  // 2. 同步会话到新适配器
+  const syncResult: SessionSyncResult = await syncSessionToAdapter({
+    from,
+    to: newAdapter,
+    sessionKey,
+    currentHistory,
+    sessionInfo,
+  });
+
+  // 3. 通知同步完成
+  if (onSyncComplete) {
+    onSyncComplete(syncResult);
+  }
+
+  return { adapter: newAdapter, syncResult };
+}
+
+/**
+ * 切换到本地模式（便捷函数）
+ */
+export async function switchToLocalMode(params: {
+  from: TerminalAdapter;
+  sessionKey: string;
+  currentHistory: HistoryEntry[];
+  sessionInfo: SessionInfo;
+  onSyncComplete?: (result: SessionSyncResult) => void;
+}): Promise<{ adapter: TerminalAdapter; syncResult: SessionSyncResult }> {
+  return switchAdapter({
+    ...params,
+    toMode: "local",
+  });
+}
+
+/**
+ * 切换到 Gateway 模式（便捷函数）
+ */
+export async function switchToGatewayMode(params: {
+  from: TerminalAdapter;
+  gatewayOptions?: {
+    url?: string;
+    token?: string;
+    password?: string;
+  };
+  sessionKey: string;
+  currentHistory: HistoryEntry[];
+  sessionInfo: SessionInfo;
+  onSyncComplete?: (result: SessionSyncResult) => void;
+}): Promise<{ adapter: TerminalAdapter; syncResult: SessionSyncResult }> {
+  return switchAdapter({
+    ...params,
+    toMode: "gateway",
+  });
 }

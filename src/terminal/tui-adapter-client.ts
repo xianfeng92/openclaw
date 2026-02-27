@@ -1,20 +1,17 @@
 /**
- * TUI Adapter Client - Bridge between TerminalAdapter and TUI
- *
- * Wraps TerminalAdapter to expose a GatewayChatClient-compatible interface
- * for minimal changes to existing TUI code.
- */
-
-import type { TerminalAdapter } from "./adapter-types.js";
-import type { GatewayEvent } from "../tui/gateway-chat.js";
-import type { AdapterConnection } from "./adapter-types.js";
-
-/**
  * Gap info from Gateway
  */
 export type GatewayGapInfo = {
   expected: number;
   received: number;
+};
+
+/**
+ * Degraded event payload
+ */
+export type DegradedEventPayload = {
+  reason: string;
+  missedHeartbeats: number;
 };
 
 /**
@@ -29,6 +26,7 @@ export class TuiAdapterClient {
   private connectedHandler?: () => void;
   private disconnectedHandler?: (reason: string) => void;
   private gapHandler?: (info: GatewayGapInfo) => void;
+  private degradedHandler?: (payload: DegradedEventPayload) => void;
 
   // Expose adapter mode and connection info
   readonly mode: "gateway" | "local";
@@ -47,7 +45,19 @@ export class TuiAdapterClient {
 
     // Forward adapter events to TUI
     adapter.onEvent((event) => {
-      if (this.eventHandler) {
+      if (event.type === "degraded") {
+        // Handle degraded event specifically
+        if (this.degradedHandler) {
+          this.degradedHandler(event.payload as DegradedEventPayload);
+        }
+        // Also forward as status event
+        if (this.eventHandler) {
+          this.eventHandler({
+            event: "status",
+            payload: event.payload,
+          });
+        }
+      } else if (this.eventHandler) {
         this.eventHandler({
           event: event.type,
           payload: event.payload as Record<string, unknown>,
@@ -75,7 +85,7 @@ export class TuiAdapterClient {
   /**
    * Set disconnected handler (required by TUI)
    */
-  set onDisconnected(handler: (reason: string) => void) {
+  set onDisconnected(handler: (reason: string) => void): void {
     this.disconnectedHandler = handler;
     this.adapter.onDisconnected?.(handler);
   }
@@ -85,6 +95,13 @@ export class TuiAdapterClient {
    */
   set onGap(handler: (info: GatewayGapInfo) => void) {
     this.gapHandler = handler;
+  }
+
+  /**
+   * Set degraded handler (for runtime degradation)
+   */
+  set onDegraded(handler: (payload: DegradedEventPayload) => void): void {
+    this.degradedHandler = handler;
   }
 
   /**
@@ -132,5 +149,27 @@ export class TuiAdapterClient {
    */
   getAdapter(): TerminalAdapter {
     return this.adapter;
+  }
+
+  /**
+   * Check if adapter is in degraded state (Gateway mode only)
+   */
+  isDegraded(): boolean {
+    if (this.mode === "local") {
+      return false;
+    }
+    const gwAdapter = this.adapter as { isDegraded?: () => boolean };
+    return gwAdapter.isDegraded?.() ?? false;
+  }
+
+  /**
+   * Reset degraded state (after reconnection)
+   */
+  resetDegraded(): void {
+    if (this.mode === "local") {
+      return;
+    }
+    const gwAdapter = this.adapter as { resetDegraded?: () => void };
+    gwAdapter.resetDegraded?.();
   }
 }

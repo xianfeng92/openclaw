@@ -160,7 +160,7 @@ export type AdapterStatus = {
  * Adapter event
  */
 export type AdapterEvent = {
-  type: "chat" | "agent" | "status" | "error";
+  type: "chat" | "agent" | "status" | "error" | "degraded";
   payload: unknown;
 };
 

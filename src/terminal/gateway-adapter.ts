@@ -3,6 +3,11 @@
  *
  * Wraps GatewayChatClient to implement TerminalAdapter interface.
  * Enables TUI to work with existing Gateway connection.
+ *
+ * Features:
+ * - Heartbeat monitoring for connection health
+ * - Automatic degradation detection
+ * - Reconnect capability
  */
 
 import type {
@@ -31,6 +36,13 @@ import type {
 import { GatewayChatClient } from "../tui/gateway-chat.js";
 
 /**
+ * Heartbeat configuration
+ */
+const HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
+const HEARTBEAT_TIMEOUT_MS = 5000; // 5 seconds
+const MAX_MISSED_HEARTBEATS = 2; // Trigger degraded after 2 missed
+
+/**
  * Gateway Adapter wraps GatewayChatClient
  */
 export class GatewayAdapter implements TerminalAdapter {
@@ -38,9 +50,15 @@ export class GatewayAdapter implements TerminalAdapter {
 
   private client: GatewayChatClient;
   private eventListeners: Set<EventListener> = new Set();
+  private heartbeatTimer?: NodeJS.Timeout;
+  private missedHeartbeats = 0;
+  private isStarted = false;
 
   // Expose connection info for TUI compatibility
   readonly connection: AdapterConnection;
+
+  // Degradation state
+  private degraded = false;
 
   constructor(opts: { url?: string; token?: string; password?: string }) {
     this.client = new GatewayChatClient(opts);
@@ -59,6 +77,8 @@ export class GatewayAdapter implements TerminalAdapter {
     });
 
     this.client.onConnected(() => {
+      this.missedHeartbeats = 0;
+      this.degraded = false;
       this.emitEvent({ type: "status", payload: { connected: true } });
     });
 
@@ -69,17 +89,28 @@ export class GatewayAdapter implements TerminalAdapter {
 
   async start(): Promise<void> {
     await this.client.ready();
+    this.startHeartbeat();
+    this.isStarted = true;
   }
 
   stop(): void {
+    this.stopHeartbeat();
+    this.isStarted = false;
     this.client.close();
   }
 
   isReady(): boolean {
-    return this.client.isConnected();
+    return this.client.isConnected() && !this.degraded;
   }
 
   getStatus(): AdapterStatus {
+    if (this.degraded) {
+      return {
+        connected: false,
+        mode: "gateway",
+        message: "Gateway degraded (connection issues)",
+      };
+    }
     return {
       connected: this.client.isConnected(),
       mode: "gateway",
@@ -87,6 +118,84 @@ export class GatewayAdapter implements TerminalAdapter {
         ? "Connected to Gateway"
         : "Connecting to Gateway...",
     };
+  }
+
+  /**
+   * Start heartbeat monitoring
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+
+    this.heartbeatTimer = setInterval(async () => {
+      await this.performHeartbeat();
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  /**
+   * Stop heartbeat monitoring
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
+  }
+
+  /**
+   * Perform a single heartbeat check
+   */
+  private async performHeartbeat(): Promise<void> {
+    if (!this.isStarted) {
+      return;
+    }
+
+    try {
+      // Quick health check - listSessions should be fast
+      await Promise.race([
+        this.client.listSessions(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Heartbeat timeout")), HEARTBEAT_TIMEOUT_MS)
+        ),
+      ]);
+
+      // Heartbeat successful - reset missed counter
+      if (this.missedHeartbeats > 0) {
+        this.missedHeartbeats = 0;
+        if (this.degraded) {
+          this.degraded = false;
+          this.emitEvent({ type: "status", payload: { connected: true, recovered: true } });
+        }
+      }
+    } catch (err) {
+      this.missedHeartbeats++;
+      console.warn(`Gateway heartbeat failed (${this.missedHeartbeats}/${MAX_MISSED_HEARTBEATS})`);
+
+      if (this.missedHeartbeats >= MAX_MISSED_HEARTBEATS && !this.degraded) {
+        this.degraded = true;
+        this.emitEvent({
+          type: "degraded",
+          payload: {
+            reason: err instanceof Error ? err.message : "Connection lost",
+            missedHeartbeats: this.missedHeartbeats,
+          },
+        });
+      }
+    }
+  }
+
+  /**
+   * Check if adapter is in degraded state
+   */
+  isDegraded(): boolean {
+    return this.degraded;
+  }
+
+  /**
+   * Reset degraded state (after reconnection)
+   */
+  resetDegraded(): void {
+    this.degraded = false;
+    this.missedHeartbeats = 0;
   }
 
   async sendChat(opts: ChatSendOptions): Promise<ChatSendResult> {

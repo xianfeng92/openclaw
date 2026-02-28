@@ -1,0 +1,57 @@
+[
+  {
+    "name": "Build and Test",
+    "description": "Build project and run tests",
+    "steps": [
+      {
+        "id": "step-1",
+        "type": "command",
+        "command": "pnpm build",
+        "description": "Build all packages"
+      },
+      {
+        "id": "step-2",
+        "type": "command",
+        "command": "pnpm test",
+        "description": "Run test suite"
+      }
+    ],
+    "tags": [
+      "ci",
+      "test"
+    ]
+  },
+  {
+    "name": "Full Release",
+    "description": "Prepare and publish a release",
+    "steps": [
+      {
+        "id": "step-1",
+        "type": "command",
+        "command": "git status",
+        "description": "Check git status"
+      },
+      {
+        "id": "step-2",
+        "type": "command",
+        "command": "pnpm build",
+        "description": "Build for production"
+      },
+      {
+        "id": "step-3",
+        "type": "command",
+        "command": "pnpm test",
+        "description": "Run tests"
+      },
+      {
+        "id": "step-4",
+        "type": "spawn",
+        "command": "Create release notes",
+        "description": "Generate release notes"
+      }
+    ],
+    "tags": [
+      "release"
+    ]
+  }
+]

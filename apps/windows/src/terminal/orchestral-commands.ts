@@ -4,7 +4,13 @@
  */
 import type { TerminalAPI } from "../preload/terminal-api";
 import { formatContextForDisplay, generateContextSummary, type PromptContext } from "./prompt-injection.js";
-import { refreshAgents as refreshSidebarAgents, refreshTasks as refreshSidebarTasks } from "./sidebar.js";
+import {
+  refreshAgents as refreshSidebarAgents,
+  refreshTasks as refreshSidebarTasks,
+  toggleCompletedTasksVisibility,
+  showAllTasks,
+  setHideCompletedTasks,
+} from "./sidebar.js";
 
 declare global {
   interface Window {
@@ -60,12 +66,18 @@ function showOrchestralHelp(terminal: HTMLElement, writeHtml: WriteHtmlFn): void
   /tasks [--status &lt;running|completed|failed&gt;] [--agent &lt;type&gt;]
       List tasks with optional filters
 
+  /tasks clear
+      Hide completed tasks from sidebar (local cache)
+
+  /tasks show [--all]
+      Show all tasks or only active tasks in sidebar
+
 <span style="font-weight: bold; color: var(--accent-cyan);">Agent Management:</span>
   /agents list
       List all running agents
 
-  /agents kill &lt;task-id&gt;
-      Terminate a running agent task
+  /agents kill &lt;task-id&gt; | --all
+      Terminate a running agent task (or all agents)
 
   /agents attach &lt;task-id&gt;
       Show command to attach to an agent's session
@@ -85,6 +97,7 @@ function showOrchestralHelp(terminal: HTMLElement, writeHtml: WriteHtmlFn): void
   /agents list
   /tasks --status running
   /agents kill task-20250225-001
+  /agents kill --all
 `);
 }
 
@@ -364,20 +377,72 @@ export async function handleAgentsCommand(
     }
 
     case "kill": {
-      const taskId = args[1];
-      if (!taskId) {
-        writeHtml(terminal, `<span class="system-info">Usage: /agents kill &lt;task-id&gt;</span>`);
+      const target = args[1];
+
+      if (!target) {
+        writeHtml(terminal, `<span class="system-info">Usage: /agents kill &lt;task-id&gt; | all | --all</span>`);
         return;
       }
 
-      writeLine(terminal, `Terminating task ${taskId}...`);
+      // Handle all/--all flag
+      if (target === "all" || target === "--all") {
+        writeLine(terminal, "Fetching all running agents...");
+
+        try {
+          const listResult = await window.terminalAPI.orchestralAgents!("list", []);
+
+          if (!listResult.tasks || listResult.tasks.length === 0) {
+            writeHtml(terminal, `<span class="system-info">No running agents to kill.</span>`);
+            return;
+          }
+
+          writeHtml(terminal, `<span class="system-warn">Terminating ${listResult.tasks.length} agent(s)...</span>`);
+
+          let killedCount = 0;
+          let failedCount = 0;
+
+          for (const task of listResult.tasks) {
+            try {
+              const result = await window.terminalAPI.orchestralAgents!("kill", [task.id]);
+              if (result.success) {
+                writeHtml(terminal, `<span class="system-ok">[ok] Killed ${task.id}</span>`);
+                killedCount++;
+              } else {
+                writeHtml(terminal, `<span class="system-error">[err] Failed to kill ${task.id}: ${result.error || "Unknown"}</span>`);
+                failedCount++;
+              }
+            } catch (err) {
+              writeHtml(terminal, `<span class="system-error">[err] Error killing ${task.id}: ${escapeHtml(String(err))}</span>`);
+              failedCount++;
+            }
+          }
+
+          writeLine(terminal, "");
+          writeHtml(terminal, `<span class="system-ok">Done: ${killedCount} killed, ${failedCount} failed</span>`);
+
+          // Wait for backend to update, then refresh sidebar
+          try {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await refreshSidebarAgents();
+          } catch {
+            // Ignore refresh errors
+          }
+        } catch (err) {
+          writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+        }
+        return;
+      }
+
+      // Handle single task kill
+      writeLine(terminal, `Terminating task ${target}...`);
 
       try {
-        const result = await window.terminalAPI.orchestralAgents!("kill", [taskId]);
+        const result = await window.terminalAPI.orchestralAgents!("kill", [target]);
         if (result.success) {
-          writeHtml(terminal, `<span class="system-ok">[ok] Task ${taskId} terminated</span>`);
-          // Refresh the sidebar agents list to remove the killed task
+          writeHtml(terminal, `<span class="system-ok">[ok] Task ${target} terminated</span>`);
+          // Wait for backend to update, then refresh sidebar
           try {
+            await new Promise(resolve => setTimeout(resolve, 300));
             await refreshSidebarAgents();
           } catch {
             // Ignore refresh errors
@@ -568,7 +633,45 @@ export async function handleTasksCommand(
     return;
   }
 
-  // Parse filters
+  const subcommand = args[0]?.toLowerCase();
+
+  // Handle clear subcommand
+  if (subcommand === "clear" || subcommand === "purge") {
+    writeLine(terminal, "Hiding completed tasks from sidebar...");
+
+    try {
+      // Hide completed tasks from sidebar (local cache only)
+      toggleCompletedTasksVisibility();
+
+      // Also refresh to get latest state
+      await refreshSidebarTasks();
+
+      writeHtml(terminal, `<span class="system-ok">[ok] Completed tasks hidden from sidebar</span>`);
+      writeLine(terminal, "");
+      writeHtml(terminal, `<span class="system-info">Use '/tasks show --all' to view all tasks including completed</span>`);
+    } catch (err) {
+      writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+    }
+    return;
+  }
+
+  // Handle show subcommand
+  if (subcommand === "show") {
+    const showAll = args.includes("--all");
+
+    if (showAll) {
+      writeLine(terminal, "Showing all tasks (including completed) in sidebar...");
+      showAllTasks();
+      writeHtml(terminal, `<span class="system-ok">[ok] Sidebar now shows all tasks</span>`);
+    } else {
+      writeLine(terminal, "Showing only running tasks in sidebar...");
+      hideCompletedTasks();
+      writeHtml(terminal, `<span class="system-ok">[ok] Sidebar now shows only active tasks</span>`);
+    }
+    return;
+  }
+
+  // Parse filters for list command
   const filters: Record<string, string> = {};
   for (const arg of args) {
     if (arg.startsWith("--status=")) {

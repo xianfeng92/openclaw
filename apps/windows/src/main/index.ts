@@ -180,6 +180,8 @@ function initAppPaths(): void {
   try {
     app.commandLine.appendSwitch("disk-cache-dir", cacheDir);
     app.commandLine.appendSwitch("gpu-disk-cache-dir", gpuCacheDir);
+    // Enable precise memory info for performance.memory API
+    app.commandLine.appendSwitch("enable-precise-memory-info");
   } catch {
     // ignore
   }

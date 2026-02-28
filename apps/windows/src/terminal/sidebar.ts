@@ -67,6 +67,7 @@ let tasks: TaskInfo[] = [];
 let agents: AgentInfo[] = [];
 let contexts: ContextItem[] = [];
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
+let hideCompletedTasks = false; // Local filter to hide completed tasks from sidebar
 
 // DOM Elements
 let sidebarEl: HTMLElement | null = null;
@@ -179,13 +180,16 @@ async function refreshData(): Promise<void> {
 export async function refreshTasks(): Promise<void> {
   try {
     const result = await window.terminalAPI?.orchestralTasks?.({});
-    if (result?.tasks) {
-      tasks = result.tasks;
-      renderTasks();
-      updateTasksCount();
-    }
+    // Always update tasks array - if result or tasks is missing, treat as empty
+    tasks = result?.tasks ?? [];
+    renderTasks();
+    updateTasksCount();
   } catch (err) {
     console.error("[Sidebar] Failed to refresh tasks:", err);
+    // On error, show empty state
+    tasks = [];
+    renderTasks();
+    updateTasksCount();
   }
 }
 
@@ -195,13 +199,16 @@ export async function refreshTasks(): Promise<void> {
 export async function refreshAgents(): Promise<void> {
   try {
     const result = await window.terminalAPI?.orchestralAgents?.("list", []);
-    if (result?.tasks) {
-      agents = result.tasks;
-      renderAgents();
-      updateAgentsCount();
-    }
+    // Always update agents array - if result or tasks is missing, treat as empty
+    agents = result?.tasks ?? [];
+    renderAgents();
+    updateAgentsCount();
   } catch (err) {
     console.error("[Sidebar] Failed to refresh agents:", err);
+    // On error, show empty state
+    agents = [];
+    renderAgents();
+    updateAgentsCount();
   }
 }
 
@@ -281,7 +288,9 @@ function updateTasksCount(): void {
  * Update agents count display
  */
 function updateAgentsCount(): void {
-  agentsCountEl!.textContent = String(agents.length);
+  // Count only running agents
+  const runningCount = agents.filter((a) => a.status === "running" || !a.status).length;
+  agentsCountEl!.textContent = String(runningCount);
 }
 
 /**
@@ -290,18 +299,27 @@ function updateAgentsCount(): void {
 function renderTasks(): void {
   if (!tasksListEl) return;
 
-  if (tasks.length === 0) {
+  // Filter tasks based on hideCompletedTasks setting
+  let displayTasks = tasks;
+  if (hideCompletedTasks) {
+    displayTasks = tasks.filter((t) => t.status === "running");
+  }
+
+  if (displayTasks.length === 0) {
+    const emptyMsg = hideCompletedTasks
+      ? "No active tasks (completed tasks hidden)"
+      : "No tasks yet";
     tasksListEl.innerHTML = `
       <div class="sidebar-empty">
         <div class="sidebar-empty-icon"></div>
-        No tasks yet
+        ${emptyMsg}
       </div>
     `;
     return;
   }
 
   // Sort: running first, then by start time (newest first)
-  const sorted = [...tasks].sort((a, b) => {
+  const sorted = [...displayTasks].sort((a, b) => {
     if (a.status === "running" && b.status !== "running") return -1;
     if (a.status !== "running" && b.status === "running") return 1;
     return b.startedAt - a.startedAt;
@@ -343,7 +361,10 @@ function renderTaskItem(task: TaskInfo): string {
 function renderAgents(): void {
   if (!agentsListEl) return;
 
-  if (agents.length === 0) {
+  // Filter to only show running agents
+  const runningAgents = agents.filter((a) => a.status === "running" || !a.status);
+
+  if (runningAgents.length === 0) {
     agentsListEl.innerHTML = `
       <div class="sidebar-empty">
         <div class="sidebar-empty-icon"></div>
@@ -353,7 +374,7 @@ function renderAgents(): void {
     return;
   }
 
-  agentsListEl.innerHTML = agents.map((agent) => renderAgentItem(agent)).join("");
+  agentsListEl.innerHTML = runningAgents.map((agent) => renderAgentItem(agent)).join("");
 }
 
 /**
@@ -512,6 +533,33 @@ export function updateTask(task: TaskInfo): void {
   } else {
     tasks.unshift(task);
   }
+  renderTasks();
+  updateTasksCount();
+}
+
+/**
+ * Toggle visibility of completed tasks in sidebar
+ */
+export function toggleCompletedTasksVisibility(): void {
+  hideCompletedTasks = !hideCompletedTasks;
+  renderTasks();
+  updateTasksCount();
+}
+
+/**
+ * Show all tasks (including completed)
+ */
+export function showAllTasks(): void {
+  hideCompletedTasks = false;
+  renderTasks();
+  updateTasksCount();
+}
+
+/**
+ * Hide completed tasks from sidebar
+ */
+export function setHideCompletedTasks(): void {
+  hideCompletedTasks = true;
   renderTasks();
   updateTasksCount();
 }

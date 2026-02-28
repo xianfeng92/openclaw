@@ -228,9 +228,11 @@
     "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772148458169",
     "branch": "orchestral/task-17721484581",
     "startedAt": 1772148486224,
-    "status": "running",
+    "status": "killed",
     "useContext": true,
-    "pid": 22132
+    "pid": 22132,
+    "completedAt": 1772236116741,
+    "failureReason": "Task was terminated by user"
   },
   {
     "id": "task-1772148551855",

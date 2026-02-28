@@ -571,7 +571,10 @@ function showHelp(terminal: HTMLElement): void {
   /spawn &lt;desc&gt;  - Spawn a new agent task
   /agents list    - List running agents
   /agents kill    - Terminate an agent
-  /tasks          - List all tasks
+  /agents kill --all - Terminate all agents
+  /tasks          - List all tasks (running by default)
+  /tasks clear    - Hide completed tasks from sidebar
+  /tasks show --all - Show all tasks including completed
   /orchestral     - Show orchestral command help
 
 <span class="system-info"><strong>Context Commands:</strong></span>

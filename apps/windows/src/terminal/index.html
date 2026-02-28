@@ -22,7 +22,6 @@
       --border-subtle: rgba(139, 148, 158, 0.45);
       --border-hard: #30363d;
       --border-subtle-alt: rgba(48, 54, 61, 0.5);
-      --status-bar-height: 34px;
 
       color-scheme: dark;
     }
@@ -57,9 +56,10 @@
       height: 100vh;
       display: flex;
       flex-direction: row;
+      overflow: hidden;
     }
 
-    /* ========== SIDEBAR - Pure TUI ========== */
+    /* ========== SIDEBAR ========== */
     #sidebar {
       width: 300px;
       min-width: 250px;
@@ -72,7 +72,6 @@
       overflow: hidden;
       flex-shrink: 0;
       transition: width 0.2s ease, transform 0.2s ease;
-      /* Pure black, no shadows */
     }
 
     #sidebar.collapsed {
@@ -88,7 +87,6 @@
       justify-content: space-between;
       align-items: center;
       background-color: transparent;
-      /* No background, pure */
     }
 
     .sidebar-title {
@@ -130,7 +128,6 @@
       padding: 4px 0;
     }
 
-    /* Minimal TUI scrollbar */
     .sidebar-content::-webkit-scrollbar {
       width: 2px;
     }
@@ -147,7 +144,6 @@
       background: var(--text-muted);
     }
 
-    /* Pure TUI Panel Headers - Underline style */
     .sidebar-panel {
       margin-bottom: 0;
     }
@@ -164,7 +160,6 @@
       cursor: pointer;
       user-select: none;
       transition: color 0.1s;
-      /* No background, just text with underline */
     }
 
     .sidebar-panel-header::after {
@@ -245,7 +240,6 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      border-radius: 0;
     }
 
     .sidebar-item:hover {
@@ -256,7 +250,6 @@
       color: var(--accent-cyan);
     }
 
-    /* TUI ASCII State Indicators */
     .sidebar-item-status {
       display: inline-block;
       margin-right: 8px;
@@ -297,7 +290,6 @@
       padding-left: 12px;
     }
 
-    /* TUI Footer - Minimal Ghost Buttons */
     .sidebar-footer {
       padding: 8px 12px;
       border-top: 1px solid var(--border-hard);
@@ -305,7 +297,6 @@
       flex-direction: column;
       gap: 6px;
       background-color: transparent;
-      /* Pure black, no background */
     }
 
     .sidebar-action-btn {
@@ -315,7 +306,6 @@
       border: 1px solid var(--text-muted);
       background: transparent;
       color: var(--text-muted);
-      border-radius: 0;
       cursor: pointer;
       transition: all 0.1s;
       display: flex;
@@ -326,14 +316,9 @@
       letter-spacing: 0.05em;
     }
 
-    /* Ghost button hover: invert */
     .sidebar-action-btn:hover {
       background-color: var(--text-muted);
       color: var(--bg-main);
-    }
-
-    .sidebar-action-btn:active {
-      transform: none;
     }
 
     .sidebar-action-btn.secondary {
@@ -360,25 +345,14 @@
       opacity: 0.5;
     }
 
-    /* ========== TUI Banner ========== */
-    .tui-banner {
-      font-family: inherit;
-      font-size: 12px;
-      line-height: 1.2;
-      margin: 0 0 1.5rem 0;
-      padding: 0;
-      color: var(--accent-prompt);
-      white-space: pre;
-      text-shadow: 0 0 6px rgba(0, 255, 65, 0.15);
-      overflow-x: auto;
-    }
-
-    /* ========== TERMINAL AREA ========== */
+    /* ========== TERMINAL AREA - FLEX SPLIT ========== */
     #terminal-container {
       flex: 1;
       display: flex;
       flex-direction: column;
       min-width: 0;
+      height: 100vh;
+      overflow: hidden;
     }
 
     /* TUI Toggle Button */
@@ -393,7 +367,6 @@
       background-color: var(--bg-sidebar);
       border: 1px solid var(--border-hard);
       border-left: none;
-      border-radius: 0;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -415,23 +388,279 @@
       left: 0;
     }
 
-    /* Hide collapse button when sidebar is collapsed */
     #sidebar.collapsed .sidebar-toggle {
       visibility: hidden;
       pointer-events: none;
     }
 
+    /* ========== STDOUT AREA (Upper) ========== */
     #terminal {
       width: 100%;
       flex: 1;
-      padding: 24px 32px calc(var(--status-bar-height) + 24px);
+      padding: 24px 32px;
       overflow-y: auto;
       overflow-x: hidden;
       white-space: pre-wrap;
       word-break: break-word;
       line-height: 1.6;
+      min-height: 0;
     }
 
+    /* ========== STDOUT AREA (Upper) ========== */
+    #terminal {
+      width: 100%;
+      flex: 1;
+      padding: 24px 32px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+      min-height: 0;
+    }
+
+    /* ========== COMMAND DECK (Lower - Fixed) ========== */
+    #command-deck {
+      flex-shrink: 0;
+      padding: 12px 32px 16px 32px;
+      background-color: var(--bg-main);
+      border-top: 1px dashed var(--border-hard);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Layer 1: Keybind Hints - Compact Left-Aligned */
+    .deck-keybinds {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px 24px;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: inherit;
+      margin-bottom: 12px;
+      white-space: nowrap;
+    }
+
+    .deck-keybind-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .deck-keybind-item kbd {
+      color: var(--text-primary);
+      font-family: inherit;
+    }
+
+    /* Layer 2: Multiline Input */
+    .deck-input-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .deck-prompt {
+      white-space: nowrap;
+      user-select: none;
+      flex-shrink: 0;
+      line-height: 1.6;
+    }
+
+    .deck-prompt .prompt-host {
+      color: var(--accent-prompt);
+    }
+
+    .deck-prompt .prompt-home {
+      color: #58a6ff;
+    }
+
+    .deck-prompt .prompt-dollar {
+      color: var(--text-primary);
+    }
+
+    .deck-input-wrapper {
+      flex: 1;
+      position: relative;
+      min-width: 0;
+    }
+
+    #command-input {
+      width: 100%;
+      min-height: 24px;
+      max-height: 200px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.6;
+      caret-color: var(--accent-prompt);
+      resize: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    #command-input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.5;
+      font-style: normal;
+    }
+
+    #command-input:focus {
+      outline: none;
+    }
+
+    /* ========== CONTEXT MENU (Drop-up ASCII) ========== */
+    #context-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      margin-bottom: 4px;
+      min-width: 320px;
+      background-color: #090C10;
+      z-index: 100;
+      display: none;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    #context-menu.visible {
+      display: block;
+    }
+
+    .context-menu-border {
+      white-space: pre;
+      color: var(--text-muted);
+      font-family: inherit;
+    }
+
+    .context-menu-content {
+      border-left: 1px solid var(--border-hard);
+      border-right: 1px solid var(--border-hard);
+      background: #090C10;
+    }
+
+    .context-menu-header {
+      padding: 4px 12px;
+      color: var(--accent-prompt);
+      border-bottom: 1px solid var(--border-hard);
+      white-space: nowrap;
+    }
+
+    .context-menu-items {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .context-menu-items::-webkit-scrollbar {
+      width: 2px;
+    }
+
+    .context-menu-items::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .context-menu-items::-webkit-scrollbar-thumb {
+      background: var(--border-hard);
+    }
+
+    .context-menu-item {
+      display: flex;
+      align-items: center;
+      padding: 4px 12px;
+      cursor: pointer;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .context-menu-item:hover {
+      color: var(--text-primary);
+    }
+
+    .context-menu-item.selected {
+      color: var(--accent-prompt);
+      background-color: transparent;
+    }
+
+    .context-item-prefix {
+      width: 16px;
+      text-align: left;
+      margin-right: 4px;
+    }
+
+    .context-item-type {
+      min-width: 48px;
+      color: var(--accent-cyan);
+    }
+
+    .context-menu-item.selected .context-item-type {
+      color: var(--accent-prompt);
+    }
+
+    .context-item-label {
+      color: var(--text-muted);
+    }
+
+    .context-menu-item.selected .context-item-label {
+      color: var(--text-primary);
+    }
+
+    /* ========== GLOBAL STATUS BAR (Tmux-style) ========== */
+    #global-status-bar {
+      flex-shrink: 0;
+      height: 24px;
+      min-height: 24px;
+      border-top: 1px solid var(--border-hard);
+      background-color: #161b22;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .status-left,
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-item {
+      white-space: nowrap;
+    }
+
+    .status-separator {
+      color: var(--border-hard);
+      margin: 0 4px;
+    }
+
+    .status-value-prompt {
+      color: var(--accent-prompt);
+    }
+
+    .status-value-cyan {
+      color: var(--accent-cyan);
+    }
+
+    /* ========== TUI BANNER ========== */
+    .tui-banner {
+      font-family: inherit;
+      font-size: 12px;
+      line-height: 1.2;
+      margin: 0 0 1.5rem 0;
+      padding: 0;
+      color: var(--accent-prompt);
+      white-space: pre;
+      text-shadow: 0 0 6px rgba(0, 255, 65, 0.15);
+      overflow-x: auto;
+    }
+
+    /* ========== TERMINAL OUTPUT STYLES ========== */
     .line {
       line-height: 1.6;
       min-height: 1.6em;
@@ -460,55 +689,6 @@
 
     .prompt-dollar {
       color: var(--text-primary);
-    }
-
-    .input-line {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding-top: 8px;
-      padding-bottom: 4px;
-      position: sticky;
-      bottom: var(--status-bar-height);
-      background:
-        linear-gradient(180deg, rgba(13, 17, 23, 0) 0%, rgba(13, 17, 23, 0.92) 36%, var(--bg-main) 100%);
-      z-index: 5;
-    }
-
-    .input-line .prompt {
-      margin-right: 2px;
-    }
-
-    .input-stack {
-      flex: 1;
-      position: relative;
-      min-height: 1.6em;
-    }
-
-    .input-ghost {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 0;
-      color: var(--text-muted);
-      white-space: pre;
-      pointer-events: none;
-      overflow: hidden;
-      min-height: 1.6em;
-    }
-
-    #input {
-      width: 100%;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: var(--accent-prompt);
-      font-family: inherit;
-      font-size: inherit;
-      line-height: 1.6;
-      caret-color: var(--accent-prompt);
-      position: relative;
-      z-index: 1;
     }
 
     .command-echo .command-text {
@@ -588,7 +768,6 @@
       padding: 0.7rem 0.85rem;
       background-color: rgba(22, 27, 34, 0.88);
       border: 1px solid #30363d;
-      border-radius: 0;
       overflow-x: auto;
     }
 
@@ -637,37 +816,180 @@
       color: var(--text-muted);
     }
 
-    /* ========== TUI Status Bar ========== */
-    .status-bar {
-      position: fixed;
-      bottom: 0;
-      left: 300px;
-      right: 0;
+    .agent-output {
+      color: var(--text-primary);
+    }
+
+    /* ========== AGENT THOUGHT STREAM ========== */
+    .agent-thought {
+      margin: 0.5rem 0 1rem 0;
+      padding-left: 12px;
+      margin-left: 8px;
+      border-left: 2px solid #30363D;
+    }
+
+    .thought-entry {
+      margin: 0.25rem 0;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .thought-prefix {
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    .thought-type {
+      color: var(--accent-cyan);
+      font-weight: normal;
+    }
+
+    .thought-content {
+      color: var(--text-muted);
+    }
+
+    /* ========== MARKDOWN ELEMENTS ========== */
+    .md-content {
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .md-content h1,
+    .md-content h2,
+    .md-content h3,
+    .md-content h4,
+    .md-content h5,
+    .md-content h6 {
+      margin: 1rem 0 0.5rem 0;
+      font-weight: bold;
+      color: #f0f6fc;
+    }
+
+    .md-content h1 { font-size: 1.3rem; }
+    .md-content h2 { font-size: 1.2rem; }
+    .md-content h3 { font-size: 1.1rem; }
+    .md-content h4,
+    .md-content h5,
+    .md-content h6 { font-size: 1rem; }
+
+    .md-content p {
+      margin: 0.75rem 0;
+    }
+
+    .md-content code {
+      font-family: inherit;
+      font-size: 0.9em;
+      color: #9cdcfe;
+      background-color: rgba(110, 118, 129, 0.2);
+      padding: 2px 4px;
+    }
+
+    /* ========== TUI CODE BLOCK ========== */
+    .tui-code-block {
+      margin: 1rem 0;
+      border: 1px solid #30363D;
+      background-color: #161B22;
+    }
+
+    .tui-code-header {
       display: flex;
       justify-content: space-between;
-      gap: 10px;
       align-items: center;
-      min-height: 32px;
-      padding: 4px 16px;
-      background-color: #161b22;
-      border-top: 1px solid var(--border-hard);
+      padding: 4px 12px;
+      border-bottom: 1px solid #30363D;
+      font-size: 10px;
       color: var(--text-muted);
-      font-size: 11px;
-      z-index: 100;
-      transition: left 0.2s ease;
-    }
-
-    #sidebar.collapsed ~ #terminal-container .status-bar {
-      left: 0;
-    }
-
-    .status-item {
+      background-color: #0d1117;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    .status-prompt {
+    .tui-code-lang {
+      color: var(--accent-cyan);
+      font-family: inherit;
+    }
+
+    .tui-code-lang::before {
+      content: "[ ";
+    }
+
+    .tui-code-lang::after {
+      content: " ]";
+    }
+
+    .tui-code-copy {
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      transition: none;
+    }
+
+    .tui-code-copy:hover {
+      color: var(--accent-prompt);
+      border-color: var(--accent-prompt);
+    }
+
+    .tui-code-copy::before {
+      content: "[ ";
+    }
+
+    .tui-code-copy::after {
+      content: " ]";
+    }
+
+    .tui-code-content {
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .tui-code-content::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .tui-code-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .tui-code-content::-webkit-scrollbar-thumb {
+      background: #30363D;
+    }
+
+    .tui-code-content pre {
+      margin: 0;
+      padding: 0;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-primary);
+      white-space: pre;
+    }
+
+    /* Syntax highlighting for C++ */
+    .syntax-keyword { color: #c586c0; }
+    .syntax-type { color: #4ec9b0; }
+    .syntax-function { color: #dcdcaa; }
+    .syntax-string { color: #ce9178; }
+    .syntax-comment { color: #6a9955; }
+    .syntax-number { color: #b5cea8; }
+
+    /* ========== SYSTEM EVENT MESSAGES ========== */
+    .system-event {
+      margin: 0.5rem 0;
+      color: var(--accent-cyan);
+      font-size: 12px;
+    }
+
+    .system-event-info {
+      color: #58a6ff;
+    }
+
+    .system-event-warn {
+      color: var(--warn);
+    }
+
+    .system-event-success {
       color: var(--accent-prompt);
     }
 
@@ -707,39 +1029,19 @@
     #terminal::-webkit-scrollbar {
       width: 10px;
     }
+
     #terminal::-webkit-scrollbar-track {
       background: #0f141c;
     }
+
     #terminal::-webkit-scrollbar-thumb {
       background: #27313f;
-      border-radius: 0;
       border: 2px solid #0f141c;
     }
+
     #terminal::-webkit-scrollbar-thumb:hover {
       background: #3a4a5f;
     }
-
-    /* ========== TUI MICRO-VISUALIZATIONS ========== */
-    /* Braille patterns for ping visualization */
-    .ping-graph {
-      display: inline-block;
-      margin-left: 4px;
-      color: var(--accent-prompt);
-      font-size: 10px;
-    }
-
-    /* Block elements for memory visualization */
-    .mem-graph {
-      display: inline-block;
-      margin-left: 4px;
-      color: var(--accent-cyan);
-      font-size: 10px;
-    }
-
-    /* Memory level coloring */
-    .mem-low { color: var(--accent-prompt); }
-    .mem-med { color: var(--warn); }
-    .mem-high { color: var(--error); }
 
     /* ========== TUI COMMAND PALETTE ========== */
     .command-palette-overlay {
@@ -844,7 +1146,6 @@
       background-color: transparent;
     }
 
-    /* ASCII selection indicator */
     .palette-checkbox {
       display: inline-block;
       width: 24px;
@@ -950,28 +1251,92 @@
     <button class="sidebar-toggle-btn" id="sidebar-expand" title="Expand sidebar">[>]</button>
 
     <div id="terminal-container">
+      <!-- STDOUT AREA: Scrollable history output -->
       <div id="terminal"></div>
-      <div id="status-bar" class="status-bar" aria-live="polite">
-        <span id="status-agent" class="status-item status-prompt">[Agent: main]</span>
-        <span id="status-ping" class="status-item">[Ping: --ms<span class="ping-graph"></span>]</span>
-        <span id="status-memory" class="status-item">[Mem: --M<span class="mem-graph"></span>]</span>
-        <span id="status-tasks" class="status-item">[Tasks: 0]</span>
-        <span id="status-time" class="status-item">[--:--:--]</span>
+
+      <!-- COMMAND DECK: Fixed input area -->
+      <div id="command-deck">
+        <!-- Layer 1: Keybind Hints - Compact Left-Aligned -->
+        <div class="deck-keybinds">
+          <span class="deck-keybind-item"><kbd>[Ctrl+Shift+Enter]</kbd> New Agent</span>
+          <span class="deck-keybind-item"><kbd>[Ctrl+Alt+Enter]</kbd> Cloud Agent</span>
+          <span class="deck-keybind-item"><kbd>[Enter]</kbd> Send</span>
+          <span class="deck-keybind-item"><kbd>[Shift+Enter]</kbd> Newline</span>
+          <span class="deck-keybind-item"><kbd>[↑/↓]</kbd> Cycle History</span>
+          <span class="deck-keybind-item"><kbd>[Ctrl+L]</kbd> Clear</span>
+          <span class="deck-keybind-item"><kbd>[Ctrl+B]</kbd> Toggle Sidebar</span>
+        </div>
+
+        <!-- Layer 2: Multiline Input -->
+        <div class="deck-input-container">
+          <span class="deck-prompt">
+            <span class="prompt-host">[User@OpenClaw]</span>
+            <span class="prompt-home">~</span>
+            <span class="prompt-dollar">$</span>
+          </span>
+          <div class="deck-input-wrapper">
+            <!-- @ Context Menu (Drop-up) -->
+            <div id="context-menu">
+              <div class="context-menu-border">╔══════════════════════════════════════════════╗</div>
+              <div class="context-menu-content">
+                <div class="context-menu-header">Attach Context</div>
+                <div class="context-menu-items" id="context-menu-items">
+                  <div class="context-menu-item selected" data-type="agent" data-value="main">
+                    <span class="context-item-prefix">&gt;</span>
+                    <span class="context-item-type">[Agent]</span>
+                    <span class="context-item-label">main</span>
+                  </div>
+                  <div class="context-menu-item" data-type="agent" data-value="web_search">
+                    <span class="context-item-prefix">&gt;</span>
+                    <span class="context-item-type">[Agent]</span>
+                    <span class="context-item-label">web_search</span>
+                  </div>
+                  <div class="context-menu-item" data-type="file" data-value="src/agent_core.cpp">
+                    <span class="context-item-prefix">&gt;</span>
+                    <span class="context-item-type">[File]</span>
+                    <span class="context-item-label">src/agent_core.cpp</span>
+                  </div>
+                  <div class="context-menu-item" data-type="file" data-value=".openclaw.md">
+                    <span class="context-item-prefix">&gt;</span>
+                    <span class="context-item-type">[File]</span>
+                    <span class="context-item-label">.openclaw.md</span>
+                  </div>
+                </div>
+              </div>
+              <div class="context-menu-border">╚══════════════════════════════════════════════╝</div>
+            </div>
+
+            <textarea id="command-input" placeholder="Awaiting command..." rows="1"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- GLOBAL STATUS BAR: Tmux-style bottom bar -->
+      <div id="global-status-bar">
+        <div class="status-left">
+          <span class="status-item"><span class="status-value-prompt" id="status-agent">[Agent: main]</span></span>
+          <span class="status-separator">│</span>
+          <span class="status-item"><span id="status-tasks">[Tasks: 0]</span></span>
+        </div>
+        <div class="status-right">
+          <span class="status-item"><span id="status-ping">[Ping: --ms]</span></span>
+          <span class="status-separator">│</span>
+          <span class="status-item"><span id="status-mem">[Mem: --M]</span></span>
+          <span class="status-separator">│</span>
+          <span class="status-item"><span id="status-time">[--:--:--]</span></span>
+        </div>
       </div>
     </div>
 
     <!-- TUI Command Palette Modal -->
-    <div class="command-palette-overlay" id="command-palette">
+    <div class="command-palette-overlay hidden" id="command-palette">
       <div class="command-palette-modal">
-        <!-- Top border with Unicode box drawing -->
         <div class="palette-border">╔══════════════════════════════════════════════════════════╗</div>
         <div class="palette-content">
-          <!-- Input row -->
           <div class="palette-input-row">
             <span class="palette-prompt">&gt;</span>
             <input type="text" class="palette-input" id="palette-input" placeholder="Search agents, tasks, commands..." autocomplete="off" spellcheck="false">
           </div>
-          <!-- Results -->
           <div class="palette-results" id="palette-results">
             <div class="palette-item selected" data-command="/spawn">
               <span class="palette-checkbox">[x]</span>
@@ -1020,7 +1385,6 @@
             </div>
           </div>
         </div>
-        <!-- Bottom border with Unicode box drawing -->
         <div class="palette-border">╚══════════════════════════════════════════════════════════╝</div>
       </div>
     </div>

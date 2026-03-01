@@ -80,7 +80,7 @@ const shellCommands = navigator.platform.includes("Win")
   : shellCommandsUnix;
 
 const USER_PROMPT_HTML =
-  '<span class="prompt-host">[User@OpenClaw]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
+  '<span class="prompt-host">[User@CyDeck]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
 
 function createPrompt(): HTMLElement {
   const promptSpan = document.createElement("span");
@@ -364,16 +364,26 @@ function initTerminal(): void {
   bannerEl.className = "tui-banner";
   bannerEl.textContent =
 `╔═════════════════════════════════════════════════════════╗
-║                    OPENCLAW TERMINAL                    ║
+║    ██████╗ ██╗   ██╗██████╗ ███████╗ ██████╗██╗  ██╗    ║
+║   ██╔════╝ ╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝██║ ██╔╝    ║
+║   ██║       ╚████╔╝ ██║  ██║█████╗  ██║     █████╔╝     ║
+║   ██║        ╚██╔╝  ██║  ██║██╔══╝  ██║     ██╔═██╗     ║
+║   ╚██████╗    ██║   ██████╔╝███████╗╚██████╗██║  ██╗    ║
+║    ╚═════╝    ╚═╝   ╚═════╝ ╚══════╝ ╚═════╝╚═╝  ╚═╝    ║
+║                                                         ║
+║         -- THE AGENTIC TERMINAL --   [MISSION: ACTIVE]  ║
 ╠═════════════════════════════════════════════════════════╣
-║ /help for commands                                      ║
-║ !cmd for local shell execution                          ║
-║ /spawn /agents /tasks for orchestration                 ║
-║ Ctrl+B toggles sidebar                                  ║
-║ Ctrl+Enter to send command                              ║
+║  /help for commands        |  Ctrl+B toggles sidebar    ║
+║  !cmd for local shell      |  /spawn /agents /tasks     ║
 ╚═════════════════════════════════════════════════════════╝`;
 
   terminalDiv.appendChild(bannerEl);
+
+  // Mission Status Line with rocket icon
+  const missionStatus = document.createElement("div");
+  missionStatus.className = "mission-status";
+  missionStatus.innerHTML = '<span class="mission-rocket">▲</span> <span class="mission-text">MISSION CONTROL: ALL SYSTEMS NOMINAL</span>';
+  terminalDiv.appendChild(missionStatus);
 
   const infoLine = document.createElement("div");
   infoLine.className = "system-info";
@@ -387,10 +397,10 @@ function initTerminal(): void {
   userCmd.innerHTML = `<span class="prompt-composite">${USER_PROMPT_HTML}</span> <span class="command-text">/spawn coder --task "Write a fast fibonacci in C++"</span>`;
   terminalDiv.appendChild(userCmd);
 
-  // System event
+  // System event - SpaceX themed
   const sysEvent = document.createElement("div");
   sysEvent.className = "system-event system-event-success";
-  sysEvent.textContent = "[SYSTEM] Agent 'coder' (PID: 9942) spawned successfully.";
+  sysEvent.innerHTML = '[SYS_OP] SEQUENCE START: Launching Agentic Payload \'coder\' (PID: 9942) 🚀';
   terminalDiv.appendChild(sysEvent);
 
   // Agent thought stream

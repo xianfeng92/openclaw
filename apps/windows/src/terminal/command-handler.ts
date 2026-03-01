@@ -19,7 +19,7 @@ const TYPEWRITER_MAX_DELAY_MS = 30;
 const CHAT_TIMEOUT_MS = 180_000;
 const CHAT_TIMEOUT_SECONDS = Math.round(CHAT_TIMEOUT_MS / 1000);
 const USER_PROMPT_HTML =
-  '<span class="prompt-host">[User@OpenClaw]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
+  '<span class="prompt-host">[User@CyDeck]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
 
 export type ParsedCommand =
   | { type: "shell"; command: string }
@@ -426,7 +426,7 @@ Platform: ${escapeHtml(navigator.platform)}
         terminal,
         `
 <span class="system-ok"><strong>Environment</strong></span>
-Terminal: OpenClaw Terminal
+Terminal: CyDeck Terminal
 Mode: Desktop (Electron)
 Platform: ${escapeHtml(navigator.platform)}
 Language: ${escapeHtml(navigator.language)}
@@ -547,7 +547,7 @@ function showHelp(terminal: HTMLElement): void {
     `
 <span class="system-ok"><strong>
 ╔═══════════════════════════════════════════════════════════╗
-║                    OpenClaw Terminal Help                ║
+║                    CyDeck Terminal Help                   ║
 ╚═══════════════════════════════════════════════════════════╝
 </strong></span>
 
@@ -630,7 +630,7 @@ async function showStatus(terminal: HTMLElement): Promise<void> {
   writeHtml(
     terminal,
     `
-<span class="system-ok"><strong>OpenClaw Terminal Status</strong></span>
+<span class="system-ok"><strong>CyDeck Terminal Status</strong></span>
 
 <span class="system-info"><strong>Session:</strong></span>
   Agent: ${escapeHtml(currentAgent)}
@@ -1272,7 +1272,7 @@ async function handlePRCommand(
 
         const result = await window.terminalAPI.prCreate?.({
           title,
-          description: `## Summary\n\n${title}\n\n---\n\n*Created via OpenClaw Terminal*`,
+          description: `## Summary\n\n${title}\n\n---\n\n*Created via CyDeck Terminal*`,
           draft: options.draft,
           baseBranch: options.baseBranch,
         });

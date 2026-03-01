@@ -3,25 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw Terminal</title>
+  <title>CyDeck - The Agentic Terminal</title>
   <style>
     * {
       box-sizing: border-box;
     }
 
     :root {
-      --bg-main: #0d1117;
-      --bg-sidebar: #0d1117;
-      --text-primary: #c9d1d9;
-      --text-muted: #8b949e;
-      --accent-prompt: #00ff41;
-      --bg-block: #161b22;
-      --accent-cyan: #00f0ff;
+      /* Deep Palette - Cyber-Telemetry Theme */
+      --bg-main: #050509;
+      --bg-sidebar: #050509;
+      --text-primary: #FFFFFF;
+      --text-muted: #5a6070;
+      --accent-prompt: #00f2ff;
+      --accent-violet: #bb00ff;
+      --bg-block: #0d0d12;
+      --accent-cyan: #00f2ff;
       --warn: #f2cc60;
       --error: #ff7b72;
-      --border-subtle: rgba(139, 148, 158, 0.45);
-      --border-hard: #30363d;
-      --border-subtle-alt: rgba(48, 54, 61, 0.5);
+      --border-subtle: rgba(90, 96, 112, 0.3);
+      --border-hard: #1a1a24;
+      --border-subtle-alt: rgba(26, 26, 36, 0.5);
+
+      /* Glow/Bloom Variables */
+      --glow-cyan: 0 0 5px rgba(0, 242, 255, 0.5);
+      --glow-violet: 0 0 5px rgba(187, 0, 255, 0.4);
+      --glow-text: 0 0 6px rgba(0, 242, 255, 0.35);
 
       color-scheme: dark;
     }
@@ -35,7 +42,7 @@
     }
 
     body {
-      background: radial-gradient(1400px 700px at 0% 0%, #111a24 0%, var(--bg-main) 52%);
+      background: radial-gradient(1400px 700px at 0% 0%, #0a0a12 0%, var(--bg-main) 52%);
       font-family:
         "JetBrainsMono Nerd Font",
         "FiraCode Nerd Font",
@@ -49,6 +56,27 @@
       color: var(--text-primary);
       text-rendering: geometricPrecision;
       letter-spacing: 0.01em;
+      position: relative;
+    }
+
+    /* Scanline Overlay - TTY Retro-Futurism */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.015;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 242, 255, 0.03) 2px,
+        rgba(0, 242, 255, 0.03) 4px
+      );
     }
 
     #terminal-shell {
@@ -95,16 +123,21 @@
       color: var(--accent-prompt);
       text-transform: uppercase;
       letter-spacing: 0.1em;
+      text-shadow: var(--glow-text);
     }
 
     .sidebar-title::before {
       content: "[";
       margin-right: 2px;
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-title::after {
       content: "]";
       margin-left: 2px;
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-toggle {
@@ -118,7 +151,8 @@
     }
 
     .sidebar-toggle:hover {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-content {
@@ -167,12 +201,13 @@
       flex: 1;
       margin-left: 12px;
       height: 1px;
-      background: linear-gradient(to right, var(--border-hard), transparent);
+      background: linear-gradient(to right, rgba(0, 242, 255, 0.2), transparent);
       opacity: 0.3;
     }
 
     .sidebar-panel-header:hover {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-panel-header:hover::after {
@@ -192,9 +227,19 @@
       font-weight: normal;
     }
 
+    /* Katakana Decorations */
+    .sidebar-panel-title::after {
+      content: attr(data-katakana);
+      font-size: 9px;
+      color: #2a2a35;
+      margin-left: 4px;
+      font-weight: normal;
+    }
+
     .sidebar-panel-icon {
       font-size: 12px;
-      color: var(--text-muted);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-panel-count {
@@ -248,6 +293,7 @@
 
     .sidebar-item.active {
       color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-item-status {
@@ -258,12 +304,14 @@
     }
 
     .sidebar-item-status.running {
-      color: #00FF41;
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
       animation: ascii-breathe 1.5s ease-in-out infinite;
     }
 
     .sidebar-item-status.completed {
-      color: var(--accent-prompt);
+      color: var(--accent-violet);
+      text-shadow: var(--glow-violet);
     }
 
     .sidebar-item-status.failed {
@@ -317,8 +365,10 @@
     }
 
     .sidebar-action-btn:hover {
-      background-color: var(--text-muted);
+      background-color: var(--accent-cyan);
       color: var(--bg-main);
+      box-shadow: var(--glow-cyan);
+      border-color: var(--accent-cyan);
     }
 
     .sidebar-action-btn.secondary {
@@ -328,8 +378,9 @@
 
     .sidebar-action-btn.secondary:hover {
       background-color: var(--border-hard);
-      color: var(--text-primary);
-      border-color: var(--border-hard);
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .sidebar-empty {
@@ -343,6 +394,35 @@
       font-size: 16px;
       margin-bottom: 4px;
       opacity: 0.5;
+    }
+
+    /* ========== MISSION TELEMETRY BLOCK ========== */
+    .mission-telemetry {
+      padding: 0;
+      margin-bottom: 8px;
+      background: transparent;
+      border: none;
+    }
+
+    .rocket-full {
+      margin: 0;
+      padding: 8px 12px;
+      font-size: 9px;
+      line-height: 1.1;
+      color: #00f2ff;
+      text-shadow: var(--glow-cyan);
+      font-family: "JetBrainsMono Nerd Font", "FiraCode Nerd Font", monospace;
+      white-space: pre;
+      overflow-x: hidden;
+    }
+
+    .rocket-full .stage-label {
+      color: #00ff88;
+      text-shadow: 0 0 5px rgba(0, 255, 136, 0.4);
+    }
+
+    .rocket-full .status-dot {
+      color: #00ff88;
     }
 
     /* ========== TERMINAL AREA - FLEX SPLIT ========== */
@@ -380,8 +460,9 @@
     }
 
     .sidebar-toggle-btn:hover {
-      background-color: var(--accent-prompt);
+      background-color: var(--accent-cyan);
       color: var(--bg-main);
+      box-shadow: var(--glow-cyan);
     }
 
     .sidebar.collapsed ~ .sidebar-toggle-btn {
@@ -428,6 +509,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      box-shadow: 0 -1px 0 rgba(0, 242, 255, 0.03);
     }
 
     /* Layer 1: Keybind Hints - Compact Left-Aligned */
@@ -469,11 +551,13 @@
     }
 
     .deck-prompt .prompt-host {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .deck-prompt .prompt-home {
-      color: #58a6ff;
+      color: var(--accent-violet);
+      text-shadow: var(--glow-violet);
     }
 
     .deck-prompt .prompt-dollar {
@@ -497,7 +581,7 @@
       font-family: inherit;
       font-size: 14px;
       line-height: 1.6;
-      caret-color: var(--accent-prompt);
+      caret-color: var(--accent-cyan);
       resize: none;
       padding: 0;
       margin: 0;
@@ -520,11 +604,12 @@
       left: 0;
       margin-bottom: 4px;
       min-width: 320px;
-      background-color: #090C10;
+      background-color: #050509;
       z-index: 100;
       display: none;
       font-size: 11px;
       line-height: 1.2;
+      box-shadow: 0 0 12px rgba(0, 242, 255, 0.15);
     }
 
     #context-menu.visible {
@@ -540,14 +625,15 @@
     .context-menu-content {
       border-left: 1px solid var(--border-hard);
       border-right: 1px solid var(--border-hard);
-      background: #090C10;
+      background: #050509;
     }
 
     .context-menu-header {
       padding: 4px 12px;
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
       border-bottom: 1px solid var(--border-hard);
       white-space: nowrap;
+      text-shadow: var(--glow-cyan);
     }
 
     .context-menu-items {
@@ -581,8 +667,9 @@
     }
 
     .context-menu-item.selected {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
       background-color: transparent;
+      text-shadow: var(--glow-cyan);
     }
 
     .context-item-prefix {
@@ -593,11 +680,12 @@
 
     .context-item-type {
       min-width: 48px;
-      color: var(--accent-cyan);
+      color: var(--accent-violet);
     }
 
     .context-menu-item.selected .context-item-type {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .context-item-label {
@@ -608,19 +696,61 @@
       color: var(--text-primary);
     }
 
+    /* ========== MISSION STATUS ========== */
+    .mission-status {
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: rgba(0, 242, 255, 0.05);
+      border-left: 2px solid var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .mission-rocket {
+      color: var(--accent-cyan);
+      font-size: 14px;
+      text-shadow: var(--glow-cyan);
+      animation: rocket-hover 2s ease-in-out infinite;
+    }
+
+    .mission-text {
+      color: var(--text-primary);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: normal;
+    }
+
+    .launch-icon {
+      margin-right: 4px;
+    }
+
+    .telemetry-small {
+      color: var(--accent-violet);
+      font-size: 9px;
+      letter-spacing: 0.05em;
+    }
+
+    @keyframes rocket-hover {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+
     /* ========== GLOBAL STATUS BAR (Tmux-style) ========== */
     #global-status-bar {
       flex-shrink: 0;
       height: 24px;
       min-height: 24px;
       border-top: 1px solid var(--border-hard);
-      background-color: #161b22;
+      background-color: #08080c;
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 16px;
       font-size: 10px;
       color: var(--text-muted);
+      box-shadow: 0 -1px 0 rgba(0, 242, 255, 0.05);
     }
 
     .status-left,
@@ -640,11 +770,33 @@
     }
 
     .status-value-prompt {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .status-value-cyan {
       color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
+    }
+
+    .status-mission {
+      color: #00ff88;
+      text-shadow: 0 0 5px rgba(0, 255, 136, 0.4);
+      letter-spacing: 0.05em;
+    }
+
+    /* Telemetry Charts */
+    .telemetry-chart {
+      display: inline-block;
+      font-size: 10px;
+      color: var(--accent-violet);
+      margin-left: 4px;
+      letter-spacing: -0.5px;
+      text-shadow: var(--glow-violet);
+    }
+
+    .telemetry-label {
+      color: var(--text-muted);
     }
 
     /* ========== TUI BANNER ========== */
@@ -654,9 +806,9 @@
       line-height: 1.2;
       margin: 0 0 1.5rem 0;
       padding: 0;
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
       white-space: pre;
-      text-shadow: 0 0 6px rgba(0, 255, 65, 0.15);
+      text-shadow: 0 0 8px rgba(0, 242, 255, 0.5), 0 0 16px rgba(0, 242, 255, 0.3);
       overflow-x: auto;
     }
 
@@ -679,12 +831,13 @@
     }
 
     .prompt-host {
-      color: var(--accent-prompt);
-      text-shadow: 0 0 6px rgba(0, 255, 65, 0.25);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .prompt-home {
-      color: #58a6ff;
+      color: var(--accent-violet);
+      text-shadow: var(--glow-violet);
     }
 
     .prompt-dollar {
@@ -712,7 +865,7 @@
     .assistant-output {
       margin: 0.25rem 0 0.5rem;
       padding-left: 1.5rem;
-      border-left: 2px solid #30363d;
+      border-left: 2px solid #1a1a24;
     }
 
     .assistant-body {
@@ -753,22 +906,23 @@
     .assistant-body blockquote {
       margin: 1rem 0;
       padding-left: 0.85rem;
-      border-left: 2px solid #30363d;
+      border-left: 2px solid #1a1a24;
       color: var(--text-muted);
     }
 
     .assistant-body code {
       font-family: inherit;
       font-size: 0.95em;
-      color: #9cdcfe;
+      color: var(--accent-violet);
     }
 
     .assistant-body .assistant-code {
       margin: 1rem 0;
       padding: 0.7rem 0.85rem;
-      background-color: rgba(22, 27, 34, 0.88);
-      border: 1px solid #30363d;
+      background-color: rgba(10, 10, 15, 0.9);
+      border: 1px solid #1a1a24;
       overflow-x: auto;
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.08);
     }
 
     .assistant-body .assistant-code code {
@@ -778,10 +932,11 @@
     }
 
     .assistant-body a {
-      color: var(--accent-cyan);
+      color: var(--accent-violet);
       text-decoration: underline;
       text-decoration-thickness: 1px;
       text-underline-offset: 2px;
+      text-shadow: var(--glow-violet);
     }
 
     .spinner-line {
@@ -792,7 +947,7 @@
 
     .turn-separator {
       width: 50%;
-      border-bottom: 1px dashed #30363d;
+      border-bottom: 1px dashed #1a1a24;
       margin: 0.45rem 0 2rem 1.5rem;
     }
 
@@ -801,7 +956,8 @@
     }
 
     .system-ok {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .system-warn {
@@ -825,7 +981,7 @@
       margin: 0.5rem 0 1rem 0;
       padding-left: 12px;
       margin-left: 8px;
-      border-left: 2px solid #30363D;
+      border-left: 2px solid #1a1a24;
     }
 
     .thought-entry {
@@ -841,8 +997,9 @@
     }
 
     .thought-type {
-      color: var(--accent-cyan);
+      color: var(--accent-violet);
       font-weight: normal;
+      text-shadow: var(--glow-violet);
     }
 
     .thought-content {
@@ -881,15 +1038,16 @@
       font-family: inherit;
       font-size: 0.9em;
       color: #9cdcfe;
-      background-color: rgba(110, 118, 129, 0.2);
+      background-color: rgba(0, 242, 255, 0.08);
       padding: 2px 4px;
     }
 
     /* ========== TUI CODE BLOCK ========== */
     .tui-code-block {
       margin: 1rem 0;
-      border: 1px solid #30363D;
-      background-color: #161B22;
+      border: 1px solid #1a1a24;
+      background-color: #0a0a0f;
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.3);
     }
 
     .tui-code-header {
@@ -897,16 +1055,18 @@
       justify-content: space-between;
       align-items: center;
       padding: 4px 12px;
-      border-bottom: 1px solid #30363D;
+      border-bottom: 1px solid #1a1a24;
       font-size: 10px;
       color: var(--text-muted);
-      background-color: #0d1117;
+      background-color: #050509;
       white-space: nowrap;
+      box-shadow: 0 1px 0 rgba(0, 242, 255, 0.08);
     }
 
     .tui-code-lang {
       color: var(--accent-cyan);
       font-family: inherit;
+      text-shadow: var(--glow-cyan);
     }
 
     .tui-code-lang::before {
@@ -927,8 +1087,9 @@
     }
 
     .tui-code-copy:hover {
-      color: var(--accent-prompt);
-      border-color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .tui-code-copy::before {
@@ -990,7 +1151,8 @@
     }
 
     .system-event-success {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     /* ANSI colors */
@@ -1031,16 +1193,17 @@
     }
 
     #terminal::-webkit-scrollbar-track {
-      background: #0f141c;
+      background: #08080c;
     }
 
     #terminal::-webkit-scrollbar-thumb {
-      background: #27313f;
-      border: 2px solid #0f141c;
+      background: #1a1a24;
+      border: 2px solid #08080c;
     }
 
     #terminal::-webkit-scrollbar-thumb:hover {
-      background: #3a4a5f;
+      background: var(--accent-cyan);
+      box-shadow: var(--glow-cyan);
     }
 
     /* ========== TUI COMMAND PALETTE ========== */
@@ -1051,7 +1214,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: rgba(13, 17, 23, 0.85);
+      background-color: rgba(5, 5, 9, 0.92);
       z-index: 1000;
       justify-content: center;
       align-items: center;
@@ -1062,13 +1225,14 @@
     }
 
     .command-palette-modal {
-      background-color: #090C10;
+      background-color: #050509;
       padding: 0;
       min-width: 480px;
       max-width: 640px;
       font-family: inherit;
       font-size: 12px;
       line-height: 1.2;
+      box-shadow: 0 0 24px rgba(0, 242, 255, 0.2);
     }
 
     .palette-border {
@@ -1082,7 +1246,7 @@
       border-left: 1px solid var(--border-hard);
       border-right: 1px solid var(--border-hard);
       padding: 0;
-      background: #090C10;
+      background: #050509;
     }
 
     .palette-input-row {
@@ -1094,9 +1258,10 @@
     }
 
     .palette-prompt {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
       margin-right: 8px;
       font-size: 13px;
+      text-shadow: var(--glow-cyan);
     }
 
     .palette-input {
@@ -1107,7 +1272,7 @@
       color: var(--text-primary);
       font-family: inherit;
       font-size: 13px;
-      caret-color: var(--accent-prompt);
+      caret-color: var(--accent-cyan);
     }
 
     .palette-results {
@@ -1142,8 +1307,9 @@
     }
 
     .palette-item.selected {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
       background-color: transparent;
+      text-shadow: var(--glow-cyan);
     }
 
     .palette-checkbox {
@@ -1154,19 +1320,21 @@
     }
 
     .palette-item.selected .palette-checkbox {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .palette-item-key {
       display: inline-block;
       min-width: 70px;
-      color: var(--accent-cyan);
+      color: var(--accent-violet);
       margin-right: 12px;
       font-size: 12px;
     }
 
     .palette-item.selected .palette-item-key {
-      color: var(--accent-prompt);
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
     }
 
     .palette-item-desc {
@@ -1183,15 +1351,15 @@
   <main id="terminal-shell">
     <aside id="sidebar">
       <div class="sidebar-header">
-        <span class="sidebar-title">OpenClaw</span>
+        <span class="sidebar-title">CyDeck</span>
         <button class="sidebar-toggle" id="sidebar-collapse" title="Collapse sidebar">◀</button>
       </div>
       <div class="sidebar-content" id="sidebar-content">
         <!-- Tasks Panel -->
         <div class="sidebar-panel open" id="panel-tasks">
           <div class="sidebar-panel-header">
-            <span class="sidebar-panel-title">
-              <span class="sidebar-panel-icon"></span>
+            <span class="sidebar-panel-title" data-katakana="タスク">
+              <span class="sidebar-panel-icon">●</span>
               Tasks
             </span>
             <span class="sidebar-panel-count" id="tasks-count">0</span>
@@ -1207,8 +1375,8 @@
         <!-- Agents Panel -->
         <div class="sidebar-panel open" id="panel-agents">
           <div class="sidebar-panel-header">
-            <span class="sidebar-panel-title">
-              <span class="sidebar-panel-icon"></span>
+            <span class="sidebar-panel-title" data-katakana="アジェント">
+              <span class="sidebar-panel-icon">●</span>
               Agents
             </span>
             <span class="sidebar-panel-count" id="agents-count">0</span>
@@ -1224,8 +1392,8 @@
         <!-- Context Panel -->
         <div class="sidebar-panel" id="panel-context">
           <div class="sidebar-panel-header">
-            <span class="sidebar-panel-title">
-              <span class="sidebar-panel-icon"></span>
+            <span class="sidebar-panel-title" data-katakana="コンテキスト">
+              <span class="sidebar-panel-icon">●</span>
               Context
             </span>
             <span class="sidebar-panel-count" id="context-count">0</span>
@@ -1239,6 +1407,19 @@
         </div>
       </div>
       <div class="sidebar-footer">
+        <!-- Mission Telemetry Block -->
+        <div class="mission-telemetry">
+          <pre class="rocket-full">
+[ TELEMETRY ] ────────
+   /\
+  |  |   STAGE : LKO
+  |  |   STATUS: NOMINAL [●]
+ /|  |\  VEL   : 27,600 km/h
+/ |__| \ ALT   : 405 km
+  ====
+  /  \   [AWAITING_PAYLOAD]
+          </pre>
+        </div>
         <button class="sidebar-action-btn" id="btn-spawn">
           Spawn Task
         </button>
@@ -1270,7 +1451,7 @@
         <!-- Layer 2: Multiline Input -->
         <div class="deck-input-container">
           <span class="deck-prompt">
-            <span class="prompt-host">[User@OpenClaw]</span>
+            <span class="prompt-host">[User@CyDeck]</span>
             <span class="prompt-home">~</span>
             <span class="prompt-dollar">$</span>
           </span>
@@ -1314,14 +1495,18 @@
       <!-- GLOBAL STATUS BAR: Tmux-style bottom bar -->
       <div id="global-status-bar">
         <div class="status-left">
+          <span class="status-item"><span class="status-mission">[MISSION: ACTIVE]</span></span>
+          <span class="status-separator">│</span>
           <span class="status-item"><span class="status-value-prompt" id="status-agent">[Agent: main]</span></span>
           <span class="status-separator">│</span>
           <span class="status-item"><span id="status-tasks">[Tasks: 0]</span></span>
         </div>
         <div class="status-right">
-          <span class="status-item"><span id="status-ping">[Ping: --ms]</span></span>
+          <span class="status-item"><span class="telemetry-label">[</span><span id="status-ping">Ping: 12ms</span><span class="telemetry-chart"> ⡠⠒⢄⣸⣷</span><span class="telemetry-label">]</span></span>
           <span class="status-separator">│</span>
-          <span class="status-item"><span id="status-mem">[Mem: --M]</span></span>
+          <span class="status-item"><span class="telemetry-label">[</span><span id="status-mem">SYS_MEM: 12%</span><span class="telemetry-chart"> ⣿⣤⣀⡀</span><span class="telemetry-label">]</span></span>
+          <span class="status-separator">│</span>
+          <span class="status-item"><span class="telemetry-label">[</span><span id="status-cpu">CPU_L</span><span class="telemetry-chart"> ▃▅▇█</span><span class="telemetry-label">]</span></span>
           <span class="status-separator">│</span>
           <span class="status-item"><span id="status-time">[--:--:--]</span></span>
         </div>

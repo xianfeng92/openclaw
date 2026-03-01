@@ -114,56 +114,9 @@ interface OrchestralTask {
   };
 }
 
-const orchestralTasks = new Map<string, OrchestralTask>();
-
-// Get the actual project repository path, not the app directory
-function getProjectPath(): string {
-  // In development, return the actual project root
-  // In production, use the app directory
-  const devPath = "C:\\Users\\xforg\\Desktop\\openclaw";
-  if (fs.existsSync(devPath)) {
-    return devPath;
-  }
-  return process.cwd();
-}
-
-const tasksFilePath = path.join(getProjectPath(), ".openclaw", "tasks.json");
-
-let gatewayManagerInstance: GatewayManager | null = null;
-
-function getShellCommand(): string {
-  return process.platform === "win32" ? "cmd.exe" : "/bin/sh";
-}
-
-// Save tasks to file
-function saveTasks(): void {
-  try {
-    const dir = path.dirname(tasksFilePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const tasks = Array.from(orchestralTasks.values());
-    fs.writeFileSync(tasksFilePath, JSON.stringify(tasks, null, 2));
-  } catch (err) {
-    console.error("[Orchestral] Failed to save tasks:", err);
-  }
-}
-
-// Load tasks from file
-function loadTasks(): void {
-  try {
-    if (fs.existsSync(tasksFilePath)) {
-      const data = fs.readFileSync(tasksFilePath, "utf-8");
-      const tasks = JSON.parse(data) as OrchestralTask[];
-      for (const task of tasks) {
-        // Remove process reference as it can't be serialized
-        orchestralTasks.set(task.id, { ...task, process: undefined });
-      }
-    }
-  } catch (err) {
-    console.error("[Orchestral] Failed to load tasks:", err);
-  }
-}
+// NOTE: Task storage is now unified in WindowsAgentProcessManager (agent-tasks.json)
+// The orchestralTasks map has been removed to avoid duplication.
+const getAgentManager = () => require("./windows-agent-manager.js").getAgentManager(getProjectPath());
 
 export function setupTerminalIpc(gatewayManager: GatewayManager): void {
   gatewayManagerInstance = gatewayManager;

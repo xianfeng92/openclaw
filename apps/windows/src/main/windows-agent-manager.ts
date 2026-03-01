@@ -724,6 +724,62 @@ export class WindowsAgentProcessManager {
       killed: processes.filter((p) => p.status === "killed").length,
     };
   }
+
+  /**
+   * Clear all tasks (completed/failed/exited) from storage
+   * Returns count of cleared tasks
+   */
+  clearCompletedTasks(): number {
+    let clearedCount = 0;
+    for (const [taskId, process] of this.processes.entries()) {
+      if (process.status === "exited" || process.status === "killed" || process.status === "completed" || process.status === "failed") {
+        this.processes.delete(taskId);
+        clearedCount++;
+      }
+    }
+    this.saveTasks();
+    return clearedCount;
+  }
+
+  /**
+   * Clear ALL tasks including stale "running" ones
+   * This is useful for cleaning up tasks that are marked as running but
+   * the actual process has exited (e.g., after a crash)
+   */
+  clearAllTasks(): { count: number; worktreesCleaned: number } {
+    let clearedCount = 0;
+    let worktreesCleaned = 0;
+    const repoPath = this.projectPath;
+
+    for (const [taskId, process] of this.processes.entries()) {
+      // Clean up worktree if it exists
+      if (process.worktree && fs.existsSync(process.worktree)) {
+        try {
+          // Try to remove git worktree first
+          const { execSync } = require("child_process");
+          execSync(`git -C "${repoPath}" worktree remove --force "${process.worktree}"`, {
+            stdio: "ignore",
+            timeout: 5000,
+          });
+          worktreesCleaned++;
+        } catch {
+          // Force remove directory if git worktree remove failed
+          try {
+            fs.rmSync(process.worktree, { recursive: true, force: true });
+            worktreesCleaned++;
+          } catch {
+            // Ignore errors
+          }
+        }
+      }
+
+      this.processes.delete(taskId);
+      clearedCount++;
+    }
+
+    this.saveTasks();
+    return { count: clearedCount, worktreesCleaned };
+  }
 }
 
 // Export a singleton instance manager

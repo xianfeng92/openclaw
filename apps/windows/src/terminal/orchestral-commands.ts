@@ -656,6 +656,26 @@ export async function handleTasksCommand(
     return;
   }
 
+  // Handle purge-all subcommand - forcefully clear ALL tasks including stale "running" ones
+  if (subcommand === "purge-all" || subcommand === "clear-all") {
+    writeLine(terminal, "Forcefully clearing ALL tasks from storage (including stale running tasks)...");
+
+    try {
+      const result = await window.terminalAPI.orchestralTasks?.({}, "purge-all");
+
+      if (result?.success) {
+        writeHtml(terminal, `<span class="system-ok">[ok] ${result.message || "All tasks cleared"}</span>`);
+        // Refresh sidebar to show updated state
+        await refreshSidebarTasks();
+      } else {
+        writeHtml(terminal, `<span class="system-error">[err] ${result?.error || "Failed to clear tasks"}</span>`);
+      }
+    } catch (err) {
+      writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
+    }
+    return;
+  }
+
   // Handle show subcommand
   if (subcommand === "show") {
     const showAll = args.includes("--all");

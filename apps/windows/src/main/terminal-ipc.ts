@@ -943,6 +943,7 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
           let worktreesCleaned = 0;
           const repoPath = getProjectPath();
 
+          // Clear from orchestralTasks (tasks.json)
           for (const [taskId, task] of orchestralTasks.entries()) {
             // Only delete completed or failed tasks, keep running ones
             if (task.status === "completed" || task.status === "failed") {
@@ -971,9 +972,51 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
             }
           }
           saveTasks();
+
+          // Also clear from agent manager (agent-tasks.json)
+          const agentMgr = getAgentManager(getProjectPath());
+          const agentResult = agentMgr.clearCompletedTasks();
+
           return {
             success: true,
-            message: `Deleted ${deletedCount} task(s)${worktreesCleaned > 0 ? ` and cleaned ${worktreesCleaned} worktree(s)` : ""}`,
+            message: `Deleted ${deletedCount + agentResult} task(s)${worktreesCleaned > 0 ? ` and cleaned ${worktreesCleaned} worktree(s)` : ""}`,
+          };
+        }
+
+        // Handle purge-all action - forcefully clear ALL tasks including stale "running" ones
+        if (action === "purge-all" || action === "clear-all") {
+          // Clear from orchestralTasks (tasks.json)
+          let worktreesCleaned = 0;
+          const repoPath = getProjectPath();
+
+          for (const [taskId, task] of orchestralTasks.entries()) {
+            // Clean up worktree if it exists
+            if (task.worktree && fs.existsSync(task.worktree)) {
+              try {
+                await execAsync(`git -C "${repoPath}" worktree remove --force "${task.worktree}"`, {
+                  timeout: 10000,
+                });
+                worktreesCleaned++;
+              } catch {
+                try {
+                  fs.rmSync(task.worktree, { recursive: true, force: true });
+                  worktreesCleaned++;
+                } catch {
+                  // Ignore errors
+                }
+              }
+            }
+            orchestralTasks.delete(taskId);
+          }
+          saveTasks();
+
+          // Also clear ALL from agent manager (including stale running tasks)
+          const agentMgr = getAgentManager(getProjectPath());
+          const agentResult = agentMgr.clearAllTasks();
+
+          return {
+            success: true,
+            message: `Cleared ALL tasks (${orchestralTasks.size + agentResult.count} total)${worktreesCleaned + agentResult.worktreesCleaned > 0 ? ` and cleaned ${worktreesCleaned + agentResult.worktreesCleaned} worktree(s)` : ""}`,
           };
         }
 

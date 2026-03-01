@@ -940,9 +940,32 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
         // Handle purge/clear action to actually delete tasks from storage
         if (action === "purge" || action === "clear") {
           let deletedCount = 0;
+          let worktreesCleaned = 0;
+          const repoPath = getProjectPath();
+
           for (const [taskId, task] of orchestralTasks.entries()) {
             // Only delete completed or failed tasks, keep running ones
             if (task.status === "completed" || task.status === "failed") {
+              // Clean up worktree if it exists
+              if (task.worktree && fs.existsSync(task.worktree)) {
+                try {
+                  // Remove git worktree first
+                  await execAsync(`git -C "${repoPath}" worktree remove --force "${task.worktree}"`, {
+                    timeout: 10000,
+                  });
+                  worktreesCleaned++;
+                } catch (worktreeErr) {
+                  console.error(`[Orchestral] Failed to remove worktree for ${taskId}:`, worktreeErr);
+                  // Force remove directory if git worktree remove failed
+                  try {
+                    fs.rmSync(task.worktree, { recursive: true, force: true });
+                    worktreesCleaned++;
+                  } catch {
+                    // Ignore directory removal errors
+                  }
+                }
+              }
+
               orchestralTasks.delete(taskId);
               deletedCount++;
             }
@@ -950,7 +973,7 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
           saveTasks();
           return {
             success: true,
-            message: `Deleted ${deletedCount} completed/failed tasks from storage`,
+            message: `Deleted ${deletedCount} task(s)${worktreesCleaned > 0 ? ` and cleaned ${worktreesCleaned} worktree(s)` : ""}`,
           };
         }
 

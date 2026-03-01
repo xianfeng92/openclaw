@@ -1,0 +1,14 @@
+[
+  {
+    "id": "task-1772323645392",
+    "agent": "claude",
+    "description": "coder --task \"Write a fast fibonacci in C++\"",
+    "repo": "C:/Users/xforg/Desktop/openclaw",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772323645392",
+    "branch": "orchestral/task-17723236453",
+    "startedAt": 1772323669252,
+    "status": "running",
+    "useContext": true,
+    "pid": 19708
+  }
+]

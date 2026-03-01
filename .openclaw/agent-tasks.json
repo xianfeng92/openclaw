@@ -1,0 +1,15 @@
+[
+  {
+    "id": "task-1772324753905",
+    "pid": 24132,
+    "description": "\"Write a fast fibonacci in C++\"",
+    "worktree": "C:\\Users\\xforg\\Desktop\\openclaw\\.openclaw\\worktrees\\task-1772324753905",
+    "startedAt": 1772324777816,
+    "status": "exited",
+    "agent": "claude",
+    "branch": "orchestral/task-17723247539",
+    "completedAt": 1772324808852,
+    "exitCode": 0,
+    "lastOutput": "[agent/embedded] workspace bootstrap file AGENTS.md is 23354 chars (limit 20000); truncating in injected context (sessionKey=task-1772324753905)\n\n```cpp\n#include <iostream>\n#include <vector>\n\n/**\n * Fast Fibonacci using Iteration (O(n) time, O(1) space)\n * This is generally the most efficient practical approach for standard integers.\n */\nunsigned long long fibonacci(int n) {\n    if (n <= 1) return n;\n\n    unsigned long long a = 0, b = 1;\n    for (int i = 2; i <= n; ++i) {\n        unsigned long long next = a + b;\n        a = b;\n        b = next;\n    }\n    return b;\n}\n\nint main() {\n    int n = 93; // Max n for 64-bit unsigned long long\n    std::cout << \"Fibonacci(\" << n << \") = \" << fibonacci(n) << std::endl;\n    return 0;\n}\n```\n\n### Key Optimizations:\n1.  **Iterative over Recursive:** Avoids $O(2^n)$ exponential time complexity and stack overflow.\n2.  **Space Efficiency:** Uses only two variables ($O(1)$ space) instead of an array/vector ($O(n)$ space).\n3.  **Type Selection:** Uses `unsigned long long` to handle values up to $n=93$. For larger numbers, you would need a BigInt library.\n\n**Note:** If you need to calculate $Fib(n)$ for extremely large $n$ (where $n > 10^9$) and only need the result modulo $M$, you should use **Matrix Exponentiation**, which runs in **$O(\\log n)$** time."
+  }
+]

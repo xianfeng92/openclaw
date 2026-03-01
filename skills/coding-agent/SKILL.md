@@ -1,15 +1,33 @@
 ---
 name: coding-agent
-description: Run Codex CLI, Claude Code, OpenCode, or Pi Coding Agent via background process for programmatic control.
+description: Run OpenClaw's built-in agent or external coding agents (Claude Code, Codex, Pi) for programmatic control.
 metadata:
   {
-    "openclaw": { "emoji": "🧩", "requires": { "anyBins": ["claude", "codex", "opencode", "pi"] } },
+    "openclaw": { "emoji": "🧩", "requires": { "anyBins": ["claude", "codex", "opencode", "pi", "openclaw"] } },
   }
 ---
 
-# Coding Agent (bash-first)
+# Coding Agent (Cross-Platform)
 
-Use **bash** (with optional background mode) for all coding agent work. Simple and effective.
+**Preferred: Use OpenClaw's built-in agent** - it's cross-platform and works on Windows, macOS, and Linux.
+
+## ⚠️ Windows Users: Use OpenClaw Built-in Agent
+
+On Windows, external tools like Codex have compatibility issues with PowerShell. **Use `openclaw agent` instead:**
+
+```bash
+# ✅ Recommended for Windows - native agent
+openclaw agent --local --workspace "C:\path\to\project" --message "Your task here"
+
+# ✅ Or use spawn for isolated worktrees
+/spawn "Your task description"
+```
+
+The OpenClaw built-in agent:
+- Works on all platforms (Windows, macOS, Linux)
+- Handles git operations automatically
+- Provides PTY emulation for correct output
+- Manages worktrees for isolated work
 
 ## ⚠️ PTY Mode Required!
 
@@ -51,29 +69,74 @@ bash command:"codex exec 'Your prompt'"
 
 ---
 
-## Quick Start: One-Shot Tasks
+## Windows-Specific Commands
 
-For quick prompts/chats, create a temp git repo and run:
+On Windows PowerShell/CMD, use OpenClaw's native agent instead of bash commands:
 
-```bash
-# Quick chat (Codex needs a git repo!)
-SCRATCH=$(mktemp -d) && cd $SCRATCH && git init && codex exec "Your prompt here"
+```powershell
+# PowerShell: Use OpenClaw built-in agent
+openclaw agent --local --workspace "C:\Projects\MyProject" --message "Add error handling"
 
-# Or in a real project - with PTY!
-bash pty:true workdir:~/Projects/myproject command:"codex exec 'Add error handling to the API calls'"
+# Or use the spawn command in OpenClaw Terminal
+/spawn "Add error handling to the API calls"
+
+# For temp directory work (PowerShell 7+ with && support):
+$scratch = New-TemporaryFile | % { Remove-Item $_; mkdir $_ }; cd $scratch; git init; openclaw agent --local --message "Your task"
+
+# For older PowerShell (no &&):
+$scratch = [System.IO.Path]::GetTempPath() + [Guid]::NewGuid()
+mkdir $scratch; cd $scratch
+git init
+openclaw agent --local --message "Your task here"
 ```
 
-**Why git init?** Codex refuses to run outside a trusted git directory. Creating a temp repo solves this for scratch work.
+**Do NOT use:** `&&` chaining in older PowerShell, `mktemp`, or bash-style paths (`~/project`).
 
 ---
 
-## The Pattern: workdir + background + pty
+## Unix/Linux/macOS: Quick Start
 
-For longer tasks, use background mode with PTY:
+On Unix-like systems with bash, you can use external tools or OpenClaw's built-in agent:
+
+```bash
+# ✅ Using OpenClaw built-in agent (recommended - works everywhere)
+openclaw agent --local --workspace ~/Projects/myproject --message "Add error handling to the API calls"
+
+# ✅ Quick temp directory setup (bash)
+SCRATCH=$(mktemp -d) && cd $SCRATCH && git init && openclaw agent --local --message "Your prompt here"
+
+# ⚠️ External tool example (Codex - requires separate installation)
+SCRATCH=$(mktemp -d) && cd $SCRATCH && git init && codex exec "Your prompt here"
+```
+
+**Why git init?** Some tools (like Codex) refuse to run outside a git directory. OpenClaw's agent is more flexible but still works best with git.
+
+---
+
+## Platform Detection
+
+Before running commands, check the platform:
+
+```javascript
+// In tool calls, check process.platform or use appropriate commands
+// - "win32": Use PowerShell/Windows commands or openclaw agent
+// - "darwin", "linux": Use bash commands
+```
+
+**Rules:**
+1. **On Windows**: Always prefer `openclaw agent --local` over external tools
+2. **On Unix**: Can use bash commands with `&&`, `mktemp`, etc.
+3. **When in doubt**: Use `openclaw agent --local` - it works everywhere
+
+---
+
+## The Pattern: workdir + background + pty (Unix only)
+
+For longer tasks on Unix-like systems, use background mode with PTY:
 
 ```bash
 # Start agent in target directory (with PTY!)
-bash pty:true workdir:~/project background:true command:"codex exec --full-auto 'Build a snake game'"
+bash pty:true workdir:~/project background:true command:"openclaw agent --local --message 'Build a snake game'"
 # Returns sessionId for tracking
 
 # Monitor progress
@@ -96,7 +159,23 @@ process action:kill sessionId:XXX
 
 ---
 
-## Codex CLI
+## Windows Pattern: Use spawn or agent command
+
+On Windows, use OpenClaw's orchestral commands instead of bash/process tools:
+
+```powershell
+# Use the spawn command (creates isolated worktree automatically)
+/spawn "Build a snake game with HTML5 Canvas"
+
+# Or use agent command directly
+openclaw agent --local --workspace "C:\Projects\MyProject" --message "Build a snake game"
+```
+
+---
+
+## Codex CLI (Unix/Linux/macOS only - NOT Windows)
+
+**⚠️ WARNING: Codex CLI does NOT work properly on Windows PowerShell.** Use `openclaw agent` instead on Windows.
 
 **Model:** `gpt-5.2-codex` is the default (set in ~/.codex/config.toml)
 
@@ -108,7 +187,7 @@ process action:kill sessionId:XXX
 | `--full-auto`   | Sandboxed but auto-approves in workspace           |
 | `--yolo`        | NO sandbox, NO approvals (fastest, most dangerous) |
 
-### Building/Creating
+### Building/Creating (Unix only)
 
 ```bash
 # Quick one-shot (auto-approves) - remember PTY!
@@ -116,6 +195,13 @@ bash pty:true workdir:~/project command:"codex exec --full-auto 'Build a dark mo
 
 # Background for longer work
 bash pty:true workdir:~/project background:true command:"codex --yolo 'Refactor the auth module'"
+```
+
+### Windows Alternative
+
+```powershell
+# Instead of codex on Windows, use:
+openclaw agent --local --workspace "C:\Projects\MyProject" --message "Build a dark mode toggle"
 ```
 
 ### Reviewing PRs
@@ -222,17 +308,20 @@ git worktree remove /tmp/issue-99
 
 ## ⚠️ Rules
 
-1. **Always use pty:true** - coding agents need a terminal!
-2. **Respect tool choice** - if user asks for Codex, use Codex.
+1. **Platform detection first:** Check if running on Windows (`process.platform === "win32"`) before using bash commands.
+2. **On Windows: Use `openclaw agent` or `/spawn`** - External tools like Codex have PowerShell compatibility issues.
+3. **On Unix: Can use external tools** - Codex, Claude Code, Pi all work with bash.
+4. **Always use pty:true on Unix** - coding agents need a terminal!
+5. **Respect tool choice** - if user asks for Codex (on Unix), use Codex.
+   - On Windows, inform user of limitation and suggest `openclaw agent` instead.
    - Orchestrator mode: do NOT hand-code patches yourself.
    - If an agent fails/hangs, respawn it or ask the user for direction, but don't silently take over.
-3. **Be patient** - don't kill sessions because they're "slow"
-4. **Monitor with process:log** - check progress without interfering
-5. **--full-auto for building** - auto-approves changes
-6. **vanilla for reviewing** - no special flags needed
-7. **Parallel is OK** - run many Codex processes at once for batch work
-8. **NEVER start Codex in ~/clawd/** - it'll read your soul docs and get weird ideas about the org chart!
-9. **NEVER checkout branches in ~/Projects/openclaw/** - that's the LIVE OpenClaw instance!
+6. **Be patient** - don't kill sessions because they're "slow"
+7. **Monitor with process:log** - check progress without interfering (Unix only)
+8. **--full-auto for building** - auto-approves changes (Codex Unix only)
+9. **vanilla for reviewing** - no special flags needed
+10. **Parallel is OK** - run many agent processes at once for batch work
+11. **NEVER start external agents in sensitive directories** - they'll read files they shouldn't.
 
 ---
 
@@ -275,10 +364,11 @@ This triggers an immediate wake event — Skippy gets pinged in seconds, not 10 
 
 ---
 
-## Learnings (Jan 2026)
+## Learnings (Feb 2026)
 
-- **PTY is essential:** Coding agents are interactive terminal apps. Without `pty:true`, output breaks or agent hangs.
-- **Git repo required:** Codex won't run outside a git directory. Use `mktemp -d && git init` for scratch work.
-- **exec is your friend:** `codex exec "prompt"` runs and exits cleanly - perfect for one-shots.
-- **submit vs write:** Use `submit` to send input + Enter, `write` for raw data without newline.
-- **Sass works:** Codex responds well to playful prompts. Asked it to write a haiku about being second fiddle to a space lobster, got: _"Second chair, I code / Space lobster sets the tempo / Keys glow, I follow"_ 🦞
+- **Cross-platform is key:** `openclaw agent --local` works on Windows, macOS, and Linux. Prefer it over external tools.
+- **Windows limitations:** PowerShell < 7 doesn't support `&&`, has no `mktemp`, uses different path syntax.
+- **PTY is essential on Unix:** Coding agents are interactive terminal apps. Without `pty:true`, output breaks or agent hangs.
+- **Git repo recommended:** Some tools won't run outside a git directory. Use `mktemp -d && git init` for scratch work on Unix.
+- **Spawn is your friend:** The `/spawn` command creates isolated worktrees automatically on all platforms.
+- **Sass works:** Agents respond well to playful prompts. Asked it to write a haiku about being second fiddle to a space lobster, got: _"Second chair, I code / Space lobster sets the tempo / Keys glow, I follow"_ 🦞

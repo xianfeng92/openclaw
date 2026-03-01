@@ -176,10 +176,13 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
     "terminal:exec-shell",
     async (event, command: string): Promise<{ runId: string }> => {
       const runId = uuidv4();
-      const shell = getShellCommand();
+      const shellCommand = getShellCommand();
 
-      const proc = spawn(shell, [], {
-        shell: true,
+      // On Windows, use cmd.exe explicitly with /c flag
+      // On Unix, use /bin/sh with -lc flag
+      const isWindows = process.platform === "win32";
+      const proc = spawn(isWindows ? shellCommand : "/bin/sh", isWindows ? ["/c", command] : ["-lc", command], {
+        shell: false, // Don't use shell: true - we're invoking shell explicitly
         cwd: process.cwd(),
         env: process.env,
         windowsHide: true,
@@ -371,12 +374,19 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
   // Helper to execute shell command and get output
   async function execShell(command: string): Promise<ShellResult> {
     try {
-      return await execAsync(command, {
+      // On Windows, explicitly use cmd.exe to avoid PowerShell compatibility issues
+      // On Unix, use the default shell (bash/sh)
+      const isWindows = process.platform === "win32";
+      const options = {
         cwd: process.cwd(),
         env: process.env,
         windowsHide: true,
         timeout: 30000,
-      }) as ShellResult;
+        // Explicitly set shell on Windows to use cmd.exe
+        ...(isWindows ? { shell: "cmd.exe" } : {}),
+      };
+
+      return await execAsync(command, options) as ShellResult;
     } catch (err: unknown) {
       const error = err as { stdout?: string; stderr?: string };
       return {

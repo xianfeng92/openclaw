@@ -637,18 +637,19 @@ export async function handleTasksCommand(
 
   // Handle clear subcommand
   if (subcommand === "clear" || subcommand === "purge") {
-    writeLine(terminal, "Hiding completed tasks from sidebar...");
+    writeLine(terminal, "Clearing completed tasks from storage...");
 
     try {
-      // Hide completed tasks from sidebar (local cache only)
-      toggleCompletedTasksVisibility();
+      // Actually delete completed tasks from backend storage
+      const result = await window.terminalAPI.orchestralTasks?.({}, "purge");
 
-      // Also refresh to get latest state
-      await refreshSidebarTasks();
-
-      writeHtml(terminal, `<span class="system-ok">[ok] Completed tasks hidden from sidebar</span>`);
-      writeLine(terminal, "");
-      writeHtml(terminal, `<span class="system-info">Use '/tasks show --all' to view all tasks including completed</span>`);
+      if (result?.success) {
+        writeHtml(terminal, `<span class="system-ok">[ok] ${result.message || "Tasks cleared"}</span>`);
+        // Refresh sidebar to show updated state
+        await refreshSidebarTasks();
+      } else {
+        writeHtml(terminal, `<span class="system-error">[err] ${result?.error || "Failed to clear tasks"}</span>`);
+      }
     } catch (err) {
       writeHtml(terminal, `<span class="system-error">[err] Error: ${escapeHtml(String(err))}</span>`);
     }

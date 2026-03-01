@@ -935,8 +935,25 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
   // Tasks command
   ipcMain.handle(
     "terminal:orchestral-tasks",
-    async (_event, filters: Record<string, string>): Promise<any> => {
+    async (_event, filters: Record<string, string>, action?: string): Promise<any> => {
       try {
+        // Handle purge/clear action to actually delete tasks from storage
+        if (action === "purge" || action === "clear") {
+          let deletedCount = 0;
+          for (const [taskId, task] of orchestralTasks.entries()) {
+            // Only delete completed or failed tasks, keep running ones
+            if (task.status === "completed" || task.status === "failed") {
+              orchestralTasks.delete(taskId);
+              deletedCount++;
+            }
+          }
+          saveTasks();
+          return {
+            success: true,
+            message: `Deleted ${deletedCount} completed/failed tasks from storage`,
+          };
+        }
+
         syncTaskStatusesFromAgentManager();
         let tasks = Array.from(orchestralTasks.values())
           .filter(t => t.status !== "killed");

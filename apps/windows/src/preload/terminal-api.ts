@@ -33,7 +33,7 @@ export interface TerminalAPI {
 
   orchestralAgents: (action: string, args: string[]) => Promise<any>;
 
-  orchestralTasks: (filters: Record<string, string>) => Promise<any>;
+  orchestralTasks: (filters: Record<string, string>, action?: string) => Promise<any>;
 
   // Agent process management
   agentStart: (opts: {
@@ -278,7 +278,7 @@ const api: TerminalAPI = {
   // Orchestral commands
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),
   orchestralAgents: (action, args) => ipcRenderer.invoke("terminal:orchestral-agents", action, args),
-  orchestralTasks: (filters) => ipcRenderer.invoke("terminal:orchestral-tasks", filters),
+  orchestralTasks: (filters, action) => ipcRenderer.invoke("terminal:orchestral-tasks", filters, action),
 
   // Agent process management
   agentStart: (opts) => ipcRenderer.invoke("terminal:agent-start", opts),

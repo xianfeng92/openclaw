@@ -84,6 +84,8 @@ type AgentCliLaunch = {
 export class WindowsAgentProcessManager {
   private processes = new Map<string, WindowsAgentProcess>();
   private projectPath: string;
+  private static readonly MAX_RETRIES = 3;
+  private static readonly RETRY_DELAY_MS = 500;
 
   constructor(projectPath: string) {
     this.projectPath = projectPath;
@@ -92,7 +94,7 @@ export class WindowsAgentProcessManager {
   }
 
   /**
-   * Start an agent process
+   * Start an agent process with retry logic
    */
   async startAgent(opts: AgentStartOptions): Promise<AgentStartResult> {
     const { taskId, description, worktree, agent, branch, webContents, useContext, relevantContext } = opts;
@@ -127,131 +129,161 @@ export class WindowsAgentProcessManager {
 
     this.processes.set(taskId, agentProcess);
 
-    try {
-      const launchContext = this.resolveLaunchContext(workingDir);
-      const launch = this.buildAgentLaunch({
-        taskId,
-        description,
-        workingDir,
-        runnerCwd: launchContext.runnerCwd,
-        includeWorkspaceFlag: launchContext.includeWorkspaceFlag,
-        note: launchContext.note,
-        agent,
-        useContext,
-        relevantContext,
-      });
+    // Build launch configuration (outside retry loop - only compute once)
+    const launchContext = this.resolveLaunchContext(workingDir);
+    const launch = this.buildAgentLaunch({
+      taskId,
+      description,
+      workingDir,
+      runnerCwd: launchContext.runnerCwd,
+      includeWorkspaceFlag: launchContext.includeWorkspaceFlag,
+      note: launchContext.note,
+      agent,
+      useContext,
+      relevantContext,
+    });
 
-      // Send minimal initial output - don't send anything yet, wait for agent to be ready
-      // Build happens silently in background
+    // Retry logic for spawning the agent
+    let lastError: Error | undefined;
+    let proc: ReturnType<typeof spawn> | undefined;
 
-      const proc = spawn(launch.command, launch.args, {
-        cwd: launch.cwd,
-        env: {
-          ...process.env,
-          // Ensure openclaw can find its config
-          OPENCLAW_PROFILE: "desktop",
-          // Suppress noisy build logs
-          OPENCLAW_QUIET_BUILD: "1",
-        },
-        shell: false,
-        windowsHide: true, // Hide the console window on Windows
-        stdio: ["ignore", "pipe", "pipe"], // Pipe stdout and stderr
-      });
-
-      agentProcess.shellProcess = proc;
-      agentProcess.pid = proc.pid ?? 0;
-      agentProcess.status = "running";
-
-      // Set up output handlers
-      proc.stdout?.on("data", (data: Buffer) => {
-        const output = data.toString();
-        this.addToBuffer(taskId, output);
-        this.sendOutput(taskId, output);
-      });
-
-      proc.stderr?.on("data", (data: Buffer) => {
-        const output = data.toString();
-        // Filter out noisy build logs
-        const filtered = this.filterBuildLogs(output);
-        if (filtered) {
-          this.addToBuffer(taskId, filtered);
-          this.sendOutput(taskId, `[stderr] ${filtered}`);
-        }
-      });
-
-      // Handle exit
-      proc.on("close", (code: number | null) => {
-        agentProcess.status = "exited";
-        agentProcess.exitCode = code;
-        agentProcess.completedAt = Date.now();
-        agentProcess.lastOutput = this.getOutputTail(agentProcess.outputBuffer, 80);
-        const parsedFailure = this.extractFailureReason(agentProcess.lastOutput);
-        if (parsedFailure) {
-          agentProcess.failureReason = parsedFailure;
-        } else if (code !== null && code !== 0) {
-          agentProcess.failureReason = `Agent exited with code ${code}`;
-        } else {
-          agentProcess.failureReason = undefined;
-        }
-        this.sendOutput(taskId, `\n[agent] Process exited with code ${code}\n`);
-        this.saveTasks();
-      });
-
-      // Handle errors
-      proc.on("error", (err: Error) => {
-        agentProcess.status = "exited";
-        agentProcess.completedAt = Date.now();
-        agentProcess.failureReason = err.message;
-        this.sendOutput(taskId, `[agent] Error: ${err.message}\n`);
-        this.saveTasks();
-      });
-
-      // Save tasks
-      this.saveTasks();
-
-      // Detect immediate launch failures so callers don't report a false "running" state.
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      if (proc.exitCode !== null && proc.exitCode !== undefined) {
-        const lastOutput = this.getOutputTail(agentProcess.outputBuffer, 80);
-        const parsedFailure = this.extractFailureReason(lastOutput);
-        const hasFailure = proc.exitCode !== 0 || !!parsedFailure;
-        if (!hasFailure) {
-          return {
-            success: true,
-            pid: proc.pid ?? 0,
-            command: launch.commandForDisplay,
-          };
-        }
-
-        agentProcess.status = "exited";
-        agentProcess.exitCode = proc.exitCode;
-        agentProcess.completedAt = Date.now();
-        agentProcess.lastOutput = lastOutput;
-        agentProcess.failureReason =
-          parsedFailure ?? `Agent exited immediately (code ${proc.exitCode})`;
-        this.saveTasks();
-        return {
-          success: false,
-          error: agentProcess.failureReason,
-          command: launch.commandForDisplay,
-          exitCode: proc.exitCode,
-          lastOutput,
-        };
+    for (let attempt = 1; attempt <= WindowsAgentProcessManager.MAX_RETRIES; attempt++) {
+      if (attempt > 1) {
+        console.log(`[AgentManager] Retry ${attempt}/${WindowsAgentProcessManager.MAX_RETRIES} for task ${taskId}`);
+        // Small delay between retries
+        await new Promise((resolve) => setTimeout(resolve, WindowsAgentProcessManager.RETRY_DELAY_MS));
       }
 
-      return {
-        success: true,
-        pid: proc.pid ?? 0,
-        command: launch.commandForDisplay,
-      };
-    } catch (err) {
+      try {
+        // Spawn the process
+        proc = spawn(launch.command, launch.args, {
+          cwd: launch.cwd,
+          env: {
+            ...process.env,
+            // Ensure openclaw can find its config
+            OPENCLAW_PROFILE: "desktop",
+            // Suppress noisy build logs
+            OPENCLAW_QUIET_BUILD: "1",
+          },
+          shell: false,
+          windowsHide: true, // Hide the console window on Windows
+          stdio: ["ignore", "pipe", "pipe"], // Pipe stdout and stderr
+        });
+
+        // Successfully spawned - exit retry loop
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt >= WindowsAgentProcessManager.MAX_RETRIES) {
+          // Final retry failed
+          agentProcess.status = "exited";
+          this.processes.delete(taskId);
+          return {
+            success: false,
+            error: `Failed to spawn agent after ${WindowsAgentProcessManager.MAX_RETRIES} attempts: ${lastError.message}`,
+          };
+        }
+        // Continue to next retry
+      }
+    }
+
+    // If we still don't have a process, something went wrong
+    if (!proc) {
       agentProcess.status = "exited";
       this.processes.delete(taskId);
       return {
         success: false,
-        error: err instanceof Error ? err.message : String(err),
+        error: lastError?.message ?? "Failed to spawn agent",
       };
     }
+
+    // Process spawned successfully - set up handlers (only once)
+    agentProcess.shellProcess = proc;
+    agentProcess.pid = proc.pid ?? 0;
+    agentProcess.status = "running";
+
+    // Set up output handlers
+    proc.stdout?.on("data", (data: Buffer) => {
+      const output = data.toString();
+      this.addToBuffer(taskId, output);
+      this.sendOutput(taskId, output);
+    });
+
+    proc.stderr?.on("data", (data: Buffer) => {
+      const output = data.toString();
+      // Filter out noisy build logs
+      const filtered = this.filterBuildLogs(output);
+      if (filtered) {
+        this.addToBuffer(taskId, filtered);
+        this.sendOutput(taskId, `[stderr] ${filtered}`);
+      }
+    });
+
+    // Handle exit
+    proc.on("close", (code: number | null) => {
+      agentProcess.status = "exited";
+      agentProcess.exitCode = code;
+      agentProcess.completedAt = Date.now();
+      agentProcess.lastOutput = this.getOutputTail(agentProcess.outputBuffer, 80);
+      const parsedFailure = this.extractFailureReason(agentProcess.lastOutput);
+      if (parsedFailure) {
+        agentProcess.failureReason = parsedFailure;
+      } else if (code !== null && code !== 0) {
+        agentProcess.failureReason = `Agent exited with code ${code}`;
+      } else {
+        agentProcess.failureReason = undefined;
+      }
+      this.sendOutput(taskId, `\n[agent] Process exited with code ${code}\n`);
+      this.saveTasks();
+    });
+
+    // Handle errors
+    proc.on("error", (err: Error) => {
+      agentProcess.status = "exited";
+      agentProcess.completedAt = Date.now();
+      agentProcess.failureReason = err.message;
+      this.sendOutput(taskId, `[agent] Error: ${err.message}\n`);
+      this.saveTasks();
+    });
+
+    // Save tasks
+    this.saveTasks();
+
+    // Detect immediate launch failures so callers don't report a false "running" state.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    if (proc.exitCode !== null && proc.exitCode !== undefined) {
+      const lastOutput = this.getOutputTail(agentProcess.outputBuffer, 80);
+      const parsedFailure = this.extractFailureReason(lastOutput);
+      const hasFailure = proc.exitCode !== 0 || !!parsedFailure;
+      if (!hasFailure) {
+        return {
+          success: true,
+          pid: proc.pid ?? 0,
+          command: launch.commandForDisplay,
+        };
+      }
+
+      agentProcess.status = "exited";
+      agentProcess.exitCode = proc.exitCode;
+      agentProcess.completedAt = Date.now();
+      agentProcess.lastOutput = lastOutput;
+      agentProcess.failureReason =
+        parsedFailure ?? `Agent exited immediately (code ${proc.exitCode})`;
+      this.saveTasks();
+      return {
+        success: false,
+        error: agentProcess.failureReason,
+        command: launch.commandForDisplay,
+        exitCode: proc.exitCode,
+        lastOutput,
+      };
+    }
+
+    return {
+      success: true,
+      pid: proc.pid ?? 0,
+      command: launch.commandForDisplay,
+    };
   }
 
   /**

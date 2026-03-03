@@ -2069,6 +2069,7 @@ async function handleConfigCommand(
 <span class="system-info">Usage:</span>
   /config show
   /config set &lt;key&gt; &lt;value&gt;
+  /config apply
   /config validate
   /config reset
   /config path
@@ -2079,6 +2080,10 @@ async function handleConfigCommand(
   ai.providers.openai.baseUrl
   ai.providers.openai.model
   ai.providers.openai.maxTokens
+  ai.providers.google.apiKey
+  ai.providers.google.baseUrl
+  ai.providers.google.model
+  ai.providers.google.maxTokens
   workspace.path
   workspace.autoCreate
   gateway.port
@@ -2088,7 +2093,9 @@ async function handleConfigCommand(
 <span class="system-info">Examples:</span>
   /config set gateway.port 19001
   /config set gateway.autoStart true
-  /config set ai.defaultProvider openai
+  /config set ai.defaultProvider google
+  /config set ai.providers.google.model gemini-2.5-flash
+  /config apply
   /config set workspace.path "./workspace"
       `.trim(),
       );
@@ -2168,6 +2175,27 @@ async function handleConfigCommand(
 
       writeSection(terminal, "Config Validation", "[config]", writeHtml);
       writeHtml(terminal, `<span class="system-info">Path: ${escapeHtml(result.configPath)}</span>`);
+      renderValidation(result.validation, result.issues);
+      return;
+    }
+
+    case "apply": {
+      const result = await window.terminalAPI.configApply();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to apply config")}</span>`);
+        return;
+      }
+
+      writeHtml(terminal, `<span class="system-ok">[ok] Config applied to live gateway</span>`);
+      const runtimeProvider = asRecord(result.runtimeProvider);
+      if (runtimeProvider) {
+        const provider = typeof runtimeProvider.provider === "string" ? runtimeProvider.provider : "unknown";
+        const model = typeof runtimeProvider.model === "string" ? runtimeProvider.model : "unknown";
+        writeHtml(
+          terminal,
+          `<span class="system-info">Runtime Provider: ${escapeHtml(provider)} / ${escapeHtml(model)}</span>`,
+        );
+      }
       renderValidation(result.validation, result.issues);
       return;
     }

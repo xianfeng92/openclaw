@@ -79,6 +79,16 @@ export interface TerminalAPI {
     stateDir: string;
     error?: string;
   }>;
+  configApply: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    runtimeProvider?: unknown;
+    validation?: TerminalConfigValidation;
+    warnings?: string[];
+    issues?: TerminalConfigIssue[];
+    error?: string;
+  }>;
 
   // Orchestral commands
   orchestralSpawn: (opts: {
@@ -343,6 +353,7 @@ const api: TerminalAPI = {
   configValidate: () => ipcRenderer.invoke("terminal:config-validate"),
   configReset: () => ipcRenderer.invoke("terminal:config-reset"),
   configPath: () => ipcRenderer.invoke("terminal:config-path"),
+  configApply: () => ipcRenderer.invoke("terminal:config-apply"),
 
   // Orchestral commands
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),

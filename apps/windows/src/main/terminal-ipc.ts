@@ -10,7 +10,7 @@ import {
   resolveCyDeckConfigPath,
   resolveCyDeckStateDir,
 } from "./cydeck-config.js";
-import type { CyDeckConfigIssue, CyDeckConfigValidation } from "./cydeck-config.js";
+import type { CyDeckConfigIssue, CyDeckConfigValidation, CyDeckRuntimeProviderConfig } from "./cydeck-config.js";
 import {
   assignConfigPathValue,
   coerceCyDeckConfigValue,
@@ -254,6 +254,13 @@ type TerminalConfigResetResult = TerminalConfigBaseResult & {
   issues?: CyDeckConfigIssue[];
 };
 
+type TerminalConfigApplyResult = TerminalConfigBaseResult & {
+  runtimeProvider?: unknown;
+  validation?: CyDeckConfigValidation;
+  warnings?: string[];
+  issues?: CyDeckConfigIssue[];
+};
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -332,6 +339,28 @@ function writeConfigDocument(
     return {
       success: false,
       error: `Failed to write config file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+function applyRuntimeProviderToGateway(
+  runtimeProvider: CyDeckRuntimeProviderConfig,
+): { success: boolean; error?: string } {
+  if (!gatewayManagerInstance) {
+    return { success: false, error: "Gateway is not initialized" };
+  }
+
+  if (typeof gatewayManagerInstance.reloadRuntimeProvider !== "function") {
+    return { success: false, error: "Current gateway does not support runtime provider reload" };
+  }
+
+  try {
+    gatewayManagerInstance.reloadRuntimeProvider(runtimeProvider);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
     };
   }
 }
@@ -499,6 +528,43 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
     }
   });
 
+  // Apply effective runtime provider to the live gateway without restarting the app.
+  ipcMain.handle("terminal:config-apply", async (): Promise<TerminalConfigApplyResult> => {
+    try {
+      const effective = getEffectiveConfig();
+      const applyResult = applyRuntimeProviderToGateway(effective.runtimeProvider);
+      if (!applyResult.success) {
+        return {
+          success: false,
+          configPath: effective.configPath,
+          stateDir: effective.stateDir,
+          runtimeProvider: effective.runtimeProvider,
+          validation: effective.validation,
+          warnings: effective.warnings,
+          issues: effective.issues,
+          error: applyResult.error,
+        };
+      }
+
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        runtimeProvider: effective.runtimeProvider,
+        validation: effective.validation,
+        warnings: effective.warnings,
+        issues: effective.issues,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath: resolveCyDeckConfigPath(),
+        stateDir: resolveCyDeckStateDir(),
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
   // Reset config back to the default CyDeck shape.
   ipcMain.handle("terminal:config-reset", async (): Promise<TerminalConfigResetResult> => {
     const configPath = resolveCyDeckConfigPath();
@@ -593,6 +659,24 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
 
       try {
         const effective = getEffectiveConfig();
+        const shouldApplyRuntimeProvider = normalizedKey === "ai.defaultProvider" || normalizedKey.startsWith("ai.providers.");
+        if (shouldApplyRuntimeProvider) {
+          const applyResult = applyRuntimeProviderToGateway(effective.runtimeProvider);
+          if (!applyResult.success) {
+            return {
+              success: false,
+              configPath: effective.configPath,
+              stateDir: effective.stateDir,
+              key: normalizedKey,
+              value: coerced.value,
+              validation: effective.validation,
+              warnings: effective.warnings,
+              issues: effective.issues,
+              error: applyResult.error,
+            };
+          }
+        }
+
         return {
           success: true,
           configPath: effective.configPath,

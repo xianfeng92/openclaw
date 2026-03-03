@@ -1,3 +1,5 @@
+import type { CyDeckRuntimeProviderConfig } from "./cydeck-config.js";
+
 export type GatewayStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 
 export type GatewayState = {
@@ -16,6 +18,7 @@ export interface GatewayLike {
   stop(): Promise<void>;
   restart(): Promise<void>;
   isRunning(): boolean;
+  reloadRuntimeProvider?(runtimeProvider?: CyDeckRuntimeProviderConfig): void;
   rotateAuthToken(newToken?: string): { token: string; path: string } | void;
   on(event: "state-changed", listener: GatewayStateChangeListener): this;
   off(event: "state-changed", listener: GatewayStateChangeListener): this;

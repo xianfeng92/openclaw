@@ -1,5 +1,5 @@
 import net from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { EmbeddedGateway, type AIProvider } from "./embedded-gateway.js";
 
@@ -272,6 +272,330 @@ describe("embedded-gateway protocol", () => {
       expect((payload.text as string).length).toBeGreaterThan(0);
     } finally {
       await gateway.stop();
+    }
+  });
+
+  it("supports google runtime provider without OpenAI compatibility mode", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const url = String(input);
+        expect(url).toContain("/models/gemini-2.0-flash:generateContent");
+        expect(url).toContain("key=gemini-test-key");
+
+        const requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        const contents = requestBody.contents as Array<Record<string, unknown>>;
+        expect(Array.isArray(contents)).toBe(true);
+        expect(String(contents[0]?.role)).toBe("user");
+
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "hello from gemini-native" }],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      },
+    );
+
+    Object.assign(globalThis, { fetch: fetchMock });
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      runtimeProvider: {
+        provider: "google",
+        apiKey: "gemini-test-key",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        model: "gemini-2.0-flash",
+        maxTokens: 2048,
+      },
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "google-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello from user",
+          deliver: true,
+          idempotencyKey: "google-run-1",
+        },
+      });
+
+      const started = await nextFrame(ws);
+      expect(started.ok).toBe(true);
+      expect((started.payload as Record<string, unknown>).runId).toBe("google-run-1");
+
+      const delta = await waitForChatState(ws, "delta");
+      expect((delta.payload as Record<string, unknown>).text).toBe("hello from gemini-native");
+      await waitForChatState(ws, "final");
+
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      await gateway.stop();
+      Object.assign(globalThis, { fetch: originalFetch });
+    }
+  });
+
+  it("uses HTTPS_PROXY dispatcher for google runtime provider when proxy is configured", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalHttpsProxy = process.env.HTTPS_PROXY;
+    const originalNoProxy = process.env.NO_PROXY;
+
+    process.env.HTTPS_PROXY = "http://127.0.0.1:7890";
+    delete process.env.NO_PROXY;
+
+    const fetchMock = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const requestInit = init as RequestInit & { dispatcher?: unknown };
+        expect(requestInit.dispatcher).toBeDefined();
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "proxy-ok" }],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      },
+    );
+
+    Object.assign(globalThis, { fetch: fetchMock });
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      runtimeProvider: {
+        provider: "google",
+        apiKey: "gemini-test-key",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        model: "gemini-2.0-flash",
+        maxTokens: 2048,
+      },
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "proxy-google-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello via proxy",
+          deliver: true,
+          idempotencyKey: "proxy-run-1",
+        },
+      });
+
+      await nextFrame(ws); // started
+      const delta = await waitForChatState(ws, "delta");
+      expect((delta.payload as Record<string, unknown>).text).toBe("proxy-ok");
+      await waitForChatState(ws, "final");
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      await gateway.stop();
+      Object.assign(globalThis, { fetch: originalFetch });
+      if (originalHttpsProxy === undefined) {
+        delete process.env.HTTPS_PROXY;
+      } else {
+        process.env.HTTPS_PROXY = originalHttpsProxy;
+      }
+      if (originalNoProxy === undefined) {
+        delete process.env.NO_PROXY;
+      } else {
+        process.env.NO_PROXY = originalNoProxy;
+      }
+    }
+  });
+
+  it("bypasses proxy dispatcher when NO_PROXY matches google host", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalHttpsProxy = process.env.HTTPS_PROXY;
+    const originalNoProxy = process.env.NO_PROXY;
+
+    process.env.HTTPS_PROXY = "http://127.0.0.1:7890";
+    process.env.NO_PROXY = "generativelanguage.googleapis.com";
+
+    const fetchMock = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const requestInit = init as RequestInit & { dispatcher?: unknown };
+        expect(requestInit.dispatcher).toBeUndefined();
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "no-proxy-ok" }],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      },
+    );
+
+    Object.assign(globalThis, { fetch: fetchMock });
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      runtimeProvider: {
+        provider: "google",
+        apiKey: "gemini-test-key",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        model: "gemini-2.0-flash",
+        maxTokens: 2048,
+      },
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "no-proxy-google-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello no proxy",
+          deliver: true,
+          idempotencyKey: "no-proxy-run-1",
+        },
+      });
+
+      await nextFrame(ws); // started
+      const delta = await waitForChatState(ws, "delta");
+      expect((delta.payload as Record<string, unknown>).text).toBe("no-proxy-ok");
+      await waitForChatState(ws, "final");
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      await gateway.stop();
+      Object.assign(globalThis, { fetch: originalFetch });
+      if (originalHttpsProxy === undefined) {
+        delete process.env.HTTPS_PROXY;
+      } else {
+        process.env.HTTPS_PROXY = originalHttpsProxy;
+      }
+      if (originalNoProxy === undefined) {
+        delete process.env.NO_PROXY;
+      } else {
+        process.env.NO_PROXY = originalNoProxy;
+      }
+    }
+  });
+
+  it("reloads runtime provider without restarting gateway", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "reloaded-provider-ok" }],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    );
+    Object.assign(globalThis, { fetch: fetchMock });
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      runtimeProvider: {
+        provider: "google",
+        apiKey: "",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        model: "gemini-2.0-flash",
+        maxTokens: 2048,
+      },
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "chat-before-reload",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "first",
+          deliver: true,
+          idempotencyKey: "reload-run-1",
+        },
+      });
+      await nextFrame(ws); // started
+      const beforeReload = await waitForChatState(ws, "final");
+      expect(String((beforeReload.payload as Record<string, unknown>).text)).toContain("apiKey is empty");
+
+      gateway.reloadRuntimeProvider({
+        provider: "google",
+        apiKey: "gemini-test-key",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        model: "gemini-2.0-flash",
+        maxTokens: 2048,
+      });
+
+      sendRequest(ws, {
+        id: "chat-after-reload",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "second",
+          deliver: true,
+          idempotencyKey: "reload-run-2",
+        },
+      });
+      await nextFrame(ws); // started
+      const delta = await waitForChatState(ws, "delta");
+      expect((delta.payload as Record<string, unknown>).text).toBe("reloaded-provider-ok");
+      await waitForChatState(ws, "final");
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      await gateway.stop();
+      Object.assign(globalThis, { fetch: originalFetch });
     }
   });
 });

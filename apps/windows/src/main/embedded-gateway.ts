@@ -1,14 +1,17 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { WebSocketServer, type WebSocket } from "ws";
+import { ProxyAgent, type Dispatcher } from "undici";
 import type { CyDeckRuntimeProviderConfig } from "./cydeck-config.js";
 import { rotateGatewayAuthToken } from "./gateway-auth.js";
 import type { GatewayLike, GatewayState, GatewayStatus } from "./gateway-like.js";
 
 const GATEWAY_PROTOCOL_VERSION = 3;
 const DEFAULT_PORT = 19001;
-const DEFAULT_MODEL = "gpt-4o-mini";
-const DEFAULT_BASE_URL = "https://api.openai.com/v1";
+const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
+const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1";
+const GOOGLE_DEFAULT_MODEL = "gemini-2.0-flash";
+const GOOGLE_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const WS_READY_STATE_OPEN = 1;
 const SESSION_MAX_MESSAGES = 40;
 
@@ -67,19 +70,100 @@ export type EmbeddedGatewayOptions = {
   aiProviderOverride?: AIProvider | null;
 };
 
+type RequestInitWithDispatcher = RequestInit & { dispatcher?: Dispatcher };
+
+function shouldBypassProxy(hostname: string, noProxyRaw?: string): boolean {
+  if (!noProxyRaw || !noProxyRaw.trim()) {
+    return false;
+  }
+
+  const host = hostname.trim().toLowerCase();
+  const rules = noProxyRaw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const rule of rules) {
+    if (rule === "*") {
+      return true;
+    }
+    const normalizedRule = rule.startsWith(".") ? rule.slice(1) : rule;
+    if (host === normalizedRule || host.endsWith(`.${normalizedRule}`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function createProxyDispatcher(baseUrl: string): Dispatcher | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return undefined;
+  }
+
+  const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+  if (shouldBypassProxy(parsed.hostname, noProxy)) {
+    return undefined;
+  }
+
+  const proxyUrl =
+    (parsed.protocol === "https:" ? process.env.HTTPS_PROXY || process.env.https_proxy : "") ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy;
+
+  if (!proxyUrl || !proxyUrl.trim()) {
+    return undefined;
+  }
+
+  try {
+    return new ProxyAgent(proxyUrl.trim());
+  } catch {
+    return undefined;
+  }
+}
+
+function formatProviderError(err: unknown): string {
+  if (!(err instanceof Error)) {
+    return String(err);
+  }
+
+  const withCause = err as Error & { cause?: unknown };
+  const cause = withCause.cause;
+
+  if (cause instanceof Error && cause.message) {
+    return `${err.message} (${cause.message})`;
+  }
+
+  if (cause && typeof cause === "object") {
+    const causeRecord = cause as Record<string, unknown>;
+    if (typeof causeRecord.message === "string" && causeRecord.message.trim()) {
+      return `${err.message} (${causeRecord.message})`;
+    }
+  }
+
+  return err.message;
+}
+
 class OpenAIProvider implements AIProvider {
+  private readonly dispatcher: Dispatcher | undefined;
+
   constructor(
     private readonly apiKey: string,
     private readonly baseUrl: string,
     private readonly model: string,
-  ) {}
+  ) {
+    this.dispatcher = createProxyDispatcher(baseUrl);
+  }
 
   async chat(
     messages: ChatMessage[],
     onChunk?: (text: string) => Promise<void>,
     signal?: AbortSignal,
   ): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const requestInit: RequestInitWithDispatcher = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -91,7 +175,12 @@ class OpenAIProvider implements AIProvider {
         stream: Boolean(onChunk),
       }),
       signal,
-    });
+    };
+    if (this.dispatcher) {
+      requestInit.dispatcher = this.dispatcher;
+    }
+
+    const response = await fetch(`${normalizeBaseUrl(this.baseUrl)}/chat/completions`, requestInit);
 
     if (!response.ok) {
       throw new Error(`AI API error: ${response.status} ${response.statusText}`);
@@ -202,6 +291,112 @@ class OpenAIProvider implements AIProvider {
   }
 }
 
+class GoogleProvider implements AIProvider {
+  private readonly dispatcher: Dispatcher | undefined;
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly baseUrl: string,
+    private readonly model: string,
+    private readonly maxTokens: number,
+  ) {
+    this.dispatcher = createProxyDispatcher(baseUrl);
+  }
+
+  async chat(
+    messages: ChatMessage[],
+    onChunk?: (text: string) => Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const systemMessages = messages
+      .filter((message) => message.role === "system")
+      .map((message) => message.content.trim())
+      .filter(Boolean);
+
+    const contents = messages
+      .filter((message) => message.role !== "system")
+      .map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: message.content }],
+      }));
+
+    const endpoint = this.buildEndpoint();
+    const payload: Record<string, unknown> = {
+      contents,
+      generationConfig: {
+        maxOutputTokens: Math.max(1, Math.floor(this.maxTokens)),
+      },
+    };
+    if (systemMessages.length > 0) {
+      payload.systemInstruction = {
+        parts: [{ text: systemMessages.join("\n\n") }],
+      };
+    }
+
+    const requestInit: RequestInitWithDispatcher = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal,
+    };
+    if (this.dispatcher) {
+      requestInit.dispatcher = this.dispatcher;
+    }
+
+    const response = await fetch(endpoint, requestInit);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      const detail = errorText ? ` - ${errorText}` : "";
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText}${detail}`);
+    }
+
+    const data = (await response.json()) as Record<string, unknown>;
+    const text = this.extractText(data);
+    if (onChunk && text) {
+      await onChunk(text);
+    }
+    return text;
+  }
+
+  private buildEndpoint(): string {
+    const normalizedBase = normalizeBaseUrl(this.baseUrl);
+    const encodedModel = encodeURIComponent(this.model);
+    const encodedKey = encodeURIComponent(this.apiKey);
+    return `${normalizedBase}/models/${encodedModel}:generateContent?key=${encodedKey}`;
+  }
+
+  private extractText(data: Record<string, unknown>): string {
+    const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+    const first = candidates[0] as Record<string, unknown> | undefined;
+    if (!first || typeof first !== "object") {
+      return "";
+    }
+
+    const content = first.content as Record<string, unknown> | undefined;
+    if (!content || typeof content !== "object") {
+      return "";
+    }
+
+    const parts = Array.isArray(content.parts) ? content.parts : [];
+    return parts
+      .map((part) => {
+        if (!part || typeof part !== "object") {
+          return "";
+        }
+        const text = (part as Record<string, unknown>).text;
+        return typeof text === "string" ? text : "";
+      })
+      .join("");
+  }
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/, "");
+}
+
 function isAbortError(err: unknown): boolean {
   if (!err) {
     return false;
@@ -219,8 +414,9 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
   private wss: WebSocketServer | null = null;
   private readonly sessions = new Map<string, ChatSession>();
   private readonly connections = new Set<ConnectionContext>();
-  private readonly aiProvider: AIProvider | null;
-  private readonly aiUnavailableReason: string;
+  private aiProvider: AIProvider | null = null;
+  private aiUnavailableReason = "";
+  private readonly runtimeProviderLocked: boolean;
 
   private status: GatewayStatus = "stopped";
   private lastError: string | undefined;
@@ -234,49 +430,78 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     const normalizedPort = Number.isFinite(port) && port > 0 ? Math.floor(port) : DEFAULT_PORT;
     this.port = normalizedPort;
     this.authToken = authToken;
+    this.runtimeProviderLocked = options.aiProviderOverride !== undefined;
 
-    if (options.aiProviderOverride !== undefined) {
-      this.aiProvider = options.aiProviderOverride;
+    if (this.runtimeProviderLocked) {
+      this.aiProvider = options.aiProviderOverride ?? null;
       this.aiUnavailableReason = options.aiProviderOverride
         ? ""
         : "AI chat is disabled for this Embedded Gateway instance.";
       return;
     }
 
-    const runtimeProvider = options.runtimeProvider;
-    if (runtimeProvider) {
-      const apiKey = runtimeProvider.apiKey.trim();
-      const baseUrl = runtimeProvider.baseUrl.trim() || DEFAULT_BASE_URL;
-      const model = runtimeProvider.model.trim() || DEFAULT_MODEL;
+    this.reloadRuntimeProvider(options.runtimeProvider);
+  }
 
-      if (runtimeProvider.provider !== "openai") {
-        this.aiProvider = null;
-        this.aiUnavailableReason =
-          `Provider "${runtimeProvider.provider}" is not supported by Embedded Gateway yet.`;
-      } else if (!apiKey) {
-        this.aiProvider = null;
-        this.aiUnavailableReason =
-          `Provider "${runtimeProvider.provider}" is selected but apiKey is empty.`;
-      } else {
-        this.aiProvider = new OpenAIProvider(apiKey, baseUrl, model);
-        this.aiUnavailableReason = "";
-      }
+  reloadRuntimeProvider(runtimeProvider?: CyDeckRuntimeProviderConfig): void {
+    if (this.runtimeProviderLocked) {
       return;
     }
 
-    const envApiKey = (process.env.OPENAI_API_KEY || "").trim();
-    const envBaseUrl = (process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL;
-    const envModel = (process.env.OPENAI_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+    if (runtimeProvider) {
+      const apiKey = runtimeProvider.apiKey.trim();
+      if (!apiKey) {
+        this.aiProvider = null;
+        this.aiUnavailableReason =
+          `Provider "${runtimeProvider.provider}" is selected but apiKey is empty.`;
+        return;
+      }
 
-    if (envApiKey) {
-      this.aiProvider = new OpenAIProvider(envApiKey, envBaseUrl, envModel);
+      if (runtimeProvider.provider === "openai") {
+        const baseUrl = runtimeProvider.baseUrl.trim() || OPENAI_DEFAULT_BASE_URL;
+        const model = runtimeProvider.model.trim() || OPENAI_DEFAULT_MODEL;
+        this.aiProvider = new OpenAIProvider(apiKey, baseUrl, model);
+        this.aiUnavailableReason = "";
+        return;
+      }
+
+      if (runtimeProvider.provider === "google") {
+        const baseUrl = runtimeProvider.baseUrl.trim() || GOOGLE_DEFAULT_BASE_URL;
+        const model = runtimeProvider.model.trim() || GOOGLE_DEFAULT_MODEL;
+        this.aiProvider = new GoogleProvider(apiKey, baseUrl, model, runtimeProvider.maxTokens);
+        this.aiUnavailableReason = "";
+        return;
+      }
+
+      this.aiProvider = null;
+      this.aiUnavailableReason =
+        `Provider "${runtimeProvider.provider}" is not supported by Embedded Gateway yet.`;
+      return;
+    }
+
+    const envOpenAiApiKey = (process.env.OPENAI_API_KEY || "").trim();
+    const envOpenAiBaseUrl =
+      (process.env.OPENAI_BASE_URL || OPENAI_DEFAULT_BASE_URL).trim() || OPENAI_DEFAULT_BASE_URL;
+    const envOpenAiModel = (process.env.OPENAI_MODEL || OPENAI_DEFAULT_MODEL).trim() || OPENAI_DEFAULT_MODEL;
+    if (envOpenAiApiKey) {
+      this.aiProvider = new OpenAIProvider(envOpenAiApiKey, envOpenAiBaseUrl, envOpenAiModel);
+      this.aiUnavailableReason = "";
+      return;
+    }
+
+    const envGeminiApiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
+    const envGeminiBaseUrl =
+      (process.env.GEMINI_BASE_URL || GOOGLE_DEFAULT_BASE_URL).trim() || GOOGLE_DEFAULT_BASE_URL;
+    const envGeminiModel = (process.env.GEMINI_MODEL || GOOGLE_DEFAULT_MODEL).trim() || GOOGLE_DEFAULT_MODEL;
+    if (envGeminiApiKey) {
+      this.aiProvider = new GoogleProvider(envGeminiApiKey, envGeminiBaseUrl, envGeminiModel, 8192);
       this.aiUnavailableReason = "";
       return;
     }
 
     this.aiProvider = null;
     this.aiUnavailableReason =
-      "AI chat is not configured. Set CyDeck config ai provider apiKey or OPENAI_API_KEY.";
+      "AI chat is not configured. Set CyDeck config ai provider apiKey or OPENAI_API_KEY/GEMINI_API_KEY.";
   }
 
   getState(): GatewayState {
@@ -723,7 +948,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
         return;
       }
 
-      const messageText = err instanceof Error ? err.message : String(err);
+      const messageText = formatProviderError(err);
       this.sendChatEvent(ws, {
         runId: idempotencyKey,
         sessionKey,

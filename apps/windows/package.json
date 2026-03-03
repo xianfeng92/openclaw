@@ -16,7 +16,8 @@
     "build:prod": "pnpm build && electron-builder --win --x64",
     "build:dir": "pnpm build && electron-builder --dir",
     "lint": "oxlint --type-aware",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "electron-store": "^10.0.0"

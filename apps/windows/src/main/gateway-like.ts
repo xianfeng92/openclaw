@@ -19,6 +19,7 @@ export interface GatewayLike {
   restart(): Promise<void>;
   isRunning(): boolean;
   reloadRuntimeProvider?(runtimeProvider?: CyDeckRuntimeProviderConfig): void;
+  reloadWorkspacePath?(workspacePath?: string): void;
   rotateAuthToken(newToken?: string): { token: string; path: string } | void;
   on(event: "state-changed", listener: GatewayStateChangeListener): this;
   off(event: "state-changed", listener: GatewayStateChangeListener): this;

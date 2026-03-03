@@ -1,6 +1,7 @@
 import type {
   TerminalConfigIssue,
   TerminalConfigValidation,
+  TerminalLandingFileStatus,
 } from "../preload/terminal-api";
 import { TerminalGatewayClient, type GatewayChatState } from "./gateway-client.js";
 import {
@@ -528,6 +529,11 @@ Language: ${escapeHtml(navigator.language)}
       return;
     }
 
+    case "/landing": {
+      await handleLandingCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
     case "/test-agent-output": {
       await showMockAgentOutput(terminal, writeLine, writeHtml);
       return;
@@ -558,6 +564,7 @@ function showHelp(terminal: HTMLElement): void {
   /clear         - Clear the terminal screen
   /status        - Show terminal and gateway status
   /config        - Show config command usage
+  /landing       - Guided setup for SOUL/IDENTITY/USER/AGENTS/MEMORY
   /history       - Show command history
   /whoami        - Display current user/session info
   /env           - Show environment information
@@ -1985,6 +1992,176 @@ async function handleTaskCommand(
     default:
       writeHtml(terminal, `<span class="system-info">Usage: /task [complete|list|status|help]</span>`);
       break;
+  }
+}
+
+async function handleLandingCommand(
+  terminal: HTMLElement,
+  args: string[],
+  _writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = (args[0] || "help").toLowerCase();
+
+  const renderFiles = (files?: TerminalLandingFileStatus[]) => {
+    if (!files || files.length === 0) {
+      return;
+    }
+    for (const file of files) {
+      const existsTag = file.exists ? "<span class=\"system-ok\">exists</span>" : "<span class=\"system-warn\">missing</span>";
+      const configuredTag = file.configured
+        ? "<span class=\"system-ok\">configured</span>"
+        : "<span class=\"system-warn\">template</span>";
+      writeHtml(
+        terminal,
+        `<span class="system-info">- ${escapeHtml(file.fileName)}: ${existsTag}, ${configuredTag}, ${file.bytes} bytes</span>`,
+      );
+    }
+  };
+
+  switch (action) {
+    case "help": {
+      writeHtml(
+        terminal,
+        `
+<span class="system-ok"><strong>Landing Commands</strong></span>
+
+<span class="system-info">Goal:</span>
+  Bootstrap and configure SOUL.md / IDENTITY.md / USER.md / AGENTS.md / MEMORY.md
+
+<span class="system-info">Usage:</span>
+  /landing status
+  /landing init
+  /landing start
+  /landing set &lt;key&gt; &lt;value&gt;
+  /landing add &lt;agents|soul|memory&gt; &lt;text&gt;
+
+<span class="system-info">Set keys:</span>
+  identity.name
+  identity.creature
+  identity.vibe
+  identity.emoji
+  identity.avatar
+  user.name
+  user.preferredName
+  user.pronouns
+  user.timezone
+  user.language
+
+<span class="system-info">Examples:</span>
+  /landing init
+  /landing set identity.name Cydec
+  /landing set user.timezone Asia/Shanghai
+  /landing add soul Be direct and evidence-driven
+  /landing add agents Ask before external side effects
+  /landing add memory User prefers concise replies in Chinese
+        `.trim(),
+      );
+      return;
+    }
+
+    case "status": {
+      const result = await window.terminalAPI.landingStatus();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to load landing status")}</span>`);
+        return;
+      }
+      writeSection(terminal, "Landing Status", "[landing]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
+      renderFiles(result.files);
+      if (result.completed) {
+        writeHtml(terminal, `<span class="system-ok">[ok] Landing is complete</span>`);
+      } else {
+        writeHtml(terminal, `<span class="system-warn">[warn] Landing is not complete. Run /landing start</span>`);
+      }
+      return;
+    }
+
+    case "init": {
+      const result = await window.terminalAPI.landingInit();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to init landing files")}</span>`);
+        return;
+      }
+      writeSection(terminal, "Landing Init", "[landing]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
+      const created = result.created ?? [];
+      const existing = result.existing ?? [];
+      writeHtml(terminal, `<span class="system-info">Created: ${escapeHtml(String(created.length))}</span>`);
+      if (created.length > 0) {
+        writeHtml(terminal, `<span class="system-info">  ${escapeHtml(created.join(", "))}</span>`);
+      }
+      writeHtml(terminal, `<span class="system-info">Existing: ${escapeHtml(String(existing.length))}</span>`);
+      renderFiles(result.files);
+      return;
+    }
+
+    case "start": {
+      const result = await window.terminalAPI.landingInit();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to start landing setup")}</span>`);
+        return;
+      }
+      writeSection(terminal, "Landing Wizard", "[landing]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
+      writeHtml(terminal, `<span class="system-info">Step 1: /landing set identity.name &lt;name&gt;</span>`);
+      writeHtml(terminal, `<span class="system-info">Step 2: /landing set user.name &lt;name&gt;</span>`);
+      writeHtml(terminal, `<span class="system-info">Step 3: /landing set user.timezone &lt;tz&gt;</span>`);
+      writeHtml(terminal, `<span class="system-info">Step 4: /landing add soul &lt;principle&gt;</span>`);
+      writeHtml(terminal, `<span class="system-info">Step 5: /landing add agents &lt;rule&gt;</span>`);
+      writeHtml(terminal, `<span class="system-info">Step 6: /landing add memory &lt;long-term fact&gt;</span>`);
+      writeHtml(terminal, `<span class="system-info">Then run: /landing status</span>`);
+      return;
+    }
+
+    case "set": {
+      const key = args[1];
+      const value = args.slice(2).join(" ");
+      if (!key || !value.trim()) {
+        writeHtml(terminal, `<span class="system-info">Usage: /landing set &lt;key&gt; &lt;value&gt;</span>`);
+        return;
+      }
+      const result = await window.terminalAPI.landingSet(key, value);
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to set landing value")}</span>`);
+        return;
+      }
+      writeHtml(
+        terminal,
+        `<span class="system-ok">[ok] ${escapeHtml(result.key || key)} = ${escapeHtml(result.value || value)}</span>`,
+      );
+      if (result.fileName) {
+        writeHtml(terminal, `<span class="system-info">Updated: ${escapeHtml(result.fileName)}</span>`);
+      }
+      return;
+    }
+
+    case "add": {
+      const target = args[1];
+      const note = args.slice(2).join(" ");
+      if (!target || !note.trim()) {
+        writeHtml(terminal, `<span class="system-info">Usage: /landing add &lt;agents|soul|memory&gt; &lt;text&gt;</span>`);
+        return;
+      }
+      const result = await window.terminalAPI.landingAdd(target, note);
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to append landing note")}</span>`);
+        return;
+      }
+      writeHtml(
+        terminal,
+        `<span class="system-ok">[ok] Added note to ${escapeHtml(result.fileName || target)}</span>`,
+      );
+      return;
+    }
+
+    default: {
+      writeHtml(
+        terminal,
+        `<span class="system-warn">[warn] Unknown /landing action: ${escapeHtml(action)}</span>`,
+      );
+      writeHtml(terminal, `<span class="system-info">Use /landing help for usage.</span>`);
+    }
   }
 }
 

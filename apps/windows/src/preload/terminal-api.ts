@@ -17,6 +17,15 @@ export type TerminalConfigValidation = {
   issues: TerminalConfigIssue[];
 };
 
+export type TerminalLandingFileStatus = {
+  id: string;
+  fileName: string;
+  path: string;
+  exists: boolean;
+  bytes: number;
+  configured: boolean;
+};
+
 export interface TerminalAPI {
   // Shell execution
   execShell: (command: string) => Promise<{ runId: string }>;
@@ -87,6 +96,52 @@ export interface TerminalAPI {
     validation?: TerminalConfigValidation;
     warnings?: string[];
     issues?: TerminalConfigIssue[];
+    error?: string;
+  }>;
+  landingStatus: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    workspacePath: string;
+    files?: TerminalLandingFileStatus[];
+    completed?: boolean;
+    error?: string;
+  }>;
+  landingInit: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    workspacePath: string;
+    created?: string[];
+    existing?: string[];
+    files?: TerminalLandingFileStatus[];
+    completed?: boolean;
+    error?: string;
+  }>;
+  landingSet: (key: string, value: string) => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    workspacePath: string;
+    key?: string;
+    value?: string;
+    filePath?: string;
+    fileName?: string;
+    files?: TerminalLandingFileStatus[];
+    completed?: boolean;
+    error?: string;
+  }>;
+  landingAdd: (target: string, note: string) => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    workspacePath: string;
+    target?: string;
+    note?: string;
+    filePath?: string;
+    fileName?: string;
+    files?: TerminalLandingFileStatus[];
+    completed?: boolean;
     error?: string;
   }>;
 
@@ -354,6 +409,10 @@ const api: TerminalAPI = {
   configReset: () => ipcRenderer.invoke("terminal:config-reset"),
   configPath: () => ipcRenderer.invoke("terminal:config-path"),
   configApply: () => ipcRenderer.invoke("terminal:config-apply"),
+  landingStatus: () => ipcRenderer.invoke("terminal:landing-status"),
+  landingInit: () => ipcRenderer.invoke("terminal:landing-init"),
+  landingSet: (key, value) => ipcRenderer.invoke("terminal:landing-set", key, value),
+  landingAdd: (target, note) => ipcRenderer.invoke("terminal:landing-add", target, note),
 
   // Orchestral commands
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),

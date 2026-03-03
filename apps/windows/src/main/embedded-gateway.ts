@@ -5,6 +5,7 @@ import { ProxyAgent, type Dispatcher } from "undici";
 import type { CyDeckRuntimeProviderConfig } from "./cydeck-config.js";
 import { rotateGatewayAuthToken } from "./gateway-auth.js";
 import type { GatewayLike, GatewayState, GatewayStatus } from "./gateway-like.js";
+import { buildLandingSystemPrompt } from "./landing.js";
 
 const GATEWAY_PROTOCOL_VERSION = 3;
 const DEFAULT_PORT = 19001;
@@ -14,6 +15,7 @@ const GOOGLE_DEFAULT_MODEL = "gemini-2.0-flash";
 const GOOGLE_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const WS_READY_STATE_OPEN = 1;
 const SESSION_MAX_MESSAGES = 40;
+const LANDING_PROMPT_MARKER = "[cydeck:landing-system-prompt]";
 
 type GatewayRequest = {
   type: "req";
@@ -68,6 +70,7 @@ export interface AIProvider {
 export type EmbeddedGatewayOptions = {
   runtimeProvider?: CyDeckRuntimeProviderConfig;
   aiProviderOverride?: AIProvider | null;
+  workspacePath?: string;
 };
 
 type RequestInitWithDispatcher = RequestInit & { dispatcher?: Dispatcher };
@@ -417,6 +420,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
   private aiProvider: AIProvider | null = null;
   private aiUnavailableReason = "";
   private readonly runtimeProviderLocked: boolean;
+  private workspacePath: string = process.cwd();
 
   private status: GatewayStatus = "stopped";
   private lastError: string | undefined;
@@ -431,6 +435,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     this.port = normalizedPort;
     this.authToken = authToken;
     this.runtimeProviderLocked = options.aiProviderOverride !== undefined;
+    this.reloadWorkspacePath(options.workspacePath);
 
     if (this.runtimeProviderLocked) {
       this.aiProvider = options.aiProviderOverride ?? null;
@@ -441,6 +446,14 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     }
 
     this.reloadRuntimeProvider(options.runtimeProvider);
+  }
+
+  reloadWorkspacePath(workspacePath?: string): void {
+    const raw = typeof workspacePath === "string" ? workspacePath.trim() : "";
+    if (!raw) {
+      return;
+    }
+    this.workspacePath = raw;
   }
 
   reloadRuntimeProvider(runtimeProvider?: CyDeckRuntimeProviderConfig): void {
@@ -833,7 +846,34 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
       return;
     }
     const overflow = session.messages.length - SESSION_MAX_MESSAGES;
+    const hasManagedSystemPrompt = this.isManagedLandingPrompt(session.messages[0]);
+    if (hasManagedSystemPrompt) {
+      // Preserve managed system prompt and trim oldest chat turns.
+      session.messages.splice(1, overflow);
+      return;
+    }
     session.messages.splice(0, overflow);
+  }
+
+  private isManagedLandingPrompt(message: ChatMessage | undefined): boolean {
+    if (!message || message.role !== "system") {
+      return false;
+    }
+    return message.content.startsWith(LANDING_PROMPT_MARKER);
+  }
+
+  private syncLandingSystemPrompt(session: ChatSession): void {
+    const prompt = buildLandingSystemPrompt(this.workspacePath, session.sessionKey);
+    if (this.isManagedLandingPrompt(session.messages[0])) {
+      session.messages.shift();
+    }
+    if (!prompt) {
+      return;
+    }
+    session.messages.unshift({
+      role: "system",
+      content: `${LANDING_PROMPT_MARKER}\n${prompt}`,
+    });
   }
 
   private async handleChatSend(
@@ -860,6 +900,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
 
     const deliver = params.deliver !== false;
     const session = this.getSession(context, sessionKey);
+    this.syncLandingSystemPrompt(session);
 
     session.messages.push({ role: "user", content: message.trim() });
     this.trimSessionMessages(session);

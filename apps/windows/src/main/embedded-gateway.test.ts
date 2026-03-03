@@ -1,7 +1,11 @@
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { EmbeddedGateway, type AIProvider } from "./embedded-gateway.js";
+import { appendLandingNote, ensureLandingWorkspaceFiles } from "./landing.js";
 
 type GatewayFrame = Record<string, unknown>;
 type FrameInbox = {
@@ -176,6 +180,13 @@ async function waitForChatState(
 }
 
 const activeSockets = new Set<WebSocket>();
+const tempDirs: string[] = [];
+
+function createTempWorkspace(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cydeck-gateway-test-"));
+  tempDirs.push(dir);
+  return dir;
+}
 
 afterEach(async () => {
   for (const socket of activeSockets) {
@@ -186,6 +197,14 @@ afterEach(async () => {
     }
   }
   activeSockets.clear();
+
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop();
+    if (!dir) {
+      continue;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe("embedded-gateway protocol", () => {
@@ -601,6 +620,136 @@ describe("embedded-gateway protocol", () => {
 });
 
 describe("embedded-gateway session and lifecycle", () => {
+  it("injects landing system prompt into provider messages", async () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+    appendLandingNote(workspace, "soul", "System soul token");
+
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const provider: AIProvider = {
+      chat: async (messages, onChunk) => {
+        capturedMessages = messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+        const text = "ok";
+        if (onChunk) {
+          await onChunk(text);
+        }
+        return text;
+      },
+    };
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: provider,
+      workspacePath: workspace,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "inject-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello",
+          deliver: true,
+          idempotencyKey: "inject-run-1",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      const systemPrompt = capturedMessages.find((message) => message.role === "system")?.content ?? "";
+      expect(systemPrompt).toContain("[cydeck:landing-system-prompt]");
+      expect(systemPrompt).toContain("### SOUL.md");
+      expect(systemPrompt).toContain("System soul token");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
+  it("loads MEMORY.md only for private sessions", async () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+    appendLandingNote(workspace, "memory", "Private memory token");
+
+    const capturedRuns: Array<Array<{ role: string; content: string }>> = [];
+    const provider: AIProvider = {
+      chat: async (messages, onChunk) => {
+        capturedRuns.push(
+          messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        );
+        const text = "ok";
+        if (onChunk) {
+          await onChunk(text);
+        }
+        return text;
+      },
+    };
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: provider,
+      workspacePath: workspace,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "shared-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "group:team-a",
+          message: "hello shared",
+          deliver: true,
+          idempotencyKey: "shared-run-1",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      sendRequest(ws, {
+        id: "private-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello private",
+          deliver: true,
+          idempotencyKey: "private-run-1",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      const sharedSystemPrompt =
+        capturedRuns[0]?.find((message) => message.role === "system")?.content ?? "";
+      const privateSystemPrompt =
+        capturedRuns[1]?.find((message) => message.role === "system")?.content ?? "";
+
+      expect(sharedSystemPrompt).not.toContain("### MEMORY.md");
+      expect(sharedSystemPrompt).not.toContain("Private memory token");
+      expect(privateSystemPrompt).toContain("### MEMORY.md");
+      expect(privateSystemPrompt).toContain("Private memory token");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
   it("keeps sessions isolated per websocket connection", async () => {
     const provider: AIProvider = {
       chat: async (messages, onChunk) => {
@@ -641,7 +790,7 @@ describe("embedded-gateway session and lifecycle", () => {
       });
       await nextFrame(ws1); // started
       const ws1Delta1 = await waitForChatState(ws1, "delta");
-      expect((ws1Delta1.payload as Record<string, unknown>).text).toBe("reply:1:first");
+      expect((ws1Delta1.payload as Record<string, unknown>).text).toBe("reply:2:first");
       await waitForChatState(ws1, "final");
 
       sendRequest(ws1, {
@@ -656,7 +805,7 @@ describe("embedded-gateway session and lifecycle", () => {
       });
       await nextFrame(ws1); // started
       const ws1Delta2 = await waitForChatState(ws1, "delta");
-      expect((ws1Delta2.payload as Record<string, unknown>).text).toBe("reply:3:second");
+      expect((ws1Delta2.payload as Record<string, unknown>).text).toBe("reply:4:second");
       await waitForChatState(ws1, "final");
 
       sendRequest(ws2, {
@@ -671,7 +820,7 @@ describe("embedded-gateway session and lifecycle", () => {
       });
       await nextFrame(ws2); // started
       const ws2Delta = await waitForChatState(ws2, "delta");
-      expect((ws2Delta.payload as Record<string, unknown>).text).toBe("reply:1:other");
+      expect((ws2Delta.payload as Record<string, unknown>).text).toBe("reply:2:other");
       await waitForChatState(ws2, "final");
     } finally {
       await gateway.stop();

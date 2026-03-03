@@ -17,6 +17,14 @@ import {
   formatMutableConfigKeysForHelp,
   isCyDeckMutableConfigKey,
 } from "./cydeck-config-ipc.js";
+import {
+  appendLandingNote,
+  ensureLandingWorkspaceFiles,
+  getLandingWorkspaceStatus,
+  isLandingAppendTarget,
+  isLandingSetKey,
+  setLandingField,
+} from "./landing.js";
 import type { GatewayLike } from "./gateway-like.js";
 // Note: Orchestration modules are imported dynamically via IPC or at runtime
 // Static imports are removed to avoid build issues
@@ -261,6 +269,35 @@ type TerminalConfigApplyResult = TerminalConfigBaseResult & {
   issues?: CyDeckConfigIssue[];
 };
 
+type TerminalLandingFileStatus = {
+  id: string;
+  fileName: string;
+  path: string;
+  exists: boolean;
+  bytes: number;
+  configured: boolean;
+};
+
+type TerminalLandingStatusResult = TerminalConfigBaseResult & {
+  workspacePath: string;
+  files?: TerminalLandingFileStatus[];
+  completed?: boolean;
+};
+
+type TerminalLandingInitResult = TerminalLandingStatusResult & {
+  created?: string[];
+  existing?: string[];
+};
+
+type TerminalLandingSetResult = TerminalLandingStatusResult & {
+  key?: string;
+  value?: string;
+  filePath?: string;
+  fileName?: string;
+  note?: string;
+  target?: string;
+};
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -356,6 +393,26 @@ function applyRuntimeProviderToGateway(
 
   try {
     gatewayManagerInstance.reloadRuntimeProvider(runtimeProvider);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function applyWorkspacePathToGateway(workspacePath: string): { success: boolean; error?: string } {
+  if (!gatewayManagerInstance) {
+    return { success: false, error: "Gateway is not initialized" };
+  }
+
+  if (typeof gatewayManagerInstance.reloadWorkspacePath !== "function") {
+    return { success: false, error: "Current gateway does not support workspace path reload" };
+  }
+
+  try {
+    gatewayManagerInstance.reloadWorkspacePath(workspacePath);
     return { success: true };
   } catch (err) {
     return {
@@ -532,8 +589,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
   ipcMain.handle("terminal:config-apply", async (): Promise<TerminalConfigApplyResult> => {
     try {
       const effective = getEffectiveConfig();
-      const applyResult = applyRuntimeProviderToGateway(effective.runtimeProvider);
-      if (!applyResult.success) {
+      const applyRuntimeResult = applyRuntimeProviderToGateway(effective.runtimeProvider);
+      if (!applyRuntimeResult.success) {
         return {
           success: false,
           configPath: effective.configPath,
@@ -542,7 +599,21 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
           validation: effective.validation,
           warnings: effective.warnings,
           issues: effective.issues,
-          error: applyResult.error,
+          error: applyRuntimeResult.error,
+        };
+      }
+
+      const applyWorkspaceResult = applyWorkspacePathToGateway(effective.workspacePath);
+      if (!applyWorkspaceResult.success) {
+        return {
+          success: false,
+          configPath: effective.configPath,
+          stateDir: effective.stateDir,
+          runtimeProvider: effective.runtimeProvider,
+          validation: effective.validation,
+          warnings: effective.warnings,
+          issues: effective.issues,
+          error: applyWorkspaceResult.error,
         };
       }
 
@@ -564,6 +635,141 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
       };
     }
   });
+
+  ipcMain.handle("terminal:landing-status", async (): Promise<TerminalLandingStatusResult> => {
+    try {
+      const effective = getEffectiveConfig();
+      const status = getLandingWorkspaceStatus(effective.workspacePath);
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        workspacePath: effective.workspacePath,
+        files: status.files,
+        completed: status.completed,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath: resolveCyDeckConfigPath(),
+        stateDir: resolveCyDeckStateDir(),
+        workspacePath: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  ipcMain.handle("terminal:landing-init", async (): Promise<TerminalLandingInitResult> => {
+    try {
+      const effective = getEffectiveConfig();
+      const init = ensureLandingWorkspaceFiles(effective.workspacePath);
+      const status = getLandingWorkspaceStatus(effective.workspacePath);
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        workspacePath: effective.workspacePath,
+        created: init.created,
+        existing: init.existing,
+        files: status.files,
+        completed: status.completed,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath: resolveCyDeckConfigPath(),
+        stateDir: resolveCyDeckStateDir(),
+        workspacePath: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  ipcMain.handle(
+    "terminal:landing-set",
+    async (_event, key: string, value: string): Promise<TerminalLandingSetResult> => {
+      try {
+        const normalizedKey = String(key).trim();
+        if (!isLandingSetKey(normalizedKey)) {
+          return {
+            success: false,
+            configPath: resolveCyDeckConfigPath(),
+            stateDir: resolveCyDeckStateDir(),
+            workspacePath: "",
+            error: `Unsupported landing key: ${normalizedKey}`,
+          };
+        }
+
+        const effective = getEffectiveConfig();
+        ensureLandingWorkspaceFiles(effective.workspacePath);
+        const result = setLandingField(effective.workspacePath, normalizedKey, value);
+        const status = getLandingWorkspaceStatus(effective.workspacePath);
+        return {
+          success: true,
+          configPath: effective.configPath,
+          stateDir: effective.stateDir,
+          workspacePath: effective.workspacePath,
+          key: result.key,
+          value: result.value,
+          filePath: result.filePath,
+          fileName: result.fileName,
+          files: status.files,
+          completed: status.completed,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          configPath: resolveCyDeckConfigPath(),
+          stateDir: resolveCyDeckStateDir(),
+          workspacePath: "",
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "terminal:landing-add",
+    async (_event, target: string, note: string): Promise<TerminalLandingSetResult> => {
+      try {
+        const normalizedTarget = String(target).trim().toLowerCase();
+        if (!isLandingAppendTarget(normalizedTarget)) {
+          return {
+            success: false,
+            configPath: resolveCyDeckConfigPath(),
+            stateDir: resolveCyDeckStateDir(),
+            workspacePath: "",
+            error: `Unsupported landing add target: ${target}`,
+          };
+        }
+
+        const effective = getEffectiveConfig();
+        ensureLandingWorkspaceFiles(effective.workspacePath);
+        const result = appendLandingNote(effective.workspacePath, normalizedTarget, note);
+        const status = getLandingWorkspaceStatus(effective.workspacePath);
+        return {
+          success: true,
+          configPath: effective.configPath,
+          stateDir: effective.stateDir,
+          workspacePath: effective.workspacePath,
+          target: normalizedTarget,
+          note: result.note,
+          filePath: result.filePath,
+          fileName: result.fileName,
+          files: status.files,
+          completed: status.completed,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          configPath: resolveCyDeckConfigPath(),
+          stateDir: resolveCyDeckStateDir(),
+          workspacePath: "",
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
 
   // Reset config back to the default CyDeck shape.
   ipcMain.handle("terminal:config-reset", async (): Promise<TerminalConfigResetResult> => {
@@ -662,6 +868,24 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         const shouldApplyRuntimeProvider = normalizedKey === "ai.defaultProvider" || normalizedKey.startsWith("ai.providers.");
         if (shouldApplyRuntimeProvider) {
           const applyResult = applyRuntimeProviderToGateway(effective.runtimeProvider);
+          if (!applyResult.success) {
+            return {
+              success: false,
+              configPath: effective.configPath,
+              stateDir: effective.stateDir,
+              key: normalizedKey,
+              value: coerced.value,
+              validation: effective.validation,
+              warnings: effective.warnings,
+              issues: effective.issues,
+              error: applyResult.error,
+            };
+          }
+        }
+
+        const shouldApplyWorkspacePath = normalizedKey === "workspace.path";
+        if (shouldApplyWorkspacePath) {
+          const applyResult = applyWorkspacePathToGateway(effective.workspacePath);
           if (!applyResult.success) {
             return {
               success: false,

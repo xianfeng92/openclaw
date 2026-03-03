@@ -142,6 +142,7 @@ void app
 
     gatewayManager = new EmbeddedGateway(gatewayPort, auth.token, {
       runtimeProvider: effectiveConfig.runtimeProvider,
+      workspacePath: effectiveConfig.workspacePath,
     });
 
     if (effectiveConfig.workspacePath && effectiveConfig.config.workspace.autoCreate) {

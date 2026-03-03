@@ -99,6 +99,20 @@ export function coerceCyDeckConfigValue(
     return { ok: true, value: parsed };
   }
 
+  if (key.endsWith(".model")) {
+    const model = maybeStripQuotes(rawValue).trim();
+    if (!model) {
+      return { ok: false, error: `${key} cannot be empty` };
+    }
+    if (/\s/.test(model)) {
+      return {
+        ok: false,
+        error: `${key} must be a single model id without spaces (for example: gemini-2.5-flash)`,
+      };
+    }
+    return { ok: true, value: model };
+  }
+
   return { ok: true, value: maybeStripQuotes(rawValue) };
 }
 

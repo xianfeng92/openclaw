@@ -50,6 +50,11 @@ describe("cydeck-config-ipc value coercion", () => {
     expect(quoted).toEqual({ ok: true, value: "./my workspace" });
     expect(raw).toEqual({ ok: true, value: "cydeck" });
   });
+
+  it("rejects model values that contain whitespace", () => {
+    const model = coerceCyDeckConfigValue("ai.providers.google.model", "gemini-3-flash-preview /config");
+    expect(model.ok).toBe(false);
+  });
 });
 
 describe("cydeck-config-ipc path assignment", () => {

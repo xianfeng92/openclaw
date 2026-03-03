@@ -170,6 +170,54 @@ function findObsidianVault(): string | undefined {
 const getAgentManager = (projectPath?: string) =>
   require("./windows-agent-manager.js").getAgentManager(projectPath ?? getProjectPath());
 
+const ORCHESTRATION_MODULE_PATH: string = "../../../src/orchestration/index.js";
+const PROCESS_EXEC_MODULE_PATH: string = "../../process/exec.js";
+
+type OrchestrationModule = Record<string, (...args: any[]) => any>;
+type ProcessExecModule = {
+  runCommandWithTimeout: (
+    argv: string[],
+    optionsOrTimeout: number | { timeoutMs: number; cwd?: string; input?: string; env?: NodeJS.ProcessEnv },
+  ) => Promise<{ stdout: string; stderr: string; code: number | null; signal: NodeJS.Signals | null; killed: boolean }>;
+  resolveCommand: (command: string) => string;
+};
+
+type AgentTaskStatus = "starting" | "running" | "exited" | "killed";
+
+type AgentTask = {
+  id: string;
+  description: string;
+  status: AgentTaskStatus;
+  agent: string;
+  startedAt: number;
+  completedAt?: number;
+  tmuxSession?: string;
+  branch?: string;
+  exitCode?: number | null;
+  failureReason?: string;
+};
+
+type PatternRecommendation = {
+  item: {
+    id: string;
+    name: string;
+    category: string;
+    description: string;
+    effectiveness?: number;
+    usageCount?: number;
+  };
+  score: number;
+  matchReason: string;
+};
+
+async function importOrchestrationModule(): Promise<OrchestrationModule> {
+  return (await import(ORCHESTRATION_MODULE_PATH)) as OrchestrationModule;
+}
+
+async function importProcessExecModule(): Promise<ProcessExecModule> {
+  return (await import(PROCESS_EXEC_MODULE_PATH)) as ProcessExecModule;
+}
+
 type TerminalConfigBaseResult = {
   success: boolean;
   configPath: string;
@@ -951,25 +999,25 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         }
 
         // Get all tasks from agent manager
-        const allTasks = agentMgr.listAgents();
-        let tasks = allTasks.filter(t => t.status !== "killed");
+        const allTasks = agentMgr.listAgents() as AgentTask[];
+        let tasks = allTasks.filter((t: AgentTask) => t.status !== "killed");
 
         // Apply filters
         if (filters.status) {
-          tasks = tasks.filter(t => t.status === filters.status);
+          tasks = tasks.filter((t: AgentTask) => t.status === filters.status);
         }
         if (filters.agent) {
-          tasks = tasks.filter(t => t.agent === filters.agent);
+          tasks = tasks.filter((t: AgentTask) => t.agent === filters.agent);
         }
         if (filters.limit) {
           tasks = tasks.slice(0, Number.parseInt(filters.limit, 10));
         }
 
         // Sort by started time (newest first)
-        tasks.sort((a, b) => b.startedAt - a.startedAt);
+        tasks.sort((a: AgentTask, b: AgentTask) => b.startedAt - a.startedAt);
 
         // Count by status
-        const summary = `Total: ${allTasks.length} | running: ${allTasks.filter(t => t.status === "running").length} | starting: ${allTasks.filter(t => t.status === "starting").length} | exited: ${allTasks.filter(t => t.status === "exited").length} | killed: ${allTasks.filter(t => t.status === "killed").length}`;
+        const summary = `Total: ${allTasks.length} | running: ${allTasks.filter((t: AgentTask) => t.status === "running").length} | starting: ${allTasks.filter((t: AgentTask) => t.status === "starting").length} | exited: ${allTasks.filter((t: AgentTask) => t.status === "exited").length} | killed: ${allTasks.filter((t: AgentTask) => t.status === "killed").length}`;
 
         return {
           success: true,
@@ -1400,13 +1448,13 @@ ipcMain.handle("terminal:pattern-rate", async (_event, patternId: string, succes
 ipcMain.handle("terminal:pattern-recommend", async (_event, description: string, limit = 3): Promise<any> => {
   try {
     // Import at runtime to avoid circular dependency
-    const { recommendPatterns } = await import("../../../src/orchestration/index.js");
+    const { recommendPatterns } = await importOrchestrationModule();
 
-    const recommendations = await recommendPatterns(description, limit);
+    const recommendations = (await recommendPatterns(description, limit)) as PatternRecommendation[];
 
     return {
       success: true,
-      patterns: recommendations.map((r) => ({
+      patterns: recommendations.map((r: PatternRecommendation) => ({
         id: r.item.id,
         name: r.item.name,
         category: r.item.category,
@@ -1426,7 +1474,7 @@ ipcMain.handle("terminal:pattern-recommend", async (_event, description: string,
 // Run code review on current git changes
 ipcMain.handle("terminal:review-diff", async (_event, options: { branch?: string; maxFiles?: number } = {}): Promise<any> => {
   try {
-    const { runCodeReview, formatReviewTerminal } = await import("../../../src/orchestration/index.js");
+    const { runCodeReview, formatReviewTerminal } = await importOrchestrationModule();
     const projectPath = getProjectPath();
 
     console.log("[Review] Starting code review for", projectPath);
@@ -1459,7 +1507,7 @@ ipcMain.handle("terminal:pr-create", async (_event, options: {
   draft?: boolean;
 }): Promise<any> => {
   try {
-    const { getGitStatus, commitChanges, getCurrentBranch, createPR } = await import("../../../src/orchestration/index.js");
+    const { getGitStatus, commitChanges, getCurrentBranch, createPR } = await importOrchestrationModule();
     const projectPath = getProjectPath();
 
     // Check status
@@ -1481,7 +1529,7 @@ ipcMain.handle("terminal:pr-create", async (_event, options: {
       return { success: false, error: "Could not determine current branch" };
     }
 
-    const { runCommandWithTimeout, resolveCommand } = await import("../../process/exec.js");
+    const { runCommandWithTimeout, resolveCommand } = await importProcessExecModule();
     const pushResult = await runCommandWithTimeout(
       [resolveCommand("git"), "-C", projectPath, "push", "-u", "origin", currentBranch],
       60_000,
@@ -1508,7 +1556,7 @@ ipcMain.handle("terminal:pr-create", async (_event, options: {
 
 ipcMain.handle("terminal:pr-list", async (): Promise<any> => {
   try {
-    const { listOpenPRs } = await import("../../../src/orchestration/index.js");
+    const { listOpenPRs } = await importOrchestrationModule();
     const projectPath = getProjectPath();
 
     const prs = await listOpenPRs(projectPath);
@@ -1521,7 +1569,7 @@ ipcMain.handle("terminal:pr-list", async (): Promise<any> => {
 
 ipcMain.handle("terminal:pr-view", async (_event, prNumber: number): Promise<any> => {
   try {
-    const { getPRDetails } = await import("../../../src/orchestration/index.js");
+    const { getPRDetails } = await importOrchestrationModule();
     const projectPath = getProjectPath();
 
     const pr = await getPRDetails(projectPath, prNumber);
@@ -1534,7 +1582,7 @@ ipcMain.handle("terminal:pr-view", async (_event, prNumber: number): Promise<any
 
 ipcMain.handle("terminal:git-status", async (): Promise<any> => {
   try {
-    const { getGitStatus, getCurrentBranch } = await import("../../../src/orchestration/index.js");
+    const { getGitStatus, getCurrentBranch } = await importOrchestrationModule();
     const projectPath = getProjectPath();
 
     const status = await getGitStatus(projectPath);
@@ -1550,7 +1598,7 @@ ipcMain.handle("terminal:git-status", async (): Promise<any> => {
 // Workflow Commands
 ipcMain.handle("terminal:workflow-list", async (): Promise<any> => {
   try {
-    const { listWorkflows } = await import("../../../src/orchestration/index.js");
+    const { listWorkflows } = await importOrchestrationModule();
     const workflows = await listWorkflows();
     return { success: true, workflows };
   } catch (err) {
@@ -1566,7 +1614,7 @@ ipcMain.handle("terminal:workflow-create", async (_event, workflow: {
   tags?: string[];
 }): Promise<any> => {
   try {
-    const { createWorkflow } = await import("../../../src/orchestration/index.js");
+    const { createWorkflow } = await importOrchestrationModule();
     const result = await createWorkflow(workflow);
     return { success: true, id: result.id };
   } catch (err) {
@@ -1577,7 +1625,7 @@ ipcMain.handle("terminal:workflow-create", async (_event, workflow: {
 
 ipcMain.handle("terminal:workflow-run", async (_event, name: string): Promise<any> => {
   try {
-    const { dryRunWorkflow, getWorkflowByName } = await import("../../../src/orchestration/index.js");
+    const { dryRunWorkflow, getWorkflowByName } = await importOrchestrationModule();
     const workflow = await getWorkflowByName(name);
 
     if (!workflow) {
@@ -1585,7 +1633,8 @@ ipcMain.handle("terminal:workflow-run", async (_event, name: string): Promise<an
     }
 
     const result = await dryRunWorkflow(workflow.id);
-    await import("../../../src/orchestration/index.js").then((m) => m.incrementWorkflowRunCount(workflow.id));
+    const { incrementWorkflowRunCount } = await importOrchestrationModule();
+    await incrementWorkflowRunCount(workflow.id);
 
     return { success: true, steps: result.steps };
   } catch (err) {
@@ -1596,7 +1645,7 @@ ipcMain.handle("terminal:workflow-run", async (_event, name: string): Promise<an
 
 ipcMain.handle("terminal:workflow-show", async (_event, name: string): Promise<any> => {
   try {
-    const { getWorkflowByName } = await import("../../../src/orchestration/index.js");
+    const { getWorkflowByName } = await importOrchestrationModule();
     const workflow = await getWorkflowByName(name);
 
     if (workflow) {
@@ -1612,7 +1661,7 @@ ipcMain.handle("terminal:workflow-show", async (_event, name: string): Promise<a
 
 ipcMain.handle("terminal:workflow-delete", async (_event, name: string): Promise<any> => {
   try {
-    const { getWorkflowByName, deleteWorkflow } = await import("../../../src/orchestration/index.js");
+    const { getWorkflowByName, deleteWorkflow } = await importOrchestrationModule();
     const workflow = await getWorkflowByName(name);
 
     if (!workflow) {

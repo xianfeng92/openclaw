@@ -1,12 +1,5 @@
-import type { TerminalAPI } from "../preload/terminal-api";
 import { handleCommand, parseCommand, getTerminalStateSnapshot } from "./command-handler.js";
 import { initSidebar, toggleSidebar } from "./sidebar.js";
-
-declare global {
-  interface Window {
-    terminalAPI: TerminalAPI;
-  }
-}
 
 let commandHistory: string[] = [];
 let historyIndex = -1;
@@ -195,7 +188,7 @@ function renderGlobalStatusBar(): void {
     statusMem.innerHTML = `[Mem: ${memoryText}]`;
   }
   if (statusTasks) {
-    statusTasks.textContent = `[Tasks: ${snapshot.tasks}]`;
+    statusTasks.textContent = statusTasks.textContent || "[Tasks: --]";
   }
   if (statusTime) {
     statusTime.textContent = `[${now}]`;
@@ -727,20 +720,21 @@ function initCommandPalette(): void {
   const resultsContainer = document.getElementById("palette-results");
 
   if (!palette || !paletteInput || !resultsContainer) return;
+  const paletteEl = palette;
 
   paletteItems = Array.from(resultsContainer.querySelectorAll(".palette-item"));
 
   function togglePalette(show?: boolean): void {
     const shouldShow = show ?? !paletteVisible;
     if (shouldShow) {
-      palette.classList.remove("hidden");
+      paletteEl.classList.remove("hidden");
       paletteInput.value = "";
       selectedIndex = 0;
       paletteInput.focus();
       updatePaletteSelection();
       paletteVisible = true;
     } else {
-      palette.classList.add("hidden");
+      paletteEl.classList.add("hidden");
       paletteVisible = false;
       commandInput.focus();
     }

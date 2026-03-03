@@ -208,7 +208,7 @@ export interface TerminalAPI {
         comments: Array<{
           file: string;
           line?: number;
-          severity: string;
+          severity: "error" | "warning" | "info" | "suggestion";
           message: string;
           suggestion?: string;
         }>;

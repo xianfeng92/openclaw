@@ -764,7 +764,7 @@ export class WindowsAgentProcessManager {
   clearCompletedTasks(): number {
     let clearedCount = 0;
     for (const [taskId, process] of this.processes.entries()) {
-      if (process.status === "exited" || process.status === "killed" || process.status === "completed" || process.status === "failed") {
+      if (process.status === "exited" || process.status === "killed") {
         this.processes.delete(taskId);
         clearedCount++;
       }

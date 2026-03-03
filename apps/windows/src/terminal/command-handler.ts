@@ -1,5 +1,4 @@
 import type {
-  TerminalAPI,
   TerminalConfigIssue,
   TerminalConfigValidation,
 } from "../preload/terminal-api";
@@ -10,12 +9,6 @@ import {
   handleTasksCommand,
   showOrchestralHelp,
 } from "./orchestral-commands.js";
-
-declare global {
-  interface Window {
-    terminalAPI: TerminalAPI;
-  }
-}
 
 const SPINNER_FRAMES = ["[ / ]", "[ - ]", "[ \\ ]", "[ | ]"] as const;
 const TYPEWRITER_MIN_DELAY_MS = 10;
@@ -982,8 +975,17 @@ async function handleContextSearch(
       if (Array.isArray(items) && items.length > 0) {
         writeHtml(terminal, `<span class="system-info">${section.icon} ${section.label}</span>`);
         for (const item of items.slice(0, 5)) {
-          const name = item.name || item.title || item.description || "Unknown";
-          const score = item.score ? ` (${Math.round(item.score * 10) / 10})` : "";
+          const itemRecord = item as Record<string, unknown>;
+          const name =
+            (typeof itemRecord.name === "string" && itemRecord.name) ||
+            (typeof itemRecord.title === "string" && itemRecord.title) ||
+            (typeof itemRecord.description === "string" && itemRecord.description) ||
+            "Unknown";
+          const scoreValue =
+            typeof itemRecord.score === "number" && Number.isFinite(itemRecord.score)
+              ? itemRecord.score
+              : null;
+          const score = scoreValue === null ? "" : ` (${Math.round(scoreValue * 10) / 10})`;
           writeHtml(terminal, `  <span class="system-muted">•</span> ${escapeHtml(name)}${score}`);
         }
         if (items.length > 5) {
@@ -1820,10 +1822,18 @@ async function handleWorkflowCommand(
       try {
         const result = await window.terminalAPI.workflowRun?.(name);
 
-        if (result?.success && result.steps) {
+        if (result?.success && result.result) {
           writeLine(terminal, "");
-          for (const step of result.steps) {
-            writeHtml(terminal, `<span style="color: var(--text-muted);">  ${escapeHtml(step.description)}</span>`);
+          for (const stepResult of result.result) {
+            const commandText =
+              stepResult.step?.description || stepResult.step?.command || stepResult.step?.id || "step";
+            writeHtml(terminal, `<span style="color: var(--text-muted);">  ${escapeHtml(commandText)}</span>`);
+            if (stepResult.error) {
+              writeHtml(
+                terminal,
+                `<span class="system-error">    failed: ${escapeHtml(stepResult.error)}</span>`,
+              );
+            }
           }
           writeLine(terminal, "");
           writeHtml(terminal, `<span class="system-info">Execute the steps above to complete the workflow</span>`);

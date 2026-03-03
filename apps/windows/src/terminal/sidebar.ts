@@ -3,51 +3,23 @@
  * Displays Tasks, Agents, and Context panels with real-time updates
  */
 
-declare global {
-  interface Window {
-    terminalAPI?: {
-      orchestralTasks?: (filters: Record<string, string>) => Promise<{
-        tasks?: Array<{
-          id: string;
-          description: string;
-          status: string;
-          agent: string;
-          startedAt: number;
-          completedAt?: number;
-          tmuxSession?: string;
-          branch?: string;
-        }>;
-        summary?: string;
-      }>;
-      orchestralAgents?: (action: string, args: string[]) => Promise<{
-        tasks?: Array<{
-          id: string;
-          description: string;
-          status: string;
-          agent: string;
-          startedAt: number;
-          tmuxSession?: string;
-          branch?: string;
-        }>;
-      }>;
-    };
-  }
-}
-
 interface TaskInfo {
   id: string;
   description: string;
-  status: "running" | "completed" | "failed" | "pending" | "stopped";
+  status: string;
   agent: string;
   startedAt: number;
   completedAt?: number;
   tmuxSession?: string;
   branch?: string;
+  exitCode?: number | null;
+  failureReason?: string;
 }
 
 interface AgentInfo {
   id: string;
   description: string;
+  status?: string;
   agent: string;
   startedAt: number;
   tmuxSession?: string;

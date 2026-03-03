@@ -2,7 +2,6 @@
  * Orchestral command handlers for OpenClaw Super Terminal.
  * Integrates with the orchestration system via IPC.
  */
-import type { TerminalAPI } from "../preload/terminal-api";
 import { formatContextForDisplay, generateContextSummary, type PromptContext } from "./prompt-injection.js";
 import {
   refreshAgents as refreshSidebarAgents,
@@ -11,12 +10,6 @@ import {
   showAllTasks,
   setHideCompletedTasks,
 } from "./sidebar.js";
-
-declare global {
-  interface Window {
-    terminalAPI: TerminalAPI;
-  }
-}
 
 type WriteLineFn = (terminal: HTMLElement, text: string) => void;
 type WriteHtmlFn = (terminal: HTMLElement, html: string) => void;
@@ -686,7 +679,7 @@ export async function handleTasksCommand(
       writeHtml(terminal, `<span class="system-ok">[ok] Sidebar now shows all tasks</span>`);
     } else {
       writeLine(terminal, "Showing only running tasks in sidebar...");
-      hideCompletedTasks();
+      setHideCompletedTasks();
       writeHtml(terminal, `<span class="system-ok">[ok] Sidebar now shows only active tasks</span>`);
     }
     return;

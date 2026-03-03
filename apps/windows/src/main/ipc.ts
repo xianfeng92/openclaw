@@ -1,12 +1,10 @@
 import { ipcMain } from "electron";
-import type { GatewayManager, GatewayState } from "./gateway.js";
-import type { ChatWindowManager } from "./window.js";
+import type { GatewayLike, GatewayState } from "./gateway-like.js";
 import type { SettingsData } from "./settings.js";
 import { saveSettings } from "./settings.js";
 
 export function setupIpc(
-  gatewayManager: GatewayManager,
-  chatWindowManager: ChatWindowManager
+  gatewayManager: GatewayLike
 ): void {
   // Synchronous auth bootstrap for the preload script (must run before the Control UI app code).
   // Never expose this token via the window globals; preload seeds localStorage and keeps the token private.
@@ -56,26 +54,6 @@ export function setupIpc(
       console.error("[IPC] gateway:restart error:", errorMessage);
       return { success: false, error: errorMessage };
     }
-  });
-
-  // Show chat window
-  ipcMain.handle("window:show", (): void => {
-    chatWindowManager.showChatWindow();
-  });
-
-  // Hide chat window
-  ipcMain.handle("window:hide", (): void => {
-    chatWindowManager.hideChatWindow();
-  });
-
-  // Toggle chat window
-  ipcMain.handle("window:toggle", (): void => {
-    chatWindowManager.toggleChatWindow();
-  });
-
-  // Show invoke fast-path window
-  ipcMain.handle("window:invoke", (): void => {
-    chatWindowManager.showInvokeWindow();
   });
 
   // Subscribe to gateway state changes

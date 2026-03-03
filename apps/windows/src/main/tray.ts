@@ -1,8 +1,8 @@
 import { Tray, Menu, nativeImage, app, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { GatewayManager } from "./gateway.js";
-import type { ChatWindowManager } from "./window.js";
+import type { GatewayLike, GatewayStatus } from "./gateway-like.js";
+import type { TerminalWindowManager } from "./terminal-window.js";
 import type { SettingsManager } from "./settings.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,7 +34,7 @@ function createFallbackIcon(color: string): NativeImage {
   return nativeImage.createFromBuffer(buffer);
 }
 
-function getTrayIcon(status: GatewayManager["status"]): NativeImage {
+function getTrayIcon(status: GatewayStatus): NativeImage {
   const resourcesPath = getResourcesPath();
   let iconPath: string;
 
@@ -76,8 +76,8 @@ function getTrayIcon(status: GatewayManager["status"]): NativeImage {
 }
 
 export function createTray(
-  gatewayManager: GatewayManager,
-  chatWindowManager: ChatWindowManager,
+  gatewayManager: GatewayLike,
+  terminalWindowManager: TerminalWindowManager,
   settingsManager: SettingsManager
 ): Tray {
   // Create initial icon with fallback
@@ -90,7 +90,7 @@ export function createTray(
   console.log("[Tray] Tray is destroyed:", tray.isDestroyed());
 
   // Set tooltip
-  tray.setToolTip("OpenClaw - Stopped");
+  tray.setToolTip("CyDeck - Stopped");
   console.log("[Tray] Tooltip set");
 
   // Update tray when gateway state changes
@@ -119,22 +119,22 @@ export function createTray(
 
     tray.setToolTip(
       state.status === "running"
-        ? `OpenClaw - Running (port ${state.port})`
+        ? `CyDeck - Running (port ${state.port})`
         : state.status === "error"
-        ? `OpenClaw - Error: ${state.error || "Unknown"}`
-        : `OpenClaw - ${statusText}`
+        ? `CyDeck - Error: ${state.error || "Unknown"}`
+        : `CyDeck - ${statusText}`
     );
 
     // Update context menu
-    updateContextMenu(tray, gatewayManager, chatWindowManager, settingsManager);
+    updateContextMenu(tray, gatewayManager, terminalWindowManager, settingsManager);
   });
 
   // Set initial context menu
-  updateContextMenu(tray, gatewayManager, chatWindowManager, settingsManager);
+  updateContextMenu(tray, gatewayManager, terminalWindowManager, settingsManager);
 
   // Handle tray click
   tray.on("click", () => {
-    chatWindowManager.showChatWindow();
+    terminalWindowManager.toggle();
   });
 
   return tray;
@@ -142,8 +142,8 @@ export function createTray(
 
 function updateContextMenu(
   tray: Tray,
-  gatewayManager: GatewayManager,
-  chatWindowManager: ChatWindowManager,
+  gatewayManager: GatewayLike,
+  terminalWindowManager: TerminalWindowManager,
   settingsManager: SettingsManager
 ): void {
   const state = gatewayManager.getState();
@@ -152,12 +152,8 @@ function updateContextMenu(
 
   const menuTemplate: MenuItemConstructorOptions[] = [
     {
-      label: "Open Chat",
-      click: () => chatWindowManager.showChatWindow(),
-    },
-    {
-      label: "Quick Invoke (Alt+Space)",
-      click: () => chatWindowManager.showInvokeWindow(),
+      label: "Open Terminal (Ctrl+Shift+T)",
+      click: () => terminalWindowManager.show(),
     },
     { type: "separator" },
     {
@@ -189,7 +185,6 @@ function updateContextMenu(
           try {
             gatewayManager.rotateAuthToken();
             await gatewayManager.restart();
-            chatWindowManager.reloadToGatewayUi();
           } catch (err) {
             console.error("[Tray] Failed to rotate desktop token:", err);
           }

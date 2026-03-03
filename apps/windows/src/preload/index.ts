@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import { contextBridge, ipcRenderer } from "electron";
-import type { GatewayState } from "../main/gateway.js";
+import type { GatewayState } from "../main/gateway-like.js";
 import type { SettingsData } from "../main/settings.js";
 
 type DesktopGatewayAuth = {
@@ -89,12 +89,6 @@ export interface ElectronAPI {
     restart(): Promise<{ success: boolean; error?: string }>;
     onStateChanged(callback: (state: GatewayState) => void): () => void;
   };
-  window: {
-    show(): Promise<void>;
-    hide(): Promise<void>;
-    toggle(): Promise<void>;
-    invoke(): Promise<void>;
-  };
   saveSettings(data: SettingsData): Promise<{ success: boolean; error?: string }>;
 }
 
@@ -112,12 +106,6 @@ const api: ElectronAPI = {
         ipcRenderer.off("gateway:state-changed", listener);
       };
     },
-  },
-  window: {
-    show: () => ipcRenderer.invoke("window:show"),
-    hide: () => ipcRenderer.invoke("window:hide"),
-    toggle: () => ipcRenderer.invoke("window:toggle"),
-    invoke: () => ipcRenderer.invoke("window:invoke"),
   },
   saveSettings: (data) => ipcRenderer.invoke("settings:save", data),
 };

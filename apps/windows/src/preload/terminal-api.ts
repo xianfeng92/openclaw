@@ -2,6 +2,21 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
+export type TerminalConfigIssue = {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  path?: string;
+  varName?: string;
+};
+
+export type TerminalConfigValidation = {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  issues: TerminalConfigIssue[];
+};
+
 export interface TerminalAPI {
   // Shell execution
   execShell: (command: string) => Promise<{ runId: string }>;
@@ -15,6 +30,55 @@ export interface TerminalAPI {
 
   // Get auth sync (for bootstrap)
   getGatewayAuthSync: () => { token: string; port: number } | null;
+
+  // Config commands
+  configGet: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    config?: unknown;
+    runtimeProvider?: unknown;
+    workspacePath?: string;
+    validation?: TerminalConfigValidation;
+    warnings?: string[];
+    issues?: TerminalConfigIssue[];
+    error?: string;
+  }>;
+  configSet: (key: string, value: string) => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    key?: string;
+    value?: string | number | boolean;
+    validation?: TerminalConfigValidation;
+    warnings?: string[];
+    issues?: TerminalConfigIssue[];
+    error?: string;
+  }>;
+  configValidate: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    validation?: TerminalConfigValidation;
+    warnings?: string[];
+    issues?: TerminalConfigIssue[];
+    error?: string;
+  }>;
+  configReset: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    validation?: TerminalConfigValidation;
+    warnings?: string[];
+    issues?: TerminalConfigIssue[];
+    error?: string;
+  }>;
+  configPath: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    error?: string;
+  }>;
 
   // Orchestral commands
   orchestralSpawn: (opts: {
@@ -274,6 +338,11 @@ const api: TerminalAPI = {
       return null;
     }
   },
+  configGet: () => ipcRenderer.invoke("terminal:config-get"),
+  configSet: (key, value) => ipcRenderer.invoke("terminal:config-set", key, value),
+  configValidate: () => ipcRenderer.invoke("terminal:config-validate"),
+  configReset: () => ipcRenderer.invoke("terminal:config-reset"),
+  configPath: () => ipcRenderer.invoke("terminal:config-path"),
 
   // Orchestral commands
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),

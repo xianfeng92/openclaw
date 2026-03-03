@@ -1,4 +1,8 @@
-import type { TerminalAPI } from "../preload/terminal-api";
+import type {
+  TerminalAPI,
+  TerminalConfigIssue,
+  TerminalConfigValidation,
+} from "../preload/terminal-api";
 import { TerminalGatewayClient, type GatewayChatState } from "./gateway-client.js";
 import {
   handleSpawnCommand,
@@ -526,6 +530,11 @@ Language: ${escapeHtml(navigator.language)}
       return;
     }
 
+    case "/config": {
+      await handleConfigCommand(terminal, args, writeLine, writeHtml);
+      return;
+    }
+
     case "/test-agent-output": {
       await showMockAgentOutput(terminal, writeLine, writeHtml);
       return;
@@ -555,6 +564,7 @@ function showHelp(terminal: HTMLElement): void {
   /help          - Show this help message
   /clear         - Clear the terminal screen
   /status        - Show terminal and gateway status
+  /config        - Show config command usage
   /history       - Show command history
   /whoami        - Display current user/session info
   /env           - Show environment information
@@ -1968,6 +1978,226 @@ async function handleTaskCommand(
   }
 }
 
+async function handleConfigCommand(
+  terminal: HTMLElement,
+  args: string[],
+  writeLine: (terminal: HTMLElement, text: string) => void,
+  writeHtml: (terminal: HTMLElement, html: string) => void,
+): Promise<void> {
+  const action = (args[0] || "show").toLowerCase();
+
+  const asRecord = (value: unknown): Record<string, unknown> | null => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  };
+
+  const redactSecret = (value: string): string => {
+    if (!value.trim()) {
+      return value;
+    }
+    if (value.includes("${")) {
+      return value;
+    }
+    if (value.length <= 8) {
+      return "********";
+    }
+    return `${value.slice(0, 4)}...${value.slice(-4)}`;
+  };
+
+  const redactConfig = (value: unknown, keyHint = ""): unknown => {
+    if (Array.isArray(value)) {
+      return value.map((item) => redactConfig(item, keyHint));
+    }
+    const record = asRecord(value);
+    if (record) {
+      const next: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(record)) {
+        next[key] = redactConfig(child, key);
+      }
+      return next;
+    }
+    if (typeof value === "string" && /(api[_-]?key|token|secret)/i.test(keyHint)) {
+      return redactSecret(value);
+    }
+    return value;
+  };
+
+  const renderValidation = (validation?: TerminalConfigValidation, issues?: TerminalConfigIssue[]) => {
+    if (!validation) {
+      return;
+    }
+
+    if (validation.valid) {
+      writeHtml(terminal, `<span class="system-ok">[ok] Config validation passed</span>`);
+    } else {
+      writeHtml(
+        terminal,
+        `<span class="system-error">[err] Config validation failed (${validation.errors.length} error(s))</span>`,
+      );
+    }
+
+    const effectiveIssues = issues ?? validation.issues;
+    for (const issue of effectiveIssues) {
+      const cssClass = issue.severity === "error" ? "system-error" : "system-warn";
+      const pathSuffix = issue.path ? ` (${issue.path})` : "";
+      writeHtml(
+        terminal,
+        `<span class="${cssClass}">[${issue.severity}] ${escapeHtml(issue.message)}${escapeHtml(pathSuffix)}</span>`,
+      );
+    }
+  };
+
+  switch (action) {
+    case "help": {
+      writeHtml(
+        terminal,
+        `
+<span class="system-ok"><strong>Config Commands</strong></span>
+
+<span class="system-info">Usage:</span>
+  /config show
+  /config set &lt;key&gt; &lt;value&gt;
+  /config validate
+  /config reset
+  /config path
+
+<span class="system-info">Common keys:</span>
+  ai.defaultProvider
+  ai.providers.openai.apiKey
+  ai.providers.openai.baseUrl
+  ai.providers.openai.model
+  ai.providers.openai.maxTokens
+  workspace.path
+  workspace.autoCreate
+  gateway.port
+  gateway.autoStart
+  ui.theme
+
+<span class="system-info">Examples:</span>
+  /config set gateway.port 19001
+  /config set gateway.autoStart true
+  /config set ai.defaultProvider openai
+  /config set workspace.path "./workspace"
+      `.trim(),
+      );
+      return;
+    }
+
+    case "show": {
+      const result = await window.terminalAPI.configGet();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to load config")}</span>`);
+        return;
+      }
+
+      writeSection(terminal, "CyDeck Config", "[config]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Path: ${escapeHtml(result.configPath)}</span>`);
+      writeHtml(terminal, `<span class="system-info">State Dir: ${escapeHtml(result.stateDir)}</span>`);
+      if (result.workspacePath) {
+        writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
+      }
+      if (result.runtimeProvider) {
+        const runtimeProvider = asRecord(result.runtimeProvider);
+        if (runtimeProvider) {
+          const provider = typeof runtimeProvider.provider === "string" ? runtimeProvider.provider : "unknown";
+          const model = typeof runtimeProvider.model === "string" ? runtimeProvider.model : "unknown";
+          writeHtml(
+            terminal,
+            `<span class="system-info">Runtime Provider: ${escapeHtml(provider)} / ${escapeHtml(model)}</span>`,
+          );
+        }
+      }
+
+      renderValidation(result.validation, result.issues);
+
+      if (result.config) {
+        writeLine(terminal, "");
+        writeHtml(terminal, `<span class="system-info">Resolved Config (redacted):</span>`);
+        const redacted = redactConfig(result.config);
+        writeHtml(
+          terminal,
+          `<pre class="assistant-code"><code>${escapeHtml(JSON.stringify(redacted, null, 2))}</code></pre>`,
+        );
+      }
+      return;
+    }
+
+    case "set": {
+      const key = args[1];
+      const value = args.slice(2).join(" ");
+      if (!key || !value.trim()) {
+        writeHtml(
+          terminal,
+          `<span class="system-info">Usage: /config set &lt;key&gt; &lt;value&gt;</span>`,
+        );
+        return;
+      }
+
+      const result = await window.terminalAPI.configSet(key, value);
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to set config value")}</span>`);
+        return;
+      }
+
+      writeHtml(
+        terminal,
+        `<span class="system-ok">[ok] Updated ${escapeHtml(result.key || key)} = ${escapeHtml(String(result.value ?? value))}</span>`,
+      );
+      renderValidation(result.validation, result.issues);
+      return;
+    }
+
+    case "validate": {
+      const result = await window.terminalAPI.configValidate();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to validate config")}</span>`);
+        return;
+      }
+
+      writeSection(terminal, "Config Validation", "[config]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Path: ${escapeHtml(result.configPath)}</span>`);
+      renderValidation(result.validation, result.issues);
+      return;
+    }
+
+    case "reset": {
+      const result = await window.terminalAPI.configReset();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to reset config")}</span>`);
+        return;
+      }
+
+      writeHtml(terminal, `<span class="system-ok">[ok] Config reset to defaults</span>`);
+      writeHtml(terminal, `<span class="system-info">Path: ${escapeHtml(result.configPath)}</span>`);
+      renderValidation(result.validation, result.issues);
+      return;
+    }
+
+    case "path": {
+      const result = await window.terminalAPI.configPath();
+      if (!result.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to resolve config paths")}</span>`);
+        return;
+      }
+
+      writeSection(terminal, "Config Paths", "[config]", writeHtml);
+      writeHtml(terminal, `<span class="system-info">Config: ${escapeHtml(result.configPath)}</span>`);
+      writeHtml(terminal, `<span class="system-info">State: ${escapeHtml(result.stateDir)}</span>`);
+      return;
+    }
+
+    default: {
+      writeHtml(
+        terminal,
+        `<span class="system-warn">[warn] Unknown /config action: ${escapeHtml(action)}</span>`,
+      );
+      writeHtml(terminal, `<span class="system-info">Use /config help for usage.</span>`);
+    }
+  }
+}
+
 /**
  * Show mock AI agent output for visual testing
  */
@@ -2029,4 +2259,3 @@ for article in articles[:3]:
   separator.className = "turn-separator";
   appendBeforeInput(terminal, separator);
 }
-

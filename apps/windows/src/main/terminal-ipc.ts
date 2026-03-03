@@ -4,8 +4,20 @@ import { v4 as uuidv4 } from "uuid";
 import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
-import type { GatewayManager } from "./gateway.js";
-import { getAgentManager } from "./windows-agent-manager.js";
+import {
+  DEFAULT_CYDECK_CONFIG,
+  getEffectiveConfig,
+  resolveCyDeckConfigPath,
+  resolveCyDeckStateDir,
+} from "./cydeck-config.js";
+import type { CyDeckConfigIssue, CyDeckConfigValidation } from "./cydeck-config.js";
+import {
+  assignConfigPathValue,
+  coerceCyDeckConfigValue,
+  formatMutableConfigKeysForHelp,
+  isCyDeckMutableConfigKey,
+} from "./cydeck-config-ipc.js";
+import type { GatewayLike } from "./gateway-like.js";
 // Note: Orchestration modules are imported dynamically via IPC or at runtime
 // Static imports are removed to avoid build issues
 
@@ -85,7 +97,7 @@ type PendingShell = {
 
 const activeShells = new Map<string, PendingShell>();
 
-let gatewayManagerInstance: GatewayManager | undefined;
+let gatewayManagerInstance: GatewayLike | undefined;
 
 // NOTE: Task storage is unified in WindowsAgentProcessManager (agent-tasks.json)
 
@@ -131,9 +143,152 @@ function getProjectPath(): string {
   return cachedProjectPath ?? currentCwd;
 }
 
-const getAgentManager = () => require("./windows-agent-manager.js").getAgentManager(getProjectPath());
+function getShellCommand(): string {
+  if (process.platform === "win32") {
+    return process.env.ComSpec || "cmd.exe";
+  }
+  return process.env.SHELL || "/bin/sh";
+}
 
-export function setupTerminalIpc(gatewayManager: GatewayManager): void {
+function findObsidianVault(): string | undefined {
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+  const candidates = [
+    process.env.CYDECK_OBSIDIAN_VAULT,
+    path.join(homeDir, "Obsidian", "Vault"),
+    path.join(homeDir, "Documents", "Obsidian", "Vault"),
+    path.join(homeDir, "OneDrive", "Documents", "Obsidian", "Vault"),
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+const getAgentManager = (projectPath?: string) =>
+  require("./windows-agent-manager.js").getAgentManager(projectPath ?? getProjectPath());
+
+type TerminalConfigBaseResult = {
+  success: boolean;
+  configPath: string;
+  stateDir: string;
+  error?: string;
+};
+
+type TerminalConfigGetResult = TerminalConfigBaseResult & {
+  config?: unknown;
+  runtimeProvider?: unknown;
+  workspacePath?: string;
+  validation?: CyDeckConfigValidation;
+  warnings?: string[];
+  issues?: CyDeckConfigIssue[];
+};
+
+type TerminalConfigSetResult = TerminalConfigBaseResult & {
+  key?: string;
+  value?: string | number | boolean;
+  validation?: CyDeckConfigValidation;
+  warnings?: string[];
+  issues?: CyDeckConfigIssue[];
+};
+
+type TerminalConfigValidateResult = TerminalConfigBaseResult & {
+  validation?: CyDeckConfigValidation;
+  warnings?: string[];
+  issues?: CyDeckConfigIssue[];
+};
+
+type TerminalConfigResetResult = TerminalConfigBaseResult & {
+  validation?: CyDeckConfigValidation;
+  warnings?: string[];
+  issues?: CyDeckConfigIssue[];
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneDefaultConfigRecord(): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(DEFAULT_CYDECK_CONFIG)) as Record<string, unknown>;
+}
+
+function loadEditableConfigDocument(): {
+  success: boolean;
+  configPath: string;
+  stateDir: string;
+  document?: Record<string, unknown>;
+  error?: string;
+} {
+  const configPath = resolveCyDeckConfigPath();
+  const stateDir = resolveCyDeckStateDir();
+
+  if (!fs.existsSync(configPath)) {
+    return {
+      success: true,
+      configPath,
+      stateDir,
+      document: cloneDefaultConfigRecord(),
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(configPath, "utf-8");
+    if (!raw.trim()) {
+      return {
+        success: true,
+        configPath,
+        stateDir,
+        document: {},
+      };
+    }
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isPlainObject(parsed)) {
+      return {
+        success: false,
+        configPath,
+        stateDir,
+        error: `Config file must contain a JSON object: ${configPath}`,
+      };
+    }
+
+    return {
+      success: true,
+      configPath,
+      stateDir,
+      document: parsed,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      configPath,
+      stateDir,
+      error: `Failed to read config file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+function writeConfigDocument(
+  configPath: string,
+  stateDir: string,
+  document: Record<string, unknown>,
+): { success: boolean; error?: string } {
+  try {
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to write config file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+export function setupTerminalIpc(gatewayManager: GatewayLike): void {
   gatewayManagerInstance = gatewayManager;
 
   // Note: Agent manager loads existing tasks on startup via its constructor
@@ -239,6 +394,179 @@ export function setupTerminalIpc(gatewayManager: GatewayManager): void {
       token,
     };
   });
+
+  // Get effective config (resolved + validated)
+  ipcMain.handle("terminal:config-get", async (): Promise<TerminalConfigGetResult> => {
+    try {
+      const effective = getEffectiveConfig();
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        config: effective.config,
+        runtimeProvider: effective.runtimeProvider,
+        workspacePath: effective.workspacePath,
+        validation: effective.validation,
+        warnings: effective.warnings,
+        issues: effective.issues,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath: resolveCyDeckConfigPath(),
+        stateDir: resolveCyDeckStateDir(),
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  // Return config filesystem paths.
+  ipcMain.handle("terminal:config-path", async (): Promise<TerminalConfigBaseResult> => {
+    return {
+      success: true,
+      configPath: resolveCyDeckConfigPath(),
+      stateDir: resolveCyDeckStateDir(),
+    };
+  });
+
+  // Re-run validation against current effective config.
+  ipcMain.handle("terminal:config-validate", async (): Promise<TerminalConfigValidateResult> => {
+    try {
+      const effective = getEffectiveConfig();
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        validation: effective.validation,
+        warnings: effective.warnings,
+        issues: effective.issues,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath: resolveCyDeckConfigPath(),
+        stateDir: resolveCyDeckStateDir(),
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  // Reset config back to the default CyDeck shape.
+  ipcMain.handle("terminal:config-reset", async (): Promise<TerminalConfigResetResult> => {
+    const configPath = resolveCyDeckConfigPath();
+    const stateDir = resolveCyDeckStateDir();
+    const writeResult = writeConfigDocument(configPath, stateDir, cloneDefaultConfigRecord());
+    if (!writeResult.success) {
+      return {
+        success: false,
+        configPath,
+        stateDir,
+        error: writeResult.error,
+      };
+    }
+
+    try {
+      const effective = getEffectiveConfig();
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        validation: effective.validation,
+        warnings: effective.warnings,
+        issues: effective.issues,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath,
+        stateDir,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  // Set a single config key in the JSON document.
+  ipcMain.handle(
+    "terminal:config-set",
+    async (_event, key: string, rawValue: string): Promise<TerminalConfigSetResult> => {
+      const normalizedKey = typeof key === "string" ? key.trim() : "";
+      const normalizedRawValue = typeof rawValue === "string" ? rawValue : "";
+      const configPath = resolveCyDeckConfigPath();
+      const stateDir = resolveCyDeckStateDir();
+
+      if (!normalizedKey) {
+        return {
+          success: false,
+          configPath,
+          stateDir,
+          error: "Missing config key. Usage: /config set <key> <value>",
+        };
+      }
+
+      if (!isCyDeckMutableConfigKey(normalizedKey)) {
+        return {
+          success: false,
+          configPath,
+          stateDir,
+          error: `Unsupported config key "${normalizedKey}". Mutable keys: ${formatMutableConfigKeysForHelp()}`,
+        };
+      }
+
+      const coerced = coerceCyDeckConfigValue(normalizedKey, normalizedRawValue);
+      if (!coerced.ok) {
+        return {
+          success: false,
+          configPath,
+          stateDir,
+          error: coerced.error,
+        };
+      }
+
+      const editable = loadEditableConfigDocument();
+      if (!editable.success || !editable.document) {
+        return {
+          success: false,
+          configPath: editable.configPath,
+          stateDir: editable.stateDir,
+          error: editable.error ?? "Failed to load editable config document",
+        };
+      }
+
+      assignConfigPathValue(editable.document, normalizedKey, coerced.value);
+      const writeResult = writeConfigDocument(editable.configPath, editable.stateDir, editable.document);
+      if (!writeResult.success) {
+        return {
+          success: false,
+          configPath: editable.configPath,
+          stateDir: editable.stateDir,
+          error: writeResult.error,
+        };
+      }
+
+      try {
+        const effective = getEffectiveConfig();
+        return {
+          success: true,
+          configPath: effective.configPath,
+          stateDir: effective.stateDir,
+          key: normalizedKey,
+          value: coerced.value,
+          validation: effective.validation,
+          warnings: effective.warnings,
+          issues: effective.issues,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          configPath: editable.configPath,
+          stateDir: editable.stateDir,
+          error: err instanceof Error ? err.message : String(err),
+          key: normalizedKey,
+          value: coerced.value,
+        };
+      }
+    },
+  );
 
   // ===== Orchestral Commands =====
 
@@ -932,16 +1260,23 @@ ipcMain.handle("terminal:pattern-list", async (): Promise<any> => {
 
 // Save a new pattern
 ipcMain.handle("terminal:pattern-save", async (_event, pattern: {
-  name,
-  category,
-  description,
-  prompt,
+  name: string;
+  category: string;
+  description: string;
+  prompt: string;
 }): Promise<any> => {
   try {
+    const { name, category, description, prompt } = pattern;
     const contextPath = path.join(getProjectPath(), ".openclaw", "business-context.json");
 
     // Load existing context or create new
-    let context = { customers: [], projects: [], meetings: [], decisions: [], patterns: [] };
+    let context: {
+      customers: unknown[];
+      projects: unknown[];
+      meetings: unknown[];
+      decisions: unknown[];
+      patterns: Array<Record<string, unknown>>;
+    } = { customers: [], projects: [], meetings: [], decisions: [], patterns: [] };
     if (fs.existsSync(contextPath)) {
       context = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
     }
@@ -1033,7 +1368,7 @@ ipcMain.handle("terminal:pattern-rate", async (_event, patternId: string, succes
       return { success: false, error: "No patterns found" };
     }
 
-    const context = JSON.parse(fs.readFileSync(contextPath, utf-8));
+    const context = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
     const patterns = context.patterns || [];
 
     // Find pattern

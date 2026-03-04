@@ -1,10 +1,15 @@
 import { handleCommand, parseCommand, getTerminalStateSnapshot } from "./command-handler.js";
+import {
+  resolveTerminalAutocomplete,
+  type TerminalAutocompleteState,
+} from "./autocomplete.js";
 import { initSidebar, toggleSidebar } from "./sidebar.js";
 
 let commandHistory: string[] = [];
 let historyIndex = -1;
 let isProcessing = false;
 let latestPingMs: number | null = null;
+let autocompleteState: TerminalAutocompleteState | null = null;
 
 // Command Palette state
 let paletteVisible = false;
@@ -27,50 +32,6 @@ const contextMenuItems = document.getElementById("context-menu-items");
 let contextMenuVisible = false;
 let contextMenuSelectedIndex = 0;
 let contextMenuTriggerPos = -1; // Position of @ symbol
-
-const commands = [
-  "help",
-  "clear",
-  "cls",
-  "status",
-  "agent",
-  "session",
-  "whoami",
-  "env",
-  "echo",
-  "date",
-  "time",
-  "history",
-  "connect",
-  "disconnect",
-  "spawn",
-  "agents",
-  "tasks",
-  "task",
-  "orchestral",
-  "orch",
-  "context",
-  "review",
-  "pattern",
-  "test-agent-output",
-];
-
-const shellCommandsWindows = [
-  "dir", "ls", "cd", "pwd", "cls", "echo", "type", "cat", "del", "rm",
-  "copy", "cp", "move", "mv", "mkdir", "md", "rmdir", "rd",
-  "git", "npm", "pnpm", "node", "python", "python3", "pip",
-];
-
-const shellCommandsUnix = [
-  "ls", "cd", "pwd", "clear", "echo", "cat", "less", "more", "head", "tail",
-  "grep", "find", "rm", "cp", "mv", "mkdir", "rmdir", "chmod", "chown",
-  "git", "npm", "pnpm", "node", "python", "python3", "pip", "curl", "wget",
-  "ssh", "vim", "nano", "top", "htop", "ps", "kill", "df", "du",
-];
-
-const shellCommands = navigator.platform.includes("Win")
-  ? shellCommandsWindows
-  : shellCommandsUnix;
 
 const USER_PROMPT_HTML =
   '<span class="prompt-host">[User@CyDeck]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
@@ -302,6 +263,7 @@ async function submitCommand(): Promise<void> {
 
   commandHistory.push(command);
   historyIndex = -1;
+  autocompleteState = null;
 
   const parsed = parseCommand(command);
   if (parsed.type !== "message") {
@@ -345,6 +307,7 @@ function navigateHistory(direction: "up" | "down"): void {
     }
   }
 
+  autocompleteState = null;
   autoResizeTextarea(commandInput);
   commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
 }
@@ -491,6 +454,7 @@ function initTerminal(): void {
 
   // Auto-resize on input
   commandInput.addEventListener("input", () => {
+    autocompleteState = null;
     autoResizeTextarea(commandInput);
 
     // Check for @ trigger
@@ -555,6 +519,10 @@ function initTerminal(): void {
 
       // Any other key hides the menu
       hideContextMenu();
+    }
+
+    if (event.key !== "Tab") {
+      autocompleteState = null;
     }
 
     // Ctrl+Enter or Ctrl+Shift+Enter to submit
@@ -630,38 +598,23 @@ function initTerminal(): void {
       return;
     }
 
-    // Tab: simple completion (single word only)
+    // Tab: multi-level autocomplete with candidate cycling.
     if (event.key === "Tab") {
       event.preventDefault();
-      const currentValue = commandInput.value;
-      const cursorPos = commandInput.selectionStart;
-
-      // Get the word being typed
-      const beforeCursor = currentValue.slice(0, cursorPos);
-      const wordMatch = beforeCursor.match(/(\S+)$/);
-      if (!wordMatch) return;
-
-      const currentWord = wordMatch[1];
-      let completion = "";
-
-      if (currentWord.startsWith("/")) {
-        const search = currentWord.toLowerCase();
-        const match = commands.find((c) => `/${c}`.startsWith(search));
-        if (match) completion = `/${match}`;
-      } else if (currentWord.startsWith("!")) {
-        const search = currentWord.slice(1).toLowerCase();
-        const match = shellCommands.find((c) => c.startsWith(search));
-        if (match) completion = `!${match}`;
-      }
-
-      if (completion && completion.length > currentWord.length) {
-        const afterCursor = currentValue.slice(cursorPos);
-        const beforeWord = beforeCursor.slice(0, -currentWord.length);
-        commandInput.value = beforeWord + completion + afterCursor;
-        const newCursorPos = beforeWord.length + completion.length;
-        commandInput.setSelectionRange(newCursorPos, newCursorPos);
+      const cursorPos = commandInput.selectionStart ?? commandInput.value.length;
+      const result = resolveTerminalAutocomplete({
+        input: commandInput.value,
+        cursorPos,
+        isWindows: navigator.platform.includes("Win"),
+        previousState: autocompleteState,
+      });
+      if (result.didComplete) {
+        commandInput.value = result.value;
+        commandInput.setSelectionRange(result.cursorPos, result.cursorPos);
+        autocompleteState = result.state;
         autoResizeTextarea(commandInput);
       }
+      return;
     }
   });
 

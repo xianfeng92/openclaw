@@ -24,6 +24,26 @@ pnpm --dir apps/windows build
 pnpm --dir apps/windows build:prod
 ```
 
+## Memory Benchmark (Regression Guard)
+
+Use this workflow when tuning memory search/snapshot/compaction strategy:
+
+```bash
+# 1) create/refresh baseline
+pnpm --dir apps/windows memory:benchmark:baseline
+
+# 2) after strategy changes, compare against baseline
+pnpm --dir apps/windows memory:benchmark:regression
+```
+
+Artifacts are written under `.local/cydeck-memory-benchmark/`:
+
+- `baseline.json`
+- `latest/memory-benchmark.report.json`
+- `latest/memory-benchmark.report.md`
+- `latest/memory-benchmark.comparison.json`
+- `latest/memory-benchmark.comparison.md`
+
 ## Project Structure
 
 ```text

@@ -17,7 +17,10 @@
     "build:dir": "pnpm build && electron-builder --dir",
     "lint": "oxlint --type-aware",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.config.ts"
+    "test": "vitest run --config vitest.config.ts",
+    "memory:benchmark:build": "tsdown --no-config src/main/memory-benchmark-cli.ts -f esm -d dist/tools --target node22 --sourcemap --clean",
+    "memory:benchmark:baseline": "pnpm memory:benchmark:build && node dist/tools/memory-benchmark-cli.mjs --seed 20260304 --workspace .local/cydeck-memory-benchmark/workspace --output-dir .local/cydeck-memory-benchmark/latest --write-baseline .local/cydeck-memory-benchmark/baseline.json --clean-workspace",
+    "memory:benchmark:regression": "pnpm memory:benchmark:build && node dist/tools/memory-benchmark-cli.mjs --seed 20260304 --workspace .local/cydeck-memory-benchmark/workspace --output-dir .local/cydeck-memory-benchmark/latest --baseline .local/cydeck-memory-benchmark/baseline.json --clean-workspace --fail-on-regression"
   },
   "dependencies": {
     "electron-store": "^10.0.0"

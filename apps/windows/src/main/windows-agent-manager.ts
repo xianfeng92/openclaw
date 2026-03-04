@@ -18,7 +18,13 @@ const __dirname = path.dirname(__filename);
 
 const execAsync = promisify(require("child_process").exec);
 
-type AgentProcessStatus = "starting" | "running" | "exited" | "killed";
+type AgentProcessStatus =
+  | "starting"
+  | "running"
+  | "completed"
+  | "failed"
+  | "exited"
+  | "killed";
 
 export interface WindowsAgentProcess {
   id: string;
@@ -221,15 +227,16 @@ export class WindowsAgentProcessManager {
 
     // Handle exit
     proc.on("close", (code: number | null) => {
-      agentProcess.status = "exited";
+      const normalizedCode = typeof code === "number" ? code : 1;
+      agentProcess.status = normalizedCode === 0 ? "completed" : "failed";
       agentProcess.exitCode = code;
       agentProcess.completedAt = Date.now();
       agentProcess.lastOutput = this.getOutputTail(agentProcess.outputBuffer, 80);
       const parsedFailure = this.extractFailureReason(agentProcess.lastOutput);
-      if (parsedFailure) {
+      if (agentProcess.status === "failed" && parsedFailure) {
         agentProcess.failureReason = parsedFailure;
-      } else if (code !== null && code !== 0) {
-        agentProcess.failureReason = `Agent exited with code ${code}`;
+      } else if (agentProcess.status === "failed") {
+        agentProcess.failureReason = `Agent exited with code ${normalizedCode}`;
       } else {
         agentProcess.failureReason = undefined;
       }
@@ -239,8 +246,9 @@ export class WindowsAgentProcessManager {
 
     // Handle errors
     proc.on("error", (err: Error) => {
-      agentProcess.status = "exited";
+      agentProcess.status = "failed";
       agentProcess.completedAt = Date.now();
+      agentProcess.exitCode = agentProcess.exitCode ?? 1;
       agentProcess.failureReason = err.message;
       this.sendOutput(taskId, `[agent] Error: ${err.message}\n`);
       this.saveTasks();
@@ -269,6 +277,7 @@ export class WindowsAgentProcessManager {
       agentProcess.lastOutput = lastOutput;
       agentProcess.failureReason =
         parsedFailure ?? `Agent exited immediately (code ${proc.exitCode})`;
+      agentProcess.status = "failed";
       this.saveTasks();
       return {
         success: false,
@@ -380,6 +389,42 @@ export class WindowsAgentProcessManager {
    */
   getAgent(taskId: string): WindowsAgentProcess | undefined {
     return this.processes.get(taskId);
+  }
+
+  /**
+   * Mark a non-running task as completed/failed for operator bookkeeping.
+   */
+  completeTask(
+    taskId: string,
+    success: boolean,
+    reason?: string,
+  ): { success: boolean; error?: string; task?: WindowsAgentProcess } {
+    const process = this.processes.get(taskId);
+    if (!process) {
+      return { success: false, error: "Task not found" };
+    }
+
+    if (process.status === "running" || process.status === "starting") {
+      return {
+        success: false,
+        error: "Task is still running. Stop it first with /agents kill <task-id>.",
+      };
+    }
+
+    process.status = success ? "completed" : "failed";
+    process.completedAt = Date.now();
+    process.exitCode = typeof process.exitCode === "number" ? process.exitCode : success ? 0 : 1;
+
+    if (success) {
+      process.failureReason = undefined;
+    } else {
+      const normalizedReason = (reason ?? "").trim();
+      process.failureReason =
+        normalizedReason || process.failureReason || "Marked as failed by operator";
+    }
+
+    this.saveTasks();
+    return { success: true, task: process };
   }
 
   /**
@@ -743,6 +788,8 @@ export class WindowsAgentProcessManager {
     total: number;
     running: number;
     starting: number;
+    completed: number;
+    failed: number;
     exited: number;
     killed: number;
   } {
@@ -752,6 +799,8 @@ export class WindowsAgentProcessManager {
       total: processes.length,
       running: processes.filter((p) => p.status === "running").length,
       starting: processes.filter((p) => p.status === "starting").length,
+      completed: processes.filter((p) => p.status === "completed").length,
+      failed: processes.filter((p) => p.status === "failed").length,
       exited: processes.filter((p) => p.status === "exited").length,
       killed: processes.filter((p) => p.status === "killed").length,
     };
@@ -764,7 +813,12 @@ export class WindowsAgentProcessManager {
   clearCompletedTasks(): number {
     let clearedCount = 0;
     for (const [taskId, process] of this.processes.entries()) {
-      if (process.status === "exited" || process.status === "killed") {
+      if (
+        process.status === "completed" ||
+        process.status === "failed" ||
+        process.status === "exited" ||
+        process.status === "killed"
+      ) {
         this.processes.delete(taskId);
         clearedCount++;
       }

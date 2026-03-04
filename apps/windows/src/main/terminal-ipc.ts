@@ -190,7 +190,13 @@ type ProcessExecModule = {
   resolveCommand: (command: string) => string;
 };
 
-type AgentTaskStatus = "starting" | "running" | "exited" | "killed";
+type AgentTaskStatus =
+  | "starting"
+  | "running"
+  | "completed"
+  | "failed"
+  | "exited"
+  | "killed";
 
 type AgentTask = {
   id: string;
@@ -1288,6 +1294,26 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
       try {
         const agentMgr = getAgentManager(getProjectPath());
 
+        // Handle complete action - mark a stopped task as completed/failed.
+        if (action === "complete") {
+          const taskId = typeof filters.taskId === "string" ? filters.taskId.trim() : "";
+          if (!taskId) {
+            return { success: false, error: "taskId is required" };
+          }
+
+          const success = String(filters.success || "").toLowerCase() === "true";
+          const reason = typeof filters.reason === "string" ? filters.reason : undefined;
+          const updateResult = agentMgr.completeTask(taskId, success, reason);
+          if (!updateResult.success) {
+            return { success: false, error: updateResult.error || "Failed to update task" };
+          }
+          return {
+            success: true,
+            task: updateResult.task,
+            message: `Task ${taskId} marked as ${success ? "completed" : "failed"}`,
+          };
+        }
+
         // Handle purge/clear action - delete completed/failed tasks
         if (action === "purge" || action === "clear") {
           const deletedCount = agentMgr.clearCompletedTasks();
@@ -1325,7 +1351,13 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         tasks.sort((a: AgentTask, b: AgentTask) => b.startedAt - a.startedAt);
 
         // Count by status
-        const summary = `Total: ${allTasks.length} | running: ${allTasks.filter((t: AgentTask) => t.status === "running").length} | starting: ${allTasks.filter((t: AgentTask) => t.status === "starting").length} | exited: ${allTasks.filter((t: AgentTask) => t.status === "exited").length} | killed: ${allTasks.filter((t: AgentTask) => t.status === "killed").length}`;
+        const summary =
+          `Total: ${allTasks.length} | running: ${allTasks.filter((t: AgentTask) => t.status === "running").length}` +
+          ` | starting: ${allTasks.filter((t: AgentTask) => t.status === "starting").length}` +
+          ` | completed: ${allTasks.filter((t: AgentTask) => t.status === "completed").length}` +
+          ` | failed: ${allTasks.filter((t: AgentTask) => t.status === "failed").length}` +
+          ` | exited: ${allTasks.filter((t: AgentTask) => t.status === "exited").length}` +
+          ` | killed: ${allTasks.filter((t: AgentTask) => t.status === "killed").length}`;
 
         return {
           success: true,

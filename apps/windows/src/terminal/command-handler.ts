@@ -25,10 +25,21 @@ export type ParsedCommand =
   | { type: "message"; content: string }
   | { type: "empty" };
 
+type TerminalCommandRuntimeHooks = {
+  clearHistory?: () => number;
+  listHistory?: () => string[];
+};
+
 // Terminal state
 let gatewayClient: TerminalGatewayClient | null = null;
 let currentSessionKey = "default";
+const knownSessionKeys = new Set<string>([currentSessionKey]);
 let currentAgent = "main";
+let runtimeHooks: TerminalCommandRuntimeHooks = {};
+
+export function registerTerminalCommandRuntimeHooks(hooks: TerminalCommandRuntimeHooks): void {
+  runtimeHooks = hooks;
+}
 
 export function parseCommand(input: string): ParsedCommand {
   const trimmed = input.trim();
@@ -410,16 +421,27 @@ async function handleSlashCommand(
         const nextSessionKey = `session-${Date.now()}`;
         await rotateSessionIfNeeded(nextSessionKey);
         currentSessionKey = nextSessionKey;
+        knownSessionKeys.add(currentSessionKey);
         writeHtml(
           terminal,
           `<span class="system-ok">[ok] Created new session: ${escapeHtml(currentSessionKey)}</span>`,
         );
       } else if (args[0] === "list") {
-        writeLine(terminal, "Sessions: (list not implemented in MVP)");
+        const sessions = Array.from(knownSessionKeys).sort((a, b) => a.localeCompare(b));
+        if (sessions.length === 0) {
+          writeLine(terminal, "No known sessions.");
+          return;
+        }
+        writeLine(terminal, "Known sessions:");
+        for (const sessionKey of sessions) {
+          const marker = sessionKey === currentSessionKey ? "*" : "-";
+          writeLine(terminal, `${marker} ${sessionKey}`);
+        }
       } else {
         const nextSessionKey = args[0];
         await rotateSessionIfNeeded(nextSessionKey);
         currentSessionKey = nextSessionKey;
+        knownSessionKeys.add(currentSessionKey);
         writeHtml(
           terminal,
           `<span class="system-ok">[ok] Switched to session: ${escapeHtml(currentSessionKey)}</span>`,
@@ -475,10 +497,21 @@ Language: ${escapeHtml(navigator.language)}
 
     case "/history": {
       if (args.length > 0 && args[0] === "clear") {
-        writeLine(terminal, "History cleared (not implemented in MVP)");
+        const cleared = runtimeHooks.clearHistory?.() ?? 0;
+        const suffix = cleared === 1 ? "entry" : "entries";
+        writeLine(terminal, `History cleared (${cleared} ${suffix}).`);
         return;
       }
-      writeLine(terminal, "Command History: (Use Up/Down arrows to navigate)");
+      const entries = runtimeHooks.listHistory?.() ?? [];
+      if (entries.length === 0) {
+        writeLine(terminal, "Command History: (empty)");
+        return;
+      }
+      const tail = entries.slice(-20);
+      writeLine(terminal, `Command History (last ${tail.length}):`);
+      tail.forEach((entry, index) => {
+        writeLine(terminal, `${index + 1}. ${entry}`);
+      });
       return;
     }
 
@@ -1989,8 +2022,96 @@ async function handleTaskCommand(
           }
         }
 
-        // TODO: Update task status in backend
-        writeHtml(terminal, `<span class="system-ok">[ok] Task ${taskId} marked as ${success ? "completed" : "failed"}</span>`);
+        const result = await window.terminalAPI.orchestralTasks?.(
+          {
+            taskId,
+            success: success ? "true" : "false",
+          },
+          "complete",
+        );
+
+        if (!result?.success) {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] Failed to update task: ${escapeHtml(result?.error || "Unknown error")}</span>`,
+          );
+          return;
+        }
+
+        const status = success ? "completed" : "failed";
+        writeHtml(terminal, `<span class="system-ok">[ok] Task ${taskId} marked as ${status}</span>`);
+      } catch (err) {
+        writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
+      }
+      break;
+    }
+
+    case "list": {
+      await handleTasksCommand(terminal, [], writeLine, writeHtml);
+      break;
+    }
+
+    case "status": {
+      const taskId = args[1];
+      if (!taskId) {
+        writeHtml(terminal, `<span class="system-info">Usage: /task status &lt;task-id&gt;</span>`);
+        return;
+      }
+
+      try {
+        const result = await window.terminalAPI.orchestralTasks?.({});
+        if (!result?.success || !Array.isArray(result.tasks)) {
+          writeHtml(
+            terminal,
+            `<span class="system-error">[err] Failed to load tasks: ${escapeHtml(result?.error || "Unknown error")}</span>`,
+          );
+          return;
+        }
+
+        const task = result.tasks.find((entry: { id?: string }) => entry.id === taskId) as
+          | {
+              id: string;
+              status: string;
+              description?: string;
+              agent?: string;
+              startedAt?: number;
+              completedAt?: number;
+              exitCode?: number | null;
+              failureReason?: string;
+            }
+          | undefined;
+
+        if (!task) {
+          writeHtml(terminal, `<span class="system-warn">[warn] Task not found: ${escapeHtml(taskId)}</span>`);
+          return;
+        }
+
+        writeHtml(terminal, `<span class="system-ok"><strong>Task ${escapeHtml(task.id)}</strong></span>`);
+        writeHtml(terminal, `<span class="system-info">Status: ${escapeHtml(task.status)}</span>`);
+        if (task.description) {
+          writeHtml(terminal, `<span class="system-info">Description: ${escapeHtml(task.description)}</span>`);
+        }
+        if (task.agent) {
+          writeHtml(terminal, `<span class="system-info">Agent: ${escapeHtml(task.agent)}</span>`);
+        }
+        if (typeof task.startedAt === "number") {
+          writeHtml(
+            terminal,
+            `<span class="system-info">Started: ${escapeHtml(new Date(task.startedAt).toLocaleString())}</span>`,
+          );
+        }
+        if (typeof task.completedAt === "number") {
+          writeHtml(
+            terminal,
+            `<span class="system-info">Completed: ${escapeHtml(new Date(task.completedAt).toLocaleString())}</span>`,
+          );
+        }
+        if (typeof task.exitCode === "number") {
+          writeHtml(terminal, `<span class="system-info">Exit Code: ${task.exitCode}</span>`);
+        }
+        if (task.failureReason) {
+          writeHtml(terminal, `<span class="system-warn">Reason: ${escapeHtml(task.failureReason)}</span>`);
+        }
       } catch (err) {
         writeHtml(terminal, `<span class='system-error'>Error: ${escapeHtml(String(err))}</span>`);
       }

@@ -1,4 +1,9 @@
-import { handleCommand, parseCommand, getTerminalStateSnapshot } from "./command-handler.js";
+import {
+  handleCommand,
+  parseCommand,
+  getTerminalStateSnapshot,
+  registerTerminalCommandRuntimeHooks,
+} from "./command-handler.js";
 import {
   resolveTerminalAutocomplete,
   type TerminalAutocompleteState,
@@ -35,6 +40,18 @@ let contextMenuTriggerPos = -1; // Position of @ symbol
 
 const USER_PROMPT_HTML =
   '<span class="prompt-host">[User@CyDeck]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
+
+function clearCommandHistory(): number {
+  const count = commandHistory.length;
+  commandHistory = [];
+  historyIndex = -1;
+  autocompleteState = null;
+  return count;
+}
+
+function listCommandHistory(): string[] {
+  return [...commandHistory];
+}
 
 function createPrompt(): HTMLElement {
   const promptSpan = document.createElement("span");
@@ -808,6 +825,10 @@ function initCommandPalette(): void {
 }
 
 // Initialize
+registerTerminalCommandRuntimeHooks({
+  clearHistory: clearCommandHistory,
+  listHistory: listCommandHistory,
+});
 initSidebar();
 initTerminal();
 initCommandPalette();

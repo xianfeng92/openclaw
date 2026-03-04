@@ -71,7 +71,7 @@ Alternative installers:
 
 > 主要面向 `apps/windows` 的 CyDeck Terminal 迭代。
 
-- **Landing 引导式配置**：新增 `/landing` 指令组，支持初始化与维护 `SOUL.md`、`IDENTITY.md`、`USER.md`、`AGENTS.md`、`MEMORY.md`，并支持向导进度持久化与自动跳转到首个缺失步骤。
+- **Landing 引导式配置**：新增 `/landing` 指令组，支持初始化与维护 `SOUL.md`、`IDENTITY.md`、`USER.md`、`AGENTS.md`、`MEMORY.md`，并支持向导进度持久化、自动跳转到首个缺失步骤、`/landing start --reset` 强制重置。
 - **系统提示注入**：运行时会将 Landing 文件拼装为系统上下文，并按会话类型区分注入范围（私有会话包含 `MEMORY.md`，共享会话不注入）。
 - **Memory 工具化能力**：网关新增 `tools.memory.search` 与 `tools.memory.get`，支持本地记忆检索与按行读取。
 - **会话记忆落盘**：支持会话记忆自动写入、`/session` 旋转写入，以及 pre-compaction flush 触发写入，统一沉淀到 `memory/*.md`。

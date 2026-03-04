@@ -63,6 +63,11 @@ describe("terminal autocomplete", () => {
     expect(resume.value).toBe("/landing resume ");
   });
 
+  it("completes /landing start flags", () => {
+    const reset = complete("/landing start --r");
+    expect(reset.value).toBe("/landing start --reset ");
+  });
+
   it("completes /config set key names and values", () => {
     const keyResult = complete("/config set ai.providers.google.mo");
     expect(keyResult.value).toBe("/config set ai.providers.google.model ");

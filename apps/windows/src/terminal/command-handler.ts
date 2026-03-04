@@ -1656,7 +1656,7 @@ async function handlePatternCommand(
 
     case "save": {
       if (args.length < 2) {
-        writeHtml(terminal, `<span class="system-info">Usage: /pattern save &lt;name&gt; &lt;category&gt; &lt;prompt&gt;</span>`);
+        writeHtml(terminal, `<span class="system-info">Usage: /pattern save &lt;name&gt; &lt;category&gt; &lt;prompt&gt; [--desc &lt;description&gt;]</span>`);
         writeLine(terminal, "");
         writeHtml(terminal, `<span class="system-muted">Categories: coding, debugging, architecture, communication, other</span>`);
         break;
@@ -1679,13 +1679,33 @@ async function handlePatternCommand(
         break;
       }
 
-      const prompt = promptParts.join(" ");
-      const description = await promptForDescription(terminal);
+      const descFlagIndex = promptParts.findIndex((part) => part === "--desc");
+      let promptTokens = promptParts;
+      let description = "";
+      if (descFlagIndex >= 0) {
+        promptTokens = promptParts.slice(0, descFlagIndex);
+        description = promptParts.slice(descFlagIndex + 1).join(" ").trim();
+        if (!description) {
+          writeHtml(terminal, `<span class="system-error">Error: Description text is required after --desc</span>`);
+          break;
+        }
+      }
+
+      if (promptTokens.length === 0) {
+        writeHtml(terminal, `<span class="system-error">Error: Prompt text is required before --desc</span>`);
+        break;
+      }
+
+      const prompt = promptTokens.join(" ").trim();
+      if (!description) {
+        description = summarizePatternDescription(prompt);
+      }
 
       writeLine(terminal, "");
       writeSection(terminal, "Saving Pattern", "[pattern]", writeHtml);
       writeLine(terminal, `Name: ${name}`);
       writeLine(terminal, `Category: ${category}`);
+      writeLine(terminal, `Description: ${description}`);
       writeLine(terminal, `Prompt: ${prompt.slice(0, 100)}${prompt.length > 100 ? "..." : ""}`);
 
       try {
@@ -1776,7 +1796,7 @@ async function handlePatternCommand(
 
 <span class="system-info">Usage:</span>
   /pattern list                    - List all saved patterns
-  /pattern save &lt;name&gt; &lt;cat&gt;    - Save a new pattern
+  /pattern save &lt;name&gt; &lt;cat&gt; &lt;prompt...&gt; [--desc &lt;description...&gt;]
   /pattern apply &lt;id&gt; &lt;task&gt;    - Apply pattern to task
   /pattern rate &lt;id&gt; &lt;success|fail&gt; - Rate pattern effectiveness
 
@@ -1784,7 +1804,8 @@ async function handlePatternCommand(
   coding, debugging, architecture, communication, other
 
 <span class="system-info">Examples:</span>
-  /pattern save BugFixTemplate coding "First understand expected behavior..."
+  /pattern save BugFixTemplate coding First understand expected behavior
+  /pattern save BugFixTemplate coding First understand expected behavior --desc Login bugfix baseline
   /pattern apply BugFixTemplate "Fix login crash"
   /pattern rate pattern-123 success
 
@@ -1812,9 +1833,15 @@ function getCategoryIcon(category: string): string {
   return icons[category] || "📝";
 }
 
-async function promptForDescription(terminal: HTMLElement): Promise<string> {
-  // For now, return empty - in a full implementation this could prompt user interactively
-  return "";
+function summarizePatternDescription(prompt: string): string {
+  const normalized = prompt.replace(/\s+/gu, " ").trim();
+  if (!normalized) {
+    return "User-defined pattern";
+  }
+  if (normalized.length <= 80) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 77)}...`;
 }
 
 type WriteHtmlFn = (terminal: HTMLElement, html: string, className?: string) => void;
@@ -1972,7 +1999,18 @@ async function handleLandingWizardMessageInput(
   return true;
 }
 
-async function startLandingWizard(terminal: HTMLElement, writeHtml: WriteHtmlFn): Promise<void> {
+async function startLandingWizard(
+  terminal: HTMLElement,
+  writeHtml: WriteHtmlFn,
+  options: { reset?: boolean } = {},
+): Promise<void> {
+  const forceReset = options.reset === true;
+  if (forceReset) {
+    landingWizardState = null;
+    await clearLandingWizardState(terminal, writeHtml);
+    writeHtml(terminal, `<span class="system-info">Reset persisted wizard progress. Starting from step 1.</span>`);
+  }
+
   const result = await window.terminalAPI.landingInit();
   if (!result.success) {
     writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to start landing setup")}</span>`);
@@ -1983,9 +2021,9 @@ async function startLandingWizard(terminal: HTMLElement, writeHtml: WriteHtmlFn)
     writeHtml(terminal, `<span class="system-warn">[warn] Restarting landing wizard from current workspace state.</span>`);
   }
 
-  const nextStepIndex = clampLandingWizardStepIndex(result.nextStepIndex);
+  const nextStepIndex = forceReset ? 0 : clampLandingWizardStepIndex(result.nextStepIndex);
   const savedStepIndex =
-    typeof result.wizardStepIndex === "number"
+    !forceReset && typeof result.wizardStepIndex === "number"
       ? clampLandingWizardStepIndex(result.wizardStepIndex)
       : null;
 
@@ -2044,15 +2082,15 @@ async function handleWorkflowCommand(
 
 <span class="system-info">Usage:</span>
   /workflow list - List all workflows
-  /workflow create <name> - Create a new workflow (interactive)
+  /workflow create <name> <step1> [<step2> ...] - Create a workflow
   /workflow run <name> - Execute a workflow
   /workflow show <name> - Show workflow details
   /workflow delete <name> - Delete a workflow
 
 <span class="system-info">Examples:</span>
-  /workflow create "Build and Test"
-  /workflow run "Build and Test"
-  /workflow show "Build and Test"
+  /workflow create BuildAndTest pnpm-check pnpm-test
+  /workflow run BuildAndTest
+  /workflow show BuildAndTest
       `.trim());
       break;
     }
@@ -2467,6 +2505,7 @@ async function handleLandingCommand(
   /landing status
   /landing init
   /landing start
+  /landing start --reset
   /landing resume
   /landing skip
   /landing cancel
@@ -2475,6 +2514,7 @@ async function handleLandingCommand(
 
 <span class="system-info">Wizard:</span>
   Run /landing start, then type answers directly (no slash command needed).
+  Use /landing start --reset to force restart from step 1.
 
 <span class="system-info">Set keys:</span>
   identity.name
@@ -2509,6 +2549,13 @@ async function handleLandingCommand(
       writeSection(terminal, "Landing Status", "[landing]", writeHtml);
       writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
       renderLandingFiles(terminal, result.files, writeHtml);
+      if (result.completed) {
+        writeHtml(terminal, `<span class="system-info">Next: /landing start --reset (optional full re-onboarding)</span>`);
+      } else if (typeof result.wizardStepIndex === "number") {
+        writeHtml(terminal, `<span class="system-info">Next: /landing resume</span>`);
+      } else {
+        writeHtml(terminal, `<span class="system-info">Next: /landing start</span>`);
+      }
       if (typeof result.wizardStepIndex === "number") {
         const wizardStep = clampLandingWizardStepIndex(result.wizardStepIndex);
         writeHtml(
@@ -2553,7 +2600,8 @@ async function handleLandingCommand(
     }
 
     case "start": {
-      await startLandingWizard(terminal, writeHtml);
+      const forceReset = args.includes("--reset");
+      await startLandingWizard(terminal, writeHtml, { reset: forceReset });
       return;
     }
 

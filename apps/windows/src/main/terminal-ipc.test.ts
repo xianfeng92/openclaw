@@ -23,11 +23,11 @@ type OrchestralTasksHandler = (
   action?: string,
 ) => Promise<{ success: boolean; error?: string; message?: string }>;
 
-function getIpcHandler(channel: string): OrchestralTasksHandler {
+function getIpcHandler<T>(channel: string): T {
   for (let i = ipcMainHandleMock.mock.calls.length - 1; i >= 0; i--) {
     const call = ipcMainHandleMock.mock.calls[i];
     if (call && call[0] === channel) {
-      return call[1] as OrchestralTasksHandler;
+      return call[1] as T;
     }
   }
   throw new Error(`IPC handler not found for channel: ${channel}`);
@@ -46,11 +46,17 @@ function createStoppedTask(taskId: string): {
 describe("terminal-ipc orchestral tasks", () => {
   let previousCwd = process.cwd();
   let tempProjectDir = "";
+  let previousStateDir: string | undefined;
+  let previousConfigPath: string | undefined;
 
   beforeEach(async () => {
     previousCwd = process.cwd();
     tempProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), "cydeck-terminal-ipc-test-"));
     process.chdir(tempProjectDir);
+    previousStateDir = process.env.CYDECK_STATE_DIR;
+    previousConfigPath = process.env.CYDECK_CONFIG_PATH;
+    process.env.CYDECK_STATE_DIR = path.join(tempProjectDir, ".state");
+    process.env.CYDECK_CONFIG_PATH = path.join(tempProjectDir, ".state", "cydeck.json");
     ipcMainHandleMock.mockReset();
     ipcMainOnMock.mockReset();
     getAgentManagerMock.mockReset();
@@ -60,6 +66,16 @@ describe("terminal-ipc orchestral tasks", () => {
 
   afterEach(() => {
     process.chdir(previousCwd);
+    if (previousStateDir === undefined) {
+      delete process.env.CYDECK_STATE_DIR;
+    } else {
+      process.env.CYDECK_STATE_DIR = previousStateDir;
+    }
+    if (previousConfigPath === undefined) {
+      delete process.env.CYDECK_CONFIG_PATH;
+    } else {
+      process.env.CYDECK_CONFIG_PATH = previousConfigPath;
+    }
     fs.rmSync(tempProjectDir, { recursive: true, force: true });
   });
 
@@ -80,7 +96,7 @@ describe("terminal-ipc orchestral tasks", () => {
       getAuthToken: () => "token",
     } as never);
 
-    const handler = getIpcHandler("terminal:orchestral-tasks");
+    const handler = getIpcHandler<OrchestralTasksHandler>("terminal:orchestral-tasks");
     const result = await handler({}, { taskId: "task-1", success: "true" }, "complete");
 
     expect(result.success).toBe(true);
@@ -103,7 +119,7 @@ describe("terminal-ipc orchestral tasks", () => {
       getAuthToken: () => "token",
     } as never);
 
-    const handler = getIpcHandler("terminal:orchestral-tasks");
+    const handler = getIpcHandler<OrchestralTasksHandler>("terminal:orchestral-tasks");
     const result = await handler({}, { success: "true" }, "complete");
 
     expect(result).toEqual({ success: false, error: "taskId is required" });
@@ -128,10 +144,52 @@ describe("terminal-ipc orchestral tasks", () => {
       getAuthToken: () => "token",
     } as never);
 
-    const handler = getIpcHandler("terminal:orchestral-tasks");
+    const handler = getIpcHandler<OrchestralTasksHandler>("terminal:orchestral-tasks");
     const result = await handler({}, { taskId: "task-running", success: "true" }, "complete");
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Task is still running");
+  });
+
+  it("persists and clears landing wizard progress via IPC", async () => {
+    const { registerTerminalIpcRuntimeDeps, setupTerminalIpc } = await import("./terminal-ipc.js");
+    getAgentManagerMock.mockReturnValue({
+      completeTask: vi.fn(),
+      clearCompletedTasks: vi.fn(() => 0),
+      clearAllTasks: vi.fn(() => ({ count: 0, worktreesCleaned: 0 })),
+      listAgents: vi.fn(() => []),
+    });
+    registerTerminalIpcRuntimeDeps({ getAgentManager: getAgentManagerMock });
+
+    setupTerminalIpc({
+      getState: () => ({ port: 18789 }),
+      getAuthToken: () => "token",
+    } as never);
+
+    const saveHandler = getIpcHandler<
+      (event: unknown, stepIndex: number) => Promise<Record<string, unknown>>
+    >("terminal:landing-wizard-save");
+    const statusHandler = getIpcHandler<
+      (event: unknown) => Promise<Record<string, unknown>>
+    >("terminal:landing-status");
+    const clearHandler = getIpcHandler<
+      (event: unknown) => Promise<Record<string, unknown>>
+    >("terminal:landing-wizard-clear");
+
+    const save = await saveHandler({}, 2);
+    expect(save.success).toBe(true);
+    expect(save.wizardStepIndex).toBe(2);
+
+    const status = await statusHandler({});
+    expect(status.success).toBe(true);
+    expect(status.wizardStepIndex).toBe(2);
+
+    const clear = await clearHandler({});
+    expect(clear.success).toBe(true);
+    expect(clear.wizardStepIndex).toBeUndefined();
+
+    const statusAfterClear = await statusHandler({});
+    expect(statusAfterClear.success).toBe(true);
+    expect(statusAfterClear.wizardStepIndex).toBeUndefined();
   });
 });

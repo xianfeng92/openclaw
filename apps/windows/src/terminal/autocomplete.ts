@@ -232,6 +232,9 @@ function getCommandArgumentCandidates(
     if (argIndex === 1) {
       return COMMAND_SUBCOMMANDS[command] ?? [];
     }
+    if (action === "start" && argIndex === 2) {
+      return ["--reset"];
+    }
     if (action === "set" && argIndex === 2) {
       return LANDING_SET_KEYS;
     }

@@ -15,6 +15,7 @@ vi.mock("./orchestral-commands.js", () => ({
 type TerminalApiMock = {
   orchestralTasks: ReturnType<typeof vi.fn>;
   patternRate: ReturnType<typeof vi.fn>;
+  patternSave: ReturnType<typeof vi.fn>;
   landingInit: ReturnType<typeof vi.fn>;
   landingSet: ReturnType<typeof vi.fn>;
   landingAdd: ReturnType<typeof vi.fn>;
@@ -104,6 +105,7 @@ function createTerminalApiMock(
   return {
     orchestralTasks: overrides.orchestralTasks ?? vi.fn(async () => ({ success: true, tasks: [] })),
     patternRate: overrides.patternRate ?? vi.fn(async () => ({ success: true })),
+    patternSave: overrides.patternSave ?? vi.fn(async () => ({ success: true, id: "pattern-1" })),
     landingInit:
       overrides.landingInit ??
       vi.fn(async () => ({
@@ -327,6 +329,30 @@ describe("command-handler task/session/history command flows", () => {
     expect(lines.some((line) => line.includes("identity.name"))).toBe(true);
   });
 
+  it("supports /landing start --reset and restarts from step 1", async () => {
+    const landingInit = vi.fn(async () => ({
+      success: true,
+      workspacePath: "C:/workspace",
+      files: [],
+      nextStepIndex: 4,
+      wizardStepIndex: 3,
+    }));
+    const landingWizardSave = vi.fn(async () => ({ success: true }));
+    const landingWizardClear = vi.fn(async () => ({ success: true }));
+    const api = createTerminalApiMock({ landingInit, landingWizardSave, landingWizardClear });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing start --reset");
+
+    expect(landingWizardClear).toHaveBeenCalledTimes(1);
+    expect(landingWizardSave).toHaveBeenCalledWith(0);
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Reset persisted wizard progress"))).toBe(true);
+    expect(lines.some((line) => line.includes("Step 1/6"))).toBe(true);
+  });
+
   it("auto-jumps /landing start to first missing step", async () => {
     const landingInit = vi.fn(async () => ({
       success: true,
@@ -451,5 +477,122 @@ describe("command-handler task/session/history command flows", () => {
     const lines = collectOutputLines(terminal);
     expect(lines.some((line) => line.includes("Resumed persisted wizard state at step 5/6"))).toBe(true);
     expect(lines.some((line) => line.includes("Step 5/6"))).toBe(true);
+  });
+
+  it("restores wizard progress after module reload and resumes at next missing step", async () => {
+    const firstLandingSet = vi.fn(async (key: string, value: string) => ({
+      success: true,
+      key,
+      value,
+      workspacePath: "C:/workspace",
+    }));
+    const firstLandingWizardSave = vi.fn(async () => ({ success: true }));
+    const firstApi = createTerminalApiMock({
+      landingInit: vi.fn(async () => ({
+        success: true,
+        workspacePath: "C:/workspace",
+        files: [],
+        nextStepIndex: 0,
+      })),
+      landingSet: firstLandingSet,
+      landingWizardSave: firstLandingWizardSave,
+    });
+
+    installDomGlobals(firstApi);
+    const commandHandlerBeforeRestart = await loadCommandHandlerModule();
+    const terminalBeforeRestart = createTerminalRoot();
+    await commandHandlerBeforeRestart.handleCommand(terminalBeforeRestart as unknown as HTMLElement, "/landing start");
+    await commandHandlerBeforeRestart.handleCommand(terminalBeforeRestart as unknown as HTMLElement, "CyDeck");
+    expect(firstLandingWizardSave).toHaveBeenCalledWith(1);
+
+    const secondLandingStatus = vi.fn(async () => ({
+      success: true,
+      workspacePath: "C:/workspace",
+      files: [],
+      completed: false,
+      wizardStepIndex: 1,
+      nextStepIndex: 1,
+    }));
+    const secondLandingWizardSave = vi.fn(async () => ({ success: true }));
+    const secondApi = createTerminalApiMock({
+      landingStatus: secondLandingStatus,
+      landingWizardSave: secondLandingWizardSave,
+    });
+
+    installDomGlobals(secondApi);
+    const commandHandlerAfterRestart = await loadCommandHandlerModule();
+    const terminalAfterRestart = createTerminalRoot();
+    await commandHandlerAfterRestart.handleCommand(terminalAfterRestart as unknown as HTMLElement, "/landing resume");
+
+    expect(secondLandingStatus).toHaveBeenCalledTimes(1);
+    expect(secondLandingWizardSave).toHaveBeenCalledWith(1);
+    const lines = collectOutputLines(terminalAfterRestart);
+    expect(lines.some((line) => line.includes("Resumed persisted wizard state at step 2/6"))).toBe(true);
+    expect(lines.some((line) => line.includes("Step 2/6"))).toBe(true);
+  });
+
+  it("shows actionable next-step hints in /landing status", async () => {
+    const api = createTerminalApiMock({
+      landingStatus: vi.fn(async () => ({
+        success: true,
+        workspacePath: "C:/workspace",
+        files: [],
+        completed: false,
+        wizardStepIndex: 2,
+        nextStepIndex: 3,
+      })),
+    });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing status");
+
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Next: /landing resume"))).toBe(true);
+  });
+
+  it("uses generated description for /pattern save when --desc is omitted", async () => {
+    const patternSave = vi.fn(async () => ({ success: true, id: "pattern-42" }));
+    const api = createTerminalApiMock({ patternSave });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(
+      terminal as unknown as HTMLElement,
+      "/pattern save BugFixTemplate coding First understand expected behavior and constraints",
+    );
+
+    expect(patternSave).toHaveBeenCalledTimes(1);
+    expect(patternSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "BugFixTemplate",
+        category: "coding",
+        prompt: "First understand expected behavior and constraints",
+        description: "First understand expected behavior and constraints",
+      }),
+    );
+  });
+
+  it("uses explicit --desc value for /pattern save", async () => {
+    const patternSave = vi.fn(async () => ({ success: true, id: "pattern-99" }));
+    const api = createTerminalApiMock({ patternSave });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(
+      terminal as unknown as HTMLElement,
+      "/pattern save BugFixTemplate coding First understand expected behavior --desc Login incident baseline",
+    );
+
+    expect(patternSave).toHaveBeenCalledTimes(1);
+    expect(patternSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: "First understand expected behavior",
+        description: "Login incident baseline",
+      }),
+    );
   });
 });

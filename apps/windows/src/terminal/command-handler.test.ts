@@ -15,6 +15,14 @@ vi.mock("./orchestral-commands.js", () => ({
 type TerminalApiMock = {
   orchestralTasks: ReturnType<typeof vi.fn>;
   patternRate: ReturnType<typeof vi.fn>;
+  landingInit: ReturnType<typeof vi.fn>;
+  landingSet: ReturnType<typeof vi.fn>;
+  landingAdd: ReturnType<typeof vi.fn>;
+  landingStatus: ReturnType<typeof vi.fn>;
+  landingWizardSave: ReturnType<typeof vi.fn>;
+  landingWizardClear: ReturnType<typeof vi.fn>;
+  getGatewayInfo: ReturnType<typeof vi.fn>;
+  getGatewayAuthSync: ReturnType<typeof vi.fn>;
 };
 
 type CommandHandlerModule = typeof import("./command-handler.js");
@@ -91,11 +99,66 @@ function collectOutputLines(terminal: MockElement): string[] {
 }
 
 function createTerminalApiMock(
-  overrides: Partial<Pick<TerminalApiMock, "orchestralTasks" | "patternRate">> = {},
+  overrides: Partial<TerminalApiMock> = {},
 ): TerminalApiMock {
   return {
     orchestralTasks: overrides.orchestralTasks ?? vi.fn(async () => ({ success: true, tasks: [] })),
     patternRate: overrides.patternRate ?? vi.fn(async () => ({ success: true })),
+    landingInit:
+      overrides.landingInit ??
+      vi.fn(async () => ({
+        success: true,
+        configPath: "C:/mock/cydeck.json",
+        stateDir: "C:/mock/state",
+        workspacePath: "C:/mock/workspace",
+        files: [],
+        created: [],
+        existing: [],
+      })),
+    landingSet:
+      overrides.landingSet ??
+      vi.fn(async (key: string, value: string) => ({
+        success: true,
+        key,
+        value,
+        workspacePath: "C:/mock/workspace",
+      })),
+    landingAdd:
+      overrides.landingAdd ??
+      vi.fn(async (target: string, note: string) => ({
+        success: true,
+        target,
+        note,
+        fileName: `${target}.md`,
+        workspacePath: "C:/mock/workspace",
+      })),
+    landingStatus:
+      overrides.landingStatus ??
+      vi.fn(async () => ({
+        success: true,
+        workspacePath: "C:/mock/workspace",
+        completed: true,
+        files: [],
+      })),
+    landingWizardSave:
+      overrides.landingWizardSave ??
+      vi.fn(async () => ({
+        success: true,
+        workspacePath: "C:/mock/workspace",
+        completed: false,
+        nextStepIndex: 0,
+        wizardStepIndex: 0,
+      })),
+    landingWizardClear:
+      overrides.landingWizardClear ??
+      vi.fn(async () => ({
+        success: true,
+        workspacePath: "C:/mock/workspace",
+        completed: false,
+        nextStepIndex: 0,
+      })),
+    getGatewayInfo: overrides.getGatewayInfo ?? vi.fn(async () => ({ port: 18789 })),
+    getGatewayAuthSync: overrides.getGatewayAuthSync ?? vi.fn(() => null),
   };
 }
 
@@ -111,7 +174,6 @@ function installDomGlobals(api: TerminalApiMock): void {
         ...api,
         execShell: vi.fn(),
         onShellOutput: vi.fn(() => () => {}),
-        getGatewayInfo: vi.fn(async () => ({ port: 18789 })),
       },
       setInterval,
       clearInterval,
@@ -240,5 +302,154 @@ describe("command-handler task/session/history command flows", () => {
     const lines = collectOutputLines(terminal);
     expect(lines.some((line) => line.includes("Status: failed"))).toBe(true);
     expect(lines.some((line) => line.includes("Reason: boom"))).toBe(true);
+  });
+
+  it("starts landing wizard and shows step prompt", async () => {
+    const landingInit = vi.fn(async () => ({
+      success: true,
+      workspacePath: "C:/workspace",
+      files: [],
+      nextStepIndex: 0,
+    }));
+    const landingWizardSave = vi.fn(async () => ({ success: true }));
+    const api = createTerminalApiMock({ landingInit, landingWizardSave });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing start");
+
+    expect(landingInit).toHaveBeenCalledTimes(1);
+    expect(landingWizardSave).toHaveBeenCalledWith(0);
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Landing Wizard"))).toBe(true);
+    expect(lines.some((line) => line.includes("Step 1/6"))).toBe(true);
+    expect(lines.some((line) => line.includes("identity.name"))).toBe(true);
+  });
+
+  it("auto-jumps /landing start to first missing step", async () => {
+    const landingInit = vi.fn(async () => ({
+      success: true,
+      workspacePath: "C:/workspace",
+      files: [],
+      nextStepIndex: 3,
+      wizardStepIndex: 2,
+    }));
+    const landingWizardSave = vi.fn(async () => ({ success: true }));
+    const api = createTerminalApiMock({ landingInit, landingWizardSave });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing start");
+
+    expect(landingWizardSave).toHaveBeenCalledWith(3);
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Auto-jump to first missing step 4/6"))).toBe(true);
+    expect(lines.some((line) => line.includes("Step 4/6"))).toBe(true);
+  });
+
+  it("consumes plain message input for landing wizard steps without gateway connect", async () => {
+    const landingSet = vi.fn(async (key: string, value: string) => ({
+      success: true,
+      key,
+      value,
+      workspacePath: "C:/workspace",
+    }));
+    const getGatewayInfo = vi.fn(async () => ({ port: 18789 }));
+    const api = createTerminalApiMock({ landingSet, getGatewayInfo });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing start");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "CyDeck");
+
+    expect(landingSet).toHaveBeenCalledWith("identity.name", "CyDeck");
+    expect(getGatewayInfo).not.toHaveBeenCalled();
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Step 2/6"))).toBe(true);
+  });
+
+  it("completes full landing wizard flow and runs final status check", async () => {
+    const landingSet = vi.fn(async (key: string, value: string) => ({ success: true, key, value }));
+    const landingAdd = vi.fn(async (target: string, note: string) => ({ success: true, target, note }));
+    const landingStatus = vi.fn(async () => ({
+      success: true,
+      workspacePath: "C:/workspace",
+      completed: true,
+      files: [],
+    }));
+    const api = createTerminalApiMock({
+      landingSet,
+      landingAdd,
+      landingStatus,
+    });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing start");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "CyDeck");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "Peter");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "Asia/Shanghai");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "Be direct and evidence-driven");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "Ask before external side effects");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "User prefers concise replies in Chinese");
+
+    expect(landingSet).toHaveBeenNthCalledWith(1, "identity.name", "CyDeck");
+    expect(landingSet).toHaveBeenNthCalledWith(2, "user.name", "Peter");
+    expect(landingSet).toHaveBeenNthCalledWith(3, "user.timezone", "Asia/Shanghai");
+    expect(landingAdd).toHaveBeenNthCalledWith(1, "soul", "Be direct and evidence-driven");
+    expect(landingAdd).toHaveBeenNthCalledWith(2, "agents", "Ask before external side effects");
+    expect(landingAdd).toHaveBeenNthCalledWith(3, "memory", "User prefers concise replies in Chinese");
+    expect(landingStatus).toHaveBeenCalledTimes(1);
+
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Landing Wizard Complete"))).toBe(true);
+    expect(lines.some((line) => line.includes("Landing is complete"))).toBe(true);
+  });
+
+  it("supports landing wizard skip and cancel commands", async () => {
+    const landingSet = vi.fn(async () => ({ success: true }));
+    const landingWizardClear = vi.fn(async () => ({ success: true }));
+    const api = createTerminalApiMock({ landingSet, landingWizardClear });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing start");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing skip");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing cancel");
+
+    expect(landingSet).not.toHaveBeenCalled();
+    expect(landingWizardClear).toHaveBeenCalledTimes(1);
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Skipped step 1/6"))).toBe(true);
+    expect(lines.some((line) => line.includes("Landing wizard cancelled"))).toBe(true);
+  });
+
+  it("resumes landing wizard from persisted state when process restarts", async () => {
+    const landingStatus = vi.fn(async () => ({
+      success: true,
+      workspacePath: "C:/workspace",
+      files: [],
+      completed: false,
+      wizardStepIndex: 2,
+      nextStepIndex: 4,
+    }));
+    const landingWizardSave = vi.fn(async () => ({ success: true }));
+    const api = createTerminalApiMock({ landingStatus, landingWizardSave });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/landing resume");
+
+    expect(landingStatus).toHaveBeenCalledTimes(1);
+    expect(landingWizardSave).toHaveBeenCalledWith(4);
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Resumed persisted wizard state at step 5/6"))).toBe(true);
+    expect(lines.some((line) => line.includes("Step 5/6"))).toBe(true);
   });
 });

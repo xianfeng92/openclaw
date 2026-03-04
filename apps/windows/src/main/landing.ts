@@ -32,7 +32,15 @@ export type LandingPromptFile = {
   content: string;
 };
 
+export type LandingWizardProgress = {
+  workspacePath: string;
+  stepIndex: number;
+  updatedAt: string;
+};
+
 const LANDING_PROMPT_MAX_CHARS = 20_000;
+const LANDING_WIZARD_STATE_FILE = "landing-wizard-state.json";
+const LANDING_WIZARD_TOTAL_STEPS = 6;
 
 type LandingFieldTarget = {
   fileId: LandingFileId;
@@ -300,6 +308,143 @@ export function getLandingWorkspaceStatus(workspacePath: string): {
 
   const completed = files.every((file) => file.exists && file.configured);
   return { files, completed };
+}
+
+function clampLandingWizardStepIndex(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const normalized = Math.floor(value);
+  if (normalized < 0) {
+    return 0;
+  }
+  if (normalized > LANDING_WIZARD_TOTAL_STEPS) {
+    return LANDING_WIZARD_TOTAL_STEPS;
+  }
+  return normalized;
+}
+
+function hasMarkdownFieldValue(content: string, label: string): boolean {
+  const escaped = escapeRegex(label);
+  const pattern = new RegExp(
+    `^[ \\t]*-[ \\t]*(?:\\*\\*)?${escaped}(?:\\*\\*)?[ \\t]*:[ \\t]*(.*)$`,
+    "im",
+  );
+  const match = content.match(pattern);
+  if (!match) {
+    return false;
+  }
+  return match[1].trim().length > 0;
+}
+
+function readLandingFileIfExists(workspacePath: string, fileId: LandingFileId): string | null {
+  const filePath = resolveLandingFilePath(workspacePath, fileId);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  return fs.readFileSync(filePath, "utf-8");
+}
+
+export function getLandingWizardNextStepIndex(workspacePath: string): number {
+  const identity = readLandingFileIfExists(workspacePath, "identity");
+  if (!identity || !hasMarkdownFieldValue(identity, "Name")) {
+    return 0;
+  }
+
+  const user = readLandingFileIfExists(workspacePath, "user");
+  if (!user || !hasMarkdownFieldValue(user, "Name")) {
+    return 1;
+  }
+  if (!hasMarkdownFieldValue(user, "Timezone")) {
+    return 2;
+  }
+
+  const soul = readLandingFileIfExists(workspacePath, "soul");
+  if (!soul || !isConfiguredFile("soul", soul)) {
+    return 3;
+  }
+
+  const agents = readLandingFileIfExists(workspacePath, "agents");
+  if (!agents || !isConfiguredFile("agents", agents)) {
+    return 4;
+  }
+
+  const memory = readLandingFileIfExists(workspacePath, "memory");
+  if (!memory || !isConfiguredFile("memory", memory)) {
+    return 5;
+  }
+
+  return LANDING_WIZARD_TOTAL_STEPS;
+}
+
+function resolveLandingWizardStatePath(stateDir: string): string {
+  return path.join(stateDir, LANDING_WIZARD_STATE_FILE);
+}
+
+export function loadLandingWizardProgress(stateDir: string): LandingWizardProgress | null {
+  const statePath = resolveLandingWizardStatePath(stateDir);
+  if (!fs.existsSync(statePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(statePath, "utf-8");
+    if (!raw.trim()) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    const record = parsed as Record<string, unknown>;
+    const workspacePath =
+      typeof record.workspacePath === "string" ? record.workspacePath.trim() : "";
+    if (!workspacePath) {
+      return null;
+    }
+    const stepIndex = clampLandingWizardStepIndex(
+      typeof record.stepIndex === "number" ? record.stepIndex : 0,
+    );
+    const updatedAt =
+      typeof record.updatedAt === "string" && record.updatedAt.trim()
+        ? record.updatedAt
+        : new Date(0).toISOString();
+    return {
+      workspacePath,
+      stepIndex,
+      updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveLandingWizardProgress(
+  stateDir: string,
+  workspacePath: string,
+  stepIndex: number,
+): LandingWizardProgress {
+  const normalizedWorkspacePath = workspacePath.trim();
+  if (!normalizedWorkspacePath) {
+    throw new Error("Workspace path cannot be empty");
+  }
+  const progress: LandingWizardProgress = {
+    workspacePath: normalizedWorkspacePath,
+    stepIndex: clampLandingWizardStepIndex(stepIndex),
+    updatedAt: new Date().toISOString(),
+  };
+  const statePath = resolveLandingWizardStatePath(stateDir);
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(statePath, `${JSON.stringify(progress, null, 2)}\n`, "utf-8");
+  return progress;
+}
+
+export function clearLandingWizardProgress(stateDir: string): void {
+  const statePath = resolveLandingWizardStatePath(stateDir);
+  if (!fs.existsSync(statePath)) {
+    return;
+  }
+  fs.rmSync(statePath, { force: true });
 }
 
 function escapeRegex(value: string): string {

@@ -105,6 +105,9 @@ export interface TerminalAPI {
     workspacePath: string;
     files?: TerminalLandingFileStatus[];
     completed?: boolean;
+    nextStepIndex?: number;
+    wizardStepIndex?: number;
+    wizardUpdatedAt?: string;
     error?: string;
   }>;
   landingInit: () => Promise<{
@@ -116,6 +119,9 @@ export interface TerminalAPI {
     existing?: string[];
     files?: TerminalLandingFileStatus[];
     completed?: boolean;
+    nextStepIndex?: number;
+    wizardStepIndex?: number;
+    wizardUpdatedAt?: string;
     error?: string;
   }>;
   landingSet: (key: string, value: string) => Promise<{
@@ -129,6 +135,9 @@ export interface TerminalAPI {
     fileName?: string;
     files?: TerminalLandingFileStatus[];
     completed?: boolean;
+    nextStepIndex?: number;
+    wizardStepIndex?: number;
+    wizardUpdatedAt?: string;
     error?: string;
   }>;
   landingAdd: (target: string, note: string) => Promise<{
@@ -142,6 +151,31 @@ export interface TerminalAPI {
     fileName?: string;
     files?: TerminalLandingFileStatus[];
     completed?: boolean;
+    nextStepIndex?: number;
+    wizardStepIndex?: number;
+    wizardUpdatedAt?: string;
+    error?: string;
+  }>;
+  landingWizardSave: (stepIndex: number) => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    workspacePath: string;
+    files?: TerminalLandingFileStatus[];
+    completed?: boolean;
+    nextStepIndex?: number;
+    wizardStepIndex?: number;
+    wizardUpdatedAt?: string;
+    error?: string;
+  }>;
+  landingWizardClear: () => Promise<{
+    success: boolean;
+    configPath: string;
+    stateDir: string;
+    workspacePath: string;
+    files?: TerminalLandingFileStatus[];
+    completed?: boolean;
+    nextStepIndex?: number;
     error?: string;
   }>;
 
@@ -413,6 +447,8 @@ const api: TerminalAPI = {
   landingInit: () => ipcRenderer.invoke("terminal:landing-init"),
   landingSet: (key, value) => ipcRenderer.invoke("terminal:landing-set", key, value),
   landingAdd: (target, note) => ipcRenderer.invoke("terminal:landing-add", target, note),
+  landingWizardSave: (stepIndex) => ipcRenderer.invoke("terminal:landing-wizard-save", stepIndex),
+  landingWizardClear: () => ipcRenderer.invoke("terminal:landing-wizard-clear"),
 
   // Orchestral commands
   orchestralSpawn: (opts) => ipcRenderer.invoke("terminal:orchestral-spawn", opts),

@@ -5,10 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   appendLandingNote,
   buildLandingSystemPrompt,
+  clearLandingWizardProgress,
   ensureLandingWorkspaceFiles,
+  getLandingWizardNextStepIndex,
   getLandingWorkspaceStatus,
   isPrivateLandingSession,
+  loadLandingWizardProgress,
   loadLandingPromptFiles,
+  saveLandingWizardProgress,
   setLandingField,
 } from "./landing.js";
 
@@ -92,6 +96,47 @@ describe("landing content updates", () => {
     expect(soul).toContain("- Keep tone pragmatic");
     expect(agents).toContain("- Ask before destructive changes");
     expect(memory).toContain("- User likes numbered lists");
+  });
+
+  it("resolves the first missing wizard step in order", () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(0);
+
+    setLandingField(workspace, "identity.name", "CyDeck");
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(1);
+
+    setLandingField(workspace, "user.name", "Peter");
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(2);
+
+    setLandingField(workspace, "user.timezone", "Asia/Shanghai");
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(3);
+
+    appendLandingNote(workspace, "soul", "Be direct and evidence-driven");
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(4);
+
+    appendLandingNote(workspace, "agents", "Ask before external side effects");
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(5);
+
+    appendLandingNote(workspace, "memory", "User prefers concise replies in Chinese");
+    expect(getLandingWizardNextStepIndex(workspace)).toBe(6);
+  });
+
+  it("persists and clears landing wizard progress", () => {
+    const stateDir = createTempWorkspace();
+
+    saveLandingWizardProgress(stateDir, "C:/workspace", 999);
+    const loaded = loadLandingWizardProgress(stateDir);
+    expect(loaded).toEqual(
+      expect.objectContaining({
+        workspacePath: "C:/workspace",
+        stepIndex: 6,
+      }),
+    );
+
+    clearLandingWizardProgress(stateDir);
+    expect(loadLandingWizardProgress(stateDir)).toBeNull();
   });
 });
 

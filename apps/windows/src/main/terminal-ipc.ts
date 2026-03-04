@@ -19,10 +19,14 @@ import {
 } from "./cydeck-config-ipc.js";
 import {
   appendLandingNote,
+  clearLandingWizardProgress,
   ensureLandingWorkspaceFiles,
+  getLandingWizardNextStepIndex,
   getLandingWorkspaceStatus,
   isLandingAppendTarget,
   isLandingSetKey,
+  loadLandingWizardProgress,
+  saveLandingWizardProgress,
   setLandingField,
 } from "./landing.js";
 import type { GatewayLike } from "./gateway-like.js";
@@ -296,6 +300,9 @@ type TerminalLandingStatusResult = TerminalConfigBaseResult & {
   workspacePath: string;
   files?: TerminalLandingFileStatus[];
   completed?: boolean;
+  nextStepIndex?: number;
+  wizardStepIndex?: number;
+  wizardUpdatedAt?: string;
 };
 
 type TerminalLandingInitResult = TerminalLandingStatusResult & {
@@ -311,6 +318,31 @@ type TerminalLandingSetResult = TerminalLandingStatusResult & {
   note?: string;
   target?: string;
 };
+
+function normalizePathForCompare(input: string): string {
+  const normalized = path.normalize(input).replace(/[\\/]+$/u, "");
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function getLandingWizardMeta(
+  stateDir: string,
+  workspacePath: string,
+): { wizardStepIndex?: number; wizardUpdatedAt?: string } {
+  const progress = loadLandingWizardProgress(stateDir);
+  if (!progress) {
+    return {};
+  }
+  if (
+    normalizePathForCompare(progress.workspacePath) !==
+    normalizePathForCompare(workspacePath)
+  ) {
+    return {};
+  }
+  return {
+    wizardStepIndex: progress.stepIndex,
+    wizardUpdatedAt: progress.updatedAt,
+  };
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -654,6 +686,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
     try {
       const effective = getEffectiveConfig();
       const status = getLandingWorkspaceStatus(effective.workspacePath);
+      const nextStepIndex = getLandingWizardNextStepIndex(effective.workspacePath);
+      const wizardMeta = getLandingWizardMeta(effective.stateDir, effective.workspacePath);
       return {
         success: true,
         configPath: effective.configPath,
@@ -661,6 +695,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         workspacePath: effective.workspacePath,
         files: status.files,
         completed: status.completed,
+        nextStepIndex,
+        ...wizardMeta,
       };
     } catch (err) {
       return {
@@ -678,6 +714,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
       const effective = getEffectiveConfig();
       const init = ensureLandingWorkspaceFiles(effective.workspacePath);
       const status = getLandingWorkspaceStatus(effective.workspacePath);
+      const nextStepIndex = getLandingWizardNextStepIndex(effective.workspacePath);
+      const wizardMeta = getLandingWizardMeta(effective.stateDir, effective.workspacePath);
       return {
         success: true,
         configPath: effective.configPath,
@@ -687,6 +725,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         existing: init.existing,
         files: status.files,
         completed: status.completed,
+        nextStepIndex,
+        ...wizardMeta,
       };
     } catch (err) {
       return {
@@ -718,6 +758,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         ensureLandingWorkspaceFiles(effective.workspacePath);
         const result = setLandingField(effective.workspacePath, normalizedKey, value);
         const status = getLandingWorkspaceStatus(effective.workspacePath);
+        const nextStepIndex = getLandingWizardNextStepIndex(effective.workspacePath);
+        const wizardMeta = getLandingWizardMeta(effective.stateDir, effective.workspacePath);
         return {
           success: true,
           configPath: effective.configPath,
@@ -729,6 +771,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
           fileName: result.fileName,
           files: status.files,
           completed: status.completed,
+          nextStepIndex,
+          ...wizardMeta,
         };
       } catch (err) {
         return {
@@ -761,6 +805,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
         ensureLandingWorkspaceFiles(effective.workspacePath);
         const result = appendLandingNote(effective.workspacePath, normalizedTarget, note);
         const status = getLandingWorkspaceStatus(effective.workspacePath);
+        const nextStepIndex = getLandingWizardNextStepIndex(effective.workspacePath);
+        const wizardMeta = getLandingWizardMeta(effective.stateDir, effective.workspacePath);
         return {
           success: true,
           configPath: effective.configPath,
@@ -772,6 +818,8 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
           fileName: result.fileName,
           files: status.files,
           completed: status.completed,
+          nextStepIndex,
+          ...wizardMeta,
         };
       } catch (err) {
         return {
@@ -784,6 +832,64 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
       }
     },
   );
+
+  ipcMain.handle(
+    "terminal:landing-wizard-save",
+    async (_event, stepIndex: number): Promise<TerminalLandingStatusResult> => {
+      try {
+        const effective = getEffectiveConfig();
+        ensureLandingWorkspaceFiles(effective.workspacePath);
+        saveLandingWizardProgress(effective.stateDir, effective.workspacePath, stepIndex);
+        const status = getLandingWorkspaceStatus(effective.workspacePath);
+        const nextStepIndex = getLandingWizardNextStepIndex(effective.workspacePath);
+        const wizardMeta = getLandingWizardMeta(effective.stateDir, effective.workspacePath);
+        return {
+          success: true,
+          configPath: effective.configPath,
+          stateDir: effective.stateDir,
+          workspacePath: effective.workspacePath,
+          files: status.files,
+          completed: status.completed,
+          nextStepIndex,
+          ...wizardMeta,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          configPath: resolveCyDeckConfigPath(),
+          stateDir: resolveCyDeckStateDir(),
+          workspacePath: "",
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle("terminal:landing-wizard-clear", async (): Promise<TerminalLandingStatusResult> => {
+    try {
+      const effective = getEffectiveConfig();
+      clearLandingWizardProgress(effective.stateDir);
+      const status = getLandingWorkspaceStatus(effective.workspacePath);
+      const nextStepIndex = getLandingWizardNextStepIndex(effective.workspacePath);
+      return {
+        success: true,
+        configPath: effective.configPath,
+        stateDir: effective.stateDir,
+        workspacePath: effective.workspacePath,
+        files: status.files,
+        completed: status.completed,
+        nextStepIndex,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        configPath: resolveCyDeckConfigPath(),
+        stateDir: resolveCyDeckStateDir(),
+        workspacePath: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
 
   // Reset config back to the default CyDeck shape.
   ipcMain.handle("terminal:config-reset", async (): Promise<TerminalConfigResetResult> => {

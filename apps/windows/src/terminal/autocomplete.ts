@@ -72,7 +72,7 @@ const COMMAND_SUBCOMMANDS: Record<string, readonly string[]> = {
   "/pr": ["help", "create", "list", "status", "view"],
   "/workflow": ["help", "list", "create", "run", "show", "delete"],
   "/config": ["help", "show", "set", "apply", "validate", "reset", "path"],
-  "/landing": ["help", "status", "init", "start", "set", "add"],
+  "/landing": ["help", "status", "init", "start", "set", "skip", "resume", "cancel", "add"],
 } as const;
 
 const CONFIG_SET_KEYS = [

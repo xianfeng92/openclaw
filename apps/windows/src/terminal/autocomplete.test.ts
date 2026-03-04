@@ -55,6 +55,14 @@ describe("terminal autocomplete", () => {
     expect(result.value).toBe("/landing set user.timezone ");
   });
 
+  it("completes new landing wizard subcommands", () => {
+    const cancel = complete("/landing c");
+    expect(cancel.value).toBe("/landing cancel ");
+
+    const resume = complete("/landing r");
+    expect(resume.value).toBe("/landing resume ");
+  });
+
   it("completes /config set key names and values", () => {
     const keyResult = complete("/config set ai.providers.google.mo");
     expect(keyResult.value).toBe("/config set ai.providers.google.model ");

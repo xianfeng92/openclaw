@@ -30,12 +30,82 @@ type TerminalCommandRuntimeHooks = {
   listHistory?: () => string[];
 };
 
+type LandingWizardSetKey = "identity.name" | "user.name" | "user.timezone";
+type LandingWizardAddTarget = "soul" | "agents" | "memory";
+
+type LandingWizardStep =
+  | {
+      mode: "set";
+      key: LandingWizardSetKey;
+      title: string;
+      prompt: string;
+      example: string;
+    }
+  | {
+      mode: "add";
+      target: LandingWizardAddTarget;
+      title: string;
+      prompt: string;
+      example: string;
+    };
+
+type LandingWizardState = {
+  workspacePath: string;
+  stepIndex: number;
+};
+
+const LANDING_WIZARD_STEPS: LandingWizardStep[] = [
+  {
+    mode: "set",
+    key: "identity.name",
+    title: "Identity Name",
+    prompt: "Who is the CyDeck agent identity? (identity.name)",
+    example: "CyDeck",
+  },
+  {
+    mode: "set",
+    key: "user.name",
+    title: "User Name",
+    prompt: "What should I call you? (user.name)",
+    example: "Peter",
+  },
+  {
+    mode: "set",
+    key: "user.timezone",
+    title: "User Timezone",
+    prompt: "What timezone should I use? (user.timezone)",
+    example: "Asia/Shanghai",
+  },
+  {
+    mode: "add",
+    target: "soul",
+    title: "SOUL Principle",
+    prompt: "Add one core SOUL principle.",
+    example: "Be direct and evidence-driven.",
+  },
+  {
+    mode: "add",
+    target: "agents",
+    title: "Agent Rule",
+    prompt: "Add one AGENTS operating rule.",
+    example: "Ask before external side effects.",
+  },
+  {
+    mode: "add",
+    target: "memory",
+    title: "Long-term Memory",
+    prompt: "Add one long-term MEMORY fact.",
+    example: "User prefers concise replies in Chinese.",
+  },
+];
+
 // Terminal state
 let gatewayClient: TerminalGatewayClient | null = null;
 let currentSessionKey = "default";
 const knownSessionKeys = new Set<string>([currentSessionKey]);
 let currentAgent = "main";
 let runtimeHooks: TerminalCommandRuntimeHooks = {};
+let landingWizardState: LandingWizardState | null = null;
 
 export function registerTerminalCommandRuntimeHooks(hooks: TerminalCommandRuntimeHooks): void {
   runtimeHooks = hooks;
@@ -98,6 +168,33 @@ function writeHtml(terminal: HTMLElement, html: string, className = "line"): voi
   line.className = className;
   line.innerHTML = html;
   appendBeforeInput(terminal, line);
+}
+
+function appendUserMessageLine(terminal: HTMLElement, content: string): void {
+  const userLine = document.createElement("div");
+  userLine.className = "line user-line";
+  userLine.innerHTML = `<span class="user-prefix prompt-composite">${USER_PROMPT_HTML}</span> <span class="user-text">${escapeHtml(content)}</span>`;
+  appendBeforeInput(terminal, userLine);
+}
+
+function renderLandingFiles(
+  terminal: HTMLElement,
+  files: TerminalLandingFileStatus[] | undefined,
+  writeHtmlFn: (terminal: HTMLElement, html: string) => void,
+): void {
+  if (!files || files.length === 0) {
+    return;
+  }
+  for (const file of files) {
+    const existsTag = file.exists ? "<span class=\"system-ok\">exists</span>" : "<span class=\"system-warn\">missing</span>";
+    const configuredTag = file.configured
+      ? "<span class=\"system-ok\">configured</span>"
+      : "<span class=\"system-warn\">template</span>";
+    writeHtmlFn(
+      terminal,
+      `<span class="system-info">- ${escapeHtml(file.fileName)}: ${existsTag}, ${configuredTag}, ${file.bytes} bytes</span>`,
+    );
+  }
 }
 
 function startAsciiSpinner(container: HTMLElement, label: string): () => void {
@@ -747,6 +844,14 @@ async function connectGateway(terminal: HTMLElement): Promise<void> {
 }
 
 async function handleMessage(terminal: HTMLElement, content: string): Promise<void> {
+  if (landingWizardState) {
+    appendUserMessageLine(terminal, content);
+    const consumed = await handleLandingWizardMessageInput(terminal, content, writeHtml);
+    if (consumed) {
+      return;
+    }
+  }
+
   if (!gatewayClient || !gatewayClient.isConnected()) {
     await connectGateway(terminal);
     if (!gatewayClient?.isConnected()) {
@@ -755,10 +860,7 @@ async function handleMessage(terminal: HTMLElement, content: string): Promise<vo
     }
   }
 
-  const userLine = document.createElement("div");
-  userLine.className = "line user-line";
-  userLine.innerHTML = `<span class="user-prefix prompt-composite">${USER_PROMPT_HTML}</span> <span class="user-text">${escapeHtml(content)}</span>`;
-  appendBeforeInput(terminal, userLine);
+  appendUserMessageLine(terminal, content);
 
   const assistantBody = document.createElement("div");
   assistantBody.className = "assistant-output";
@@ -1724,6 +1826,199 @@ function writeSection(terminal: HTMLElement, title: string, icon: string, writeH
   );
 }
 
+function getLandingWizardStep(): LandingWizardStep | null {
+  if (!landingWizardState) {
+    return null;
+  }
+  return LANDING_WIZARD_STEPS[landingWizardState.stepIndex] ?? null;
+}
+
+function clampLandingWizardStepIndex(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  const normalized = Math.floor(value);
+  if (normalized < 0) {
+    return 0;
+  }
+  if (normalized > LANDING_WIZARD_STEPS.length) {
+    return LANDING_WIZARD_STEPS.length;
+  }
+  return normalized;
+}
+
+function formatLandingWizardStep(stepIndex: number): string {
+  const normalized = clampLandingWizardStepIndex(stepIndex);
+  if (normalized >= LANDING_WIZARD_STEPS.length) {
+    return `complete (${LANDING_WIZARD_STEPS.length}/${LANDING_WIZARD_STEPS.length})`;
+  }
+  return `${normalized + 1}/${LANDING_WIZARD_STEPS.length}`;
+}
+
+async function persistLandingWizardState(
+  terminal: HTMLElement,
+  writeHtml: WriteHtmlFn,
+): Promise<void> {
+  if (!landingWizardState) {
+    return;
+  }
+  const result = await window.terminalAPI.landingWizardSave(landingWizardState.stepIndex);
+  if (!result.success) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Failed to persist landing wizard state: ${escapeHtml(result.error || "Unknown error")}</span>`,
+    );
+  }
+}
+
+async function clearLandingWizardState(
+  terminal: HTMLElement,
+  writeHtml: WriteHtmlFn,
+): Promise<void> {
+  const result = await window.terminalAPI.landingWizardClear();
+  if (!result.success) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Failed to clear landing wizard state: ${escapeHtml(result.error || "Unknown error")}</span>`,
+    );
+  }
+}
+
+function renderLandingWizardStep(terminal: HTMLElement, writeHtml: WriteHtmlFn): void {
+  const step = getLandingWizardStep();
+  if (!step || !landingWizardState) {
+    return;
+  }
+
+  const stepNumber = landingWizardState.stepIndex + 1;
+  writeHtml(terminal, `<span class="system-info">Step ${stepNumber}/${LANDING_WIZARD_STEPS.length}: ${escapeHtml(step.title)}</span>`);
+  writeHtml(terminal, `<span class="system-info">${escapeHtml(step.prompt)}</span>`);
+  writeHtml(terminal, `<span class="system-muted">Example: ${escapeHtml(step.example)}</span>`);
+  writeHtml(terminal, `<span class="system-muted">Type your answer and press Enter. Commands: /landing skip, /landing cancel</span>`);
+}
+
+async function finishLandingWizard(terminal: HTMLElement, writeHtml: WriteHtmlFn): Promise<void> {
+  landingWizardState = null;
+  await clearLandingWizardState(terminal, writeHtml);
+  const status = await window.terminalAPI.landingStatus();
+  writeSection(terminal, "Landing Wizard Complete", "[landing]", writeHtml);
+  if (!status.success) {
+    writeHtml(terminal, `<span class="system-warn">[warn] Wizard finished, but status check failed: ${escapeHtml(status.error || "Unknown error")}</span>`);
+    writeHtml(terminal, `<span class="system-info">Run /landing status to inspect files.</span>`);
+    return;
+  }
+
+  writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(status.workspacePath)}</span>`);
+  renderLandingFiles(terminal, status.files, writeHtml);
+  if (status.completed) {
+    writeHtml(terminal, `<span class="system-ok">[ok] Landing is complete and ready.</span>`);
+  } else {
+    writeHtml(terminal, `<span class="system-warn">[warn] Landing still has template fields. Run /landing status for details.</span>`);
+  }
+}
+
+async function handleLandingWizardMessageInput(
+  terminal: HTMLElement,
+  content: string,
+  writeHtml: WriteHtmlFn,
+): Promise<boolean> {
+  const step = getLandingWizardStep();
+  if (!step || !landingWizardState) {
+    return false;
+  }
+
+  const answer = content.trim();
+  if (!answer) {
+    writeHtml(terminal, `<span class="system-warn">[warn] Input cannot be empty.</span>`);
+    renderLandingWizardStep(terminal, writeHtml);
+    return true;
+  }
+
+  if (step.mode === "set") {
+    const result = await window.terminalAPI.landingSet(step.key, answer);
+    if (!result.success) {
+      writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to save landing value")}</span>`);
+      writeHtml(terminal, `<span class="system-info">Try again, or use /landing skip /landing cancel.</span>`);
+      return true;
+    }
+    writeHtml(
+      terminal,
+      `<span class="system-ok">[ok] ${escapeHtml(result.key || step.key)} = ${escapeHtml(result.value || answer)}</span>`,
+    );
+    if (result.fileName) {
+      writeHtml(terminal, `<span class="system-info">Updated: ${escapeHtml(result.fileName)}</span>`);
+    }
+  } else {
+    const result = await window.terminalAPI.landingAdd(step.target, answer);
+    if (!result.success) {
+      writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to append landing note")}</span>`);
+      writeHtml(terminal, `<span class="system-info">Try again, or use /landing skip /landing cancel.</span>`);
+      return true;
+    }
+    writeHtml(
+      terminal,
+      `<span class="system-ok">[ok] Added note to ${escapeHtml(result.fileName || step.target)}</span>`,
+    );
+  }
+
+  landingWizardState.stepIndex += 1;
+  if (landingWizardState.stepIndex >= LANDING_WIZARD_STEPS.length) {
+    await finishLandingWizard(terminal, writeHtml);
+    return true;
+  }
+
+  await persistLandingWizardState(terminal, writeHtml);
+  renderLandingWizardStep(terminal, writeHtml);
+  return true;
+}
+
+async function startLandingWizard(terminal: HTMLElement, writeHtml: WriteHtmlFn): Promise<void> {
+  const result = await window.terminalAPI.landingInit();
+  if (!result.success) {
+    writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to start landing setup")}</span>`);
+    return;
+  }
+
+  if (landingWizardState) {
+    writeHtml(terminal, `<span class="system-warn">[warn] Restarting landing wizard from current workspace state.</span>`);
+  }
+
+  const nextStepIndex = clampLandingWizardStepIndex(result.nextStepIndex);
+  const savedStepIndex =
+    typeof result.wizardStepIndex === "number"
+      ? clampLandingWizardStepIndex(result.wizardStepIndex)
+      : null;
+
+  landingWizardState = {
+    workspacePath: result.workspacePath,
+    stepIndex: nextStepIndex,
+  };
+
+  writeSection(terminal, "Landing Wizard", "[landing]", writeHtml);
+  writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
+  renderLandingFiles(terminal, result.files, writeHtml);
+  if (savedStepIndex !== null) {
+    writeHtml(
+      terminal,
+      `<span class="system-info">Recovered saved wizard progress at step ${formatLandingWizardStep(savedStepIndex)}.</span>`,
+    );
+  }
+  if (nextStepIndex >= LANDING_WIZARD_STEPS.length) {
+    writeHtml(terminal, `<span class="system-ok">[ok] Landing is already complete. No wizard steps are pending.</span>`);
+    await finishLandingWizard(terminal, writeHtml);
+    return;
+  }
+  if (nextStepIndex > 0) {
+    writeHtml(
+      terminal,
+      `<span class="system-info">Auto-jump to first missing step ${formatLandingWizardStep(nextStepIndex)}.</span>`,
+    );
+  }
+  writeHtml(terminal, `<span class="system-muted">This wizard asks one question per step and writes files immediately.</span>`);
+  await persistLandingWizardState(terminal, writeHtml);
+  renderLandingWizardStep(terminal, writeHtml);
+}
+
 // Check if orchestral API is available
 function hasOrchestralAPI(): boolean {
   return typeof window.terminalAPI?.reviewDiff === "function" ||
@@ -2158,22 +2453,6 @@ async function handleLandingCommand(
 ): Promise<void> {
   const action = (args[0] || "help").toLowerCase();
 
-  const renderFiles = (files?: TerminalLandingFileStatus[]) => {
-    if (!files || files.length === 0) {
-      return;
-    }
-    for (const file of files) {
-      const existsTag = file.exists ? "<span class=\"system-ok\">exists</span>" : "<span class=\"system-warn\">missing</span>";
-      const configuredTag = file.configured
-        ? "<span class=\"system-ok\">configured</span>"
-        : "<span class=\"system-warn\">template</span>";
-      writeHtml(
-        terminal,
-        `<span class="system-info">- ${escapeHtml(file.fileName)}: ${existsTag}, ${configuredTag}, ${file.bytes} bytes</span>`,
-      );
-    }
-  };
-
   switch (action) {
     case "help": {
       writeHtml(
@@ -2188,8 +2467,14 @@ async function handleLandingCommand(
   /landing status
   /landing init
   /landing start
+  /landing resume
+  /landing skip
+  /landing cancel
   /landing set &lt;key&gt; &lt;value&gt;
   /landing add &lt;agents|soul|memory&gt; &lt;text&gt;
+
+<span class="system-info">Wizard:</span>
+  Run /landing start, then type answers directly (no slash command needed).
 
 <span class="system-info">Set keys:</span>
   identity.name
@@ -2223,11 +2508,27 @@ async function handleLandingCommand(
       }
       writeSection(terminal, "Landing Status", "[landing]", writeHtml);
       writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
-      renderFiles(result.files);
+      renderLandingFiles(terminal, result.files, writeHtml);
+      if (typeof result.wizardStepIndex === "number") {
+        const wizardStep = clampLandingWizardStepIndex(result.wizardStepIndex);
+        writeHtml(
+          terminal,
+          `<span class="system-info">Persisted wizard progress: step ${formatLandingWizardStep(wizardStep)}</span>`,
+        );
+      }
       if (result.completed) {
         writeHtml(terminal, `<span class="system-ok">[ok] Landing is complete</span>`);
       } else {
         writeHtml(terminal, `<span class="system-warn">[warn] Landing is not complete. Run /landing start</span>`);
+        if (typeof result.nextStepIndex === "number") {
+          const nextStep = clampLandingWizardStepIndex(result.nextStepIndex);
+          if (nextStep < LANDING_WIZARD_STEPS.length) {
+            writeHtml(
+              terminal,
+              `<span class="system-info">First missing wizard step: ${nextStep + 1}/${LANDING_WIZARD_STEPS.length}</span>`,
+            );
+          }
+        }
       }
       return;
     }
@@ -2247,25 +2548,93 @@ async function handleLandingCommand(
         writeHtml(terminal, `<span class="system-info">  ${escapeHtml(created.join(", "))}</span>`);
       }
       writeHtml(terminal, `<span class="system-info">Existing: ${escapeHtml(String(existing.length))}</span>`);
-      renderFiles(result.files);
+      renderLandingFiles(terminal, result.files, writeHtml);
       return;
     }
 
     case "start": {
-      const result = await window.terminalAPI.landingInit();
-      if (!result.success) {
-        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(result.error || "Failed to start landing setup")}</span>`);
-        return;
+      await startLandingWizard(terminal, writeHtml);
+      return;
+    }
+
+    case "resume": {
+      if (!landingWizardState) {
+        const status = await window.terminalAPI.landingStatus();
+        if (!status.success) {
+          writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(status.error || "Failed to load landing status")}</span>`);
+          return;
+        }
+        if (typeof status.wizardStepIndex !== "number") {
+          writeHtml(terminal, `<span class="system-warn">[warn] No persisted landing wizard state. Run /landing start.</span>`);
+          return;
+        }
+        const resumeStep = clampLandingWizardStepIndex(status.nextStepIndex ?? status.wizardStepIndex);
+        if (resumeStep >= LANDING_WIZARD_STEPS.length) {
+          await clearLandingWizardState(terminal, writeHtml);
+          writeHtml(terminal, `<span class="system-ok">[ok] Landing is already complete.</span>`);
+          return;
+        }
+        landingWizardState = {
+          workspacePath: status.workspacePath,
+          stepIndex: resumeStep,
+        };
+        await persistLandingWizardState(terminal, writeHtml);
+        writeHtml(
+          terminal,
+          `<span class="system-info">Resumed persisted wizard state at step ${formatLandingWizardStep(resumeStep)}.</span>`,
+        );
       }
       writeSection(terminal, "Landing Wizard", "[landing]", writeHtml);
-      writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(result.workspacePath)}</span>`);
-      writeHtml(terminal, `<span class="system-info">Step 1: /landing set identity.name &lt;name&gt;</span>`);
-      writeHtml(terminal, `<span class="system-info">Step 2: /landing set user.name &lt;name&gt;</span>`);
-      writeHtml(terminal, `<span class="system-info">Step 3: /landing set user.timezone &lt;tz&gt;</span>`);
-      writeHtml(terminal, `<span class="system-info">Step 4: /landing add soul &lt;principle&gt;</span>`);
-      writeHtml(terminal, `<span class="system-info">Step 5: /landing add agents &lt;rule&gt;</span>`);
-      writeHtml(terminal, `<span class="system-info">Step 6: /landing add memory &lt;long-term fact&gt;</span>`);
-      writeHtml(terminal, `<span class="system-info">Then run: /landing status</span>`);
+      writeHtml(terminal, `<span class="system-info">Workspace: ${escapeHtml(landingWizardState.workspacePath)}</span>`);
+      renderLandingWizardStep(terminal, writeHtml);
+      return;
+    }
+
+    case "skip": {
+      if (!landingWizardState) {
+        writeHtml(terminal, `<span class="system-warn">[warn] No active landing wizard. Run /landing start.</span>`);
+        return;
+      }
+      const skippedStep = getLandingWizardStep();
+      if (!skippedStep) {
+        landingWizardState = null;
+        await clearLandingWizardState(terminal, writeHtml);
+        writeHtml(terminal, `<span class="system-warn">[warn] Landing wizard state was invalid and has been reset.</span>`);
+        return;
+      }
+      const skippedIndex = landingWizardState.stepIndex + 1;
+      writeHtml(
+        terminal,
+        `<span class="system-warn">[warn] Skipped step ${skippedIndex}/${LANDING_WIZARD_STEPS.length}: ${escapeHtml(skippedStep.title)}</span>`,
+      );
+      landingWizardState.stepIndex += 1;
+      if (landingWizardState.stepIndex >= LANDING_WIZARD_STEPS.length) {
+        await finishLandingWizard(terminal, writeHtml);
+        return;
+      }
+      await persistLandingWizardState(terminal, writeHtml);
+      renderLandingWizardStep(terminal, writeHtml);
+      return;
+    }
+
+    case "cancel": {
+      if (landingWizardState) {
+        landingWizardState = null;
+        await clearLandingWizardState(terminal, writeHtml);
+        writeHtml(terminal, `<span class="system-ok">[ok] Landing wizard cancelled.</span>`);
+        return;
+      }
+      const status = await window.terminalAPI.landingStatus();
+      if (!status.success) {
+        writeHtml(terminal, `<span class="system-error">[err] ${escapeHtml(status.error || "Failed to load landing status")}</span>`);
+        return;
+      }
+      if (typeof status.wizardStepIndex !== "number") {
+        writeHtml(terminal, `<span class="system-warn">[warn] No active landing wizard.</span>`);
+        return;
+      }
+      await clearLandingWizardState(terminal, writeHtml);
+      writeHtml(terminal, `<span class="system-ok">[ok] Cleared persisted landing wizard state.</span>`);
       return;
     }
 

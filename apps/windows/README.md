@@ -21,6 +21,8 @@ Electron-based desktop terminal for CyDeck, with an embedded local gateway for A
 # Landing bootstrap
 /landing init
 /landing start
+/landing resume
+/landing cancel
 /landing set identity.name CyDeck
 /landing add memory User prefers concise replies in Chinese
 /landing status
@@ -51,6 +53,8 @@ Behavior:
 - `MEMORY.md` is injected only for private sessions.
 - Private sessions: `default`, `main`, `direct` (and keys without shared markers).
 - Shared sessions (contains `group`, `channel`, `subagent`, `cron`) do not inject `MEMORY.md`.
+- `/landing start` auto-jumps to the first missing wizard step.
+- Wizard progress is persisted in state dir, and `/landing resume` restores progress after restart.
 
 ## Session Memory Runtime
 

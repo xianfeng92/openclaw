@@ -382,11 +382,34 @@ async function handleSlashCommand(
     }
 
     case "/session": {
+      const rotateSessionIfNeeded = async (nextSessionKey: string): Promise<void> => {
+        if (!gatewayClient || !gatewayClient.isConnected()) {
+          return;
+        }
+        if (nextSessionKey === currentSessionKey) {
+          return;
+        }
+        try {
+          const rotated = await gatewayClient.rotateSession(currentSessionKey);
+          if (rotated.saved) {
+            const savedPath = rotated.relativePath ?? "memory/<date>-<session>.md";
+            writeHtml(
+              terminal,
+              `<span class="system-info">[memory] Saved session snapshot: ${escapeHtml(savedPath)}</span>`,
+            );
+          }
+        } catch {
+          // Best-effort housekeeping; don't block session switches.
+        }
+      };
+
       if (args.length === 0) {
         writeLine(terminal, `Current session: ${currentSessionKey}`);
         writeLine(terminal, "Usage: /session <session-key> | new | list");
       } else if (args[0] === "new") {
-        currentSessionKey = `session-${Date.now()}`;
+        const nextSessionKey = `session-${Date.now()}`;
+        await rotateSessionIfNeeded(nextSessionKey);
+        currentSessionKey = nextSessionKey;
         writeHtml(
           terminal,
           `<span class="system-ok">[ok] Created new session: ${escapeHtml(currentSessionKey)}</span>`,
@@ -394,7 +417,9 @@ async function handleSlashCommand(
       } else if (args[0] === "list") {
         writeLine(terminal, "Sessions: (list not implemented in MVP)");
       } else {
-        currentSessionKey = args[0];
+        const nextSessionKey = args[0];
+        await rotateSessionIfNeeded(nextSessionKey);
+        currentSessionKey = nextSessionKey;
         writeHtml(
           terminal,
           `<span class="system-ok">[ok] Switched to session: ${escapeHtml(currentSessionKey)}</span>`,

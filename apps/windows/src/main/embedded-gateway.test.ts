@@ -750,6 +750,226 @@ describe("embedded-gateway session and lifecycle", () => {
     }
   });
 
+  it("injects memory tool context when memory_search finds matches", async () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+    appendLandingNote(workspace, "memory", "Project codename is Atlas");
+
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const provider: AIProvider = {
+      chat: async (messages, onChunk) => {
+        capturedMessages = messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+        const text = "ok";
+        if (onChunk) {
+          await onChunk(text);
+        }
+        return text;
+      },
+    };
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: provider,
+      workspacePath: workspace,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "memory-context-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "What is the Atlas codename?",
+          deliver: true,
+          idempotencyKey: "memory-context-run",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      const memoryContext = capturedMessages.find(
+        (message) => message.role === "system" && message.content.includes("[cydeck:memory-tools]"),
+      )?.content;
+      expect(memoryContext).toBeDefined();
+      expect(memoryContext).toContain("memory_search");
+      expect(memoryContext).toContain("Atlas");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
+  it("supports tools.memory.search and tools.memory.get request handlers", async () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+    appendLandingNote(workspace, "memory", "Atlas release requires phased rollout.");
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: null,
+      workspacePath: workspace,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "memory-search-tool",
+        method: "tools.memory.search",
+        params: {
+          sessionKey: "default",
+          query: "atlas rollout",
+        },
+      });
+      const searchResponse = await nextFrame(ws);
+      expect(searchResponse.ok).toBe(true);
+      const searchPayload = searchResponse.payload as { results?: Array<{ path: string }> };
+      expect(searchPayload.results?.length ?? 0).toBeGreaterThan(0);
+
+      sendRequest(ws, {
+        id: "memory-get-tool",
+        method: "tools.memory.get",
+        params: {
+          path: "MEMORY.md",
+          from: 1,
+          lines: 20,
+        },
+      });
+      const getResponse = await nextFrame(ws);
+      expect(getResponse.ok).toBe(true);
+      const getPayload = getResponse.payload as { text?: string };
+      expect(getPayload.text).toContain("Atlas");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
+  it("writes session-memory snapshot on session.rotate", async () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: null,
+      workspacePath: workspace,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "chat-before-rotate",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "Remember Atlas rollout checklist.",
+          deliver: false,
+          idempotencyKey: "rotate-run",
+        },
+      });
+      await nextFrame(ws); // started
+
+      sendRequest(ws, {
+        id: "rotate-request",
+        method: "session.rotate",
+        params: {
+          fromSessionKey: "default",
+        },
+      });
+      const rotateResponse = await nextFrame(ws);
+      expect(rotateResponse.ok).toBe(true);
+      const payload = rotateResponse.payload as {
+        saved?: boolean;
+        relativePath?: string;
+      };
+      expect(payload.saved).toBe(true);
+      expect(payload.relativePath).toBeTypeOf("string");
+      const savedPath = payload.relativePath ?? "";
+      const diskPath = path.join(workspace, savedPath);
+      expect(fs.existsSync(diskPath)).toBe(true);
+      const content = fs.readFileSync(diskPath, "utf-8");
+      expect(content).toContain("session-rotate");
+      expect(content).toContain("Atlas rollout checklist");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
+  it("runs pre-compaction flush snapshots when threshold is reached", async () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+    appendLandingNote(workspace, "memory", "Compaction flush test token");
+
+    const provider: AIProvider = {
+      chat: async (_messages, onChunk) => {
+        const text = "ok";
+        if (onChunk) {
+          await onChunk(text);
+        }
+        return text;
+      },
+    };
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: provider,
+      workspacePath: workspace,
+      memoryRuntime: {
+        preCompactionMessages: 2,
+        autoWriteMessages: 999,
+      },
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "preflush-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "Trigger pre compaction flush.",
+          deliver: true,
+          idempotencyKey: "preflush-run",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      const memoryDir = path.join(workspace, "memory");
+      const files = fs.readdirSync(memoryDir).filter((entry) => entry.endsWith(".md"));
+      expect(files.length).toBeGreaterThan(0);
+      const firstSnapshot = files[0];
+      if (!firstSnapshot) {
+        throw new Error("Expected snapshot file");
+      }
+      const snapshot = fs.readFileSync(path.join(memoryDir, firstSnapshot), "utf-8");
+      expect(snapshot).toContain("pre-compaction-flush");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
   it("keeps sessions isolated per websocket connection", async () => {
     const provider: AIProvider = {
       chat: async (messages, onChunk) => {

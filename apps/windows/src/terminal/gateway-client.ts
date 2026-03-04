@@ -243,49 +243,76 @@ export class TerminalGatewayClient {
     }
   }
 
-  async sendMessage(
-    sessionKey: string,
-    message: string,
-    opts?: { idempotencyKey?: string },
-  ): Promise<{ runId: string; status: string }> {
+  private async sendRequest<TResponse>(
+    method: string,
+    params: Record<string, unknown>,
+    opts?: { requestId?: string; timeoutMs?: number },
+  ): Promise<TResponse> {
     if (!this.helloReceived) {
       throw new Error("Not connected to Gateway");
     }
 
-    return new Promise((resolve, reject) => {
-      const requestId = opts?.idempotencyKey ?? generateUUID();
-
-      // Set up timeout
+    return await new Promise<TResponse>((resolve, reject) => {
+      const requestId = opts?.requestId ?? generateUUID();
+      const timeoutMs = Math.max(1, Math.floor(opts?.timeoutMs ?? 60000));
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         reject(new Error("Request timeout"));
-      }, 60000);
+      }, timeoutMs);
 
       this.pendingRequests.set(requestId, {
         resolve: (value: unknown) => {
-          const rec =
-            value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-          const runId = typeof rec?.runId === "string" ? rec.runId : requestId;
-          const status = typeof rec?.status === "string" ? rec.status : "started";
-          resolve({ runId, status });
+          resolve(value as TResponse);
         },
         reject,
         timeout,
       });
 
-      // Send the message request
       this.send({
         type: "req",
         id: requestId,
-        method: "chat.send",
-        params: {
-          sessionKey,
-          message,
-          deliver: true,
-          idempotencyKey: requestId,
-        },
+        method,
+        params,
       });
     });
+  }
+
+  async sendMessage(
+    sessionKey: string,
+    message: string,
+    opts?: { idempotencyKey?: string },
+  ): Promise<{ runId: string; status: string }> {
+    const requestId = opts?.idempotencyKey ?? generateUUID();
+    const payload = await this.sendRequest<Record<string, unknown>>(
+      "chat.send",
+      {
+        sessionKey,
+        message,
+        deliver: true,
+        idempotencyKey: requestId,
+      },
+      { requestId, timeoutMs: 60000 },
+    );
+    const runId = typeof payload.runId === "string" ? payload.runId : requestId;
+    const status = typeof payload.status === "string" ? payload.status : "started";
+    return { runId, status };
+  }
+
+  async rotateSession(fromSessionKey: string): Promise<{
+    saved: boolean;
+    relativePath?: string;
+    messageCount?: number;
+  }> {
+    const payload = await this.sendRequest<Record<string, unknown>>(
+      "session.rotate",
+      { fromSessionKey },
+      { timeoutMs: 10000 },
+    );
+    return {
+      saved: payload.saved === true,
+      relativePath: typeof payload.relativePath === "string" ? payload.relativePath : undefined,
+      messageCount: typeof payload.messageCount === "number" ? payload.messageCount : undefined,
+    };
   }
 
   onEvent(handler: GatewayEventHandler): () => void {

@@ -5,7 +5,15 @@ import { ProxyAgent, type Dispatcher } from "undici";
 import type { CyDeckRuntimeProviderConfig } from "./cydeck-config.js";
 import { rotateGatewayAuthToken } from "./gateway-auth.js";
 import type { GatewayLike, GatewayState, GatewayStatus } from "./gateway-like.js";
-import { buildLandingSystemPrompt } from "./landing.js";
+import { buildLandingSystemPrompt, isPrivateLandingSession } from "./landing.js";
+import {
+  appendSessionMemorySnapshot,
+  memoryGet,
+  memorySearch,
+  type MemorySearchResult,
+  type SessionSnapshotResult,
+  type SessionSnapshotReason,
+} from "./memory-runtime.js";
 
 const GATEWAY_PROTOCOL_VERSION = 3;
 const DEFAULT_PORT = 19001;
@@ -16,6 +24,11 @@ const GOOGLE_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1bet
 const WS_READY_STATE_OPEN = 1;
 const SESSION_MAX_MESSAGES = 40;
 const LANDING_PROMPT_MARKER = "[cydeck:landing-system-prompt]";
+const MEMORY_TOOLS_PROMPT_MARKER = "[cydeck:memory-tools]";
+const DEFAULT_AUTO_MEMORY_WRITE_MESSAGES = 12;
+const DEFAULT_PRE_COMPACTION_MESSAGES = SESSION_MAX_MESSAGES;
+const DEFAULT_SNAPSHOT_MAX_MESSAGES = 18;
+const DEFAULT_MEMORY_SEARCH_RESULTS = 3;
 
 type GatewayRequest = {
   type: "req";
@@ -49,6 +62,8 @@ type ChatMessage = {
 type ChatSession = {
   sessionKey: string;
   messages: ChatMessage[];
+  lastMemoryWriteMessageCount: number;
+  lastPreCompactionFlushMessageCount: number;
 };
 
 type ConnectionContext = {
@@ -71,6 +86,15 @@ export type EmbeddedGatewayOptions = {
   runtimeProvider?: CyDeckRuntimeProviderConfig;
   aiProviderOverride?: AIProvider | null;
   workspacePath?: string;
+  memoryRuntime?: Partial<MemoryRuntimeConfig>;
+};
+
+type MemoryRuntimeConfig = {
+  enabled: boolean;
+  autoWriteMessages: number;
+  preCompactionMessages: number;
+  snapshotMaxMessages: number;
+  searchMaxResults: number;
 };
 
 type RequestInitWithDispatcher = RequestInit & { dispatcher?: Dispatcher };
@@ -400,6 +424,30 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, "");
 }
 
+function resolveMemoryRuntimeConfig(
+  input?: Partial<MemoryRuntimeConfig>,
+): MemoryRuntimeConfig {
+  return {
+    enabled: input?.enabled !== false,
+    autoWriteMessages: Math.max(
+      1,
+      Math.floor(input?.autoWriteMessages ?? DEFAULT_AUTO_MEMORY_WRITE_MESSAGES),
+    ),
+    preCompactionMessages: Math.max(
+      1,
+      Math.floor(input?.preCompactionMessages ?? DEFAULT_PRE_COMPACTION_MESSAGES),
+    ),
+    snapshotMaxMessages: Math.max(
+      1,
+      Math.floor(input?.snapshotMaxMessages ?? DEFAULT_SNAPSHOT_MAX_MESSAGES),
+    ),
+    searchMaxResults: Math.max(
+      1,
+      Math.floor(input?.searchMaxResults ?? DEFAULT_MEMORY_SEARCH_RESULTS),
+    ),
+  };
+}
+
 function isAbortError(err: unknown): boolean {
   if (!err) {
     return false;
@@ -420,6 +468,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
   private aiProvider: AIProvider | null = null;
   private aiUnavailableReason = "";
   private readonly runtimeProviderLocked: boolean;
+  private readonly memoryRuntime: MemoryRuntimeConfig;
   private workspacePath: string = process.cwd();
 
   private status: GatewayStatus = "stopped";
@@ -435,6 +484,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     this.port = normalizedPort;
     this.authToken = authToken;
     this.runtimeProviderLocked = options.aiProviderOverride !== undefined;
+    this.memoryRuntime = resolveMemoryRuntimeConfig(options.memoryRuntime);
     this.reloadWorkspacePath(options.workspacePath);
 
     if (this.runtimeProviderLocked) {
@@ -661,7 +711,14 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
       console.warn(`[EmbeddedGateway] Connection error (${context.connectionId}): ${message}`);
     });
     ws.on("message", (raw) => {
-      const text = typeof raw === "string" ? raw : raw.toString();
+      const text =
+        typeof raw === "string"
+          ? raw
+          : raw instanceof ArrayBuffer
+            ? Buffer.from(raw).toString("utf-8")
+            : Array.isArray(raw)
+              ? Buffer.concat(raw).toString("utf-8")
+              : Buffer.from(raw).toString("utf-8");
 
       let frame: GatewayRequest;
       try {
@@ -741,6 +798,21 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
 
     if (method === "chat.send") {
       await this.handleChatSend(ws, context, id, params);
+      return;
+    }
+
+    if (method === "tools.memory.search") {
+      this.handleMemorySearch(ws, id, params);
+      return;
+    }
+
+    if (method === "tools.memory.get") {
+      this.handleMemoryGet(ws, id, params);
+      return;
+    }
+
+    if (method === "session.rotate") {
+      await this.handleSessionRotate(ws, context, id, params);
       return;
     }
 
@@ -835,10 +907,23 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     const namespacedKey = `${context.connectionId}::${sessionKey}`;
     let session = this.sessions.get(namespacedKey);
     if (!session) {
-      session = { sessionKey, messages: [] };
+      session = {
+        sessionKey,
+        messages: [],
+        lastMemoryWriteMessageCount: 0,
+        lastPreCompactionFlushMessageCount: 0,
+      };
       this.sessions.set(namespacedKey, session);
     }
     return session;
+  }
+
+  private getExistingSession(
+    context: ConnectionContext,
+    sessionKey: string,
+  ): ChatSession | undefined {
+    const namespacedKey = `${context.connectionId}::${sessionKey}`;
+    return this.sessions.get(namespacedKey);
   }
 
   private trimSessionMessages(session: ChatSession): void {
@@ -876,6 +961,258 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     });
   }
 
+  private collectConversationMessages(session: ChatSession): Array<{
+    role: "user" | "assistant";
+    content: string;
+  }> {
+    return session.messages
+      .filter(
+        (
+          message,
+        ): message is {
+          role: "user" | "assistant";
+          content: string;
+        } => message.role === "user" || message.role === "assistant",
+      )
+      .filter((message) => message.content.trim().length > 0);
+  }
+
+  private shouldPersistMemoryForSession(sessionKey: string): boolean {
+    if (!this.memoryRuntime.enabled) {
+      return false;
+    }
+    return isPrivateLandingSession(sessionKey);
+  }
+
+  private persistSessionMemorySnapshot(
+    session: ChatSession,
+    reason: SessionSnapshotReason,
+    options?: { force?: boolean },
+  ): SessionSnapshotResult {
+    if (!this.shouldPersistMemoryForSession(session.sessionKey)) {
+      return {
+        filePath: "",
+        relativePath: "",
+        saved: false,
+        messageCount: 0,
+      };
+    }
+
+    const conversation = this.collectConversationMessages(session);
+    if (conversation.length === 0) {
+      return {
+        filePath: "",
+        relativePath: "",
+        saved: false,
+        messageCount: 0,
+      };
+    }
+
+    const shouldWrite =
+      options?.force === true ||
+      conversation.length - session.lastMemoryWriteMessageCount >= this.memoryRuntime.autoWriteMessages;
+    if (!shouldWrite) {
+      return {
+        filePath: "",
+        relativePath: "",
+        saved: false,
+        messageCount: conversation.length,
+      };
+    }
+
+    const snapshotMessages = conversation.slice(-this.memoryRuntime.snapshotMaxMessages);
+    const result = appendSessionMemorySnapshot({
+      workspacePath: this.workspacePath,
+      sessionKey: session.sessionKey,
+      reason,
+      messages: snapshotMessages,
+    });
+    if (result.saved) {
+      session.lastMemoryWriteMessageCount = conversation.length;
+    }
+    return result;
+  }
+
+  private maybeRunPreCompactionFlush(session: ChatSession): void {
+    if (!this.shouldPersistMemoryForSession(session.sessionKey)) {
+      return;
+    }
+
+    const conversationCount = this.collectConversationMessages(session).length;
+    if (conversationCount < this.memoryRuntime.preCompactionMessages) {
+      return;
+    }
+    if (session.lastPreCompactionFlushMessageCount === conversationCount) {
+      return;
+    }
+
+    this.persistSessionMemorySnapshot(session, "pre-compaction-flush", { force: true });
+    session.lastPreCompactionFlushMessageCount = conversationCount;
+  }
+
+  private maybeRunSessionMemoryAutoWrite(session: ChatSession): void {
+    this.persistSessionMemorySnapshot(session, "session-memory");
+  }
+
+  private buildMemoryToolContext(results: MemorySearchResult[], query: string): string {
+    const lines: string[] = [
+      MEMORY_TOOLS_PROMPT_MARKER,
+      "Available local tools: memory_search, memory_get.",
+      `memory_search(query="${query.replaceAll('"', '\\"')}") returned ${results.length} snippets.`,
+      "",
+      "Use memory_get(path, from, lines) when you need exact source lines.",
+      "",
+    ];
+    for (const result of results) {
+      lines.push(
+        `- ${result.path}#L${result.startLine}-L${result.endLine} (score=${result.score.toFixed(2)})`,
+        result.snippet,
+        "",
+      );
+    }
+    return lines.join("\n").trim();
+  }
+
+  private buildMessagesForProvider(
+    session: ChatSession,
+    userMessage: string,
+  ): { messages: ChatMessage[]; memoryResults: MemorySearchResult[] } {
+    const baseMessages = session.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+    if (!this.shouldPersistMemoryForSession(session.sessionKey)) {
+      return { messages: baseMessages, memoryResults: [] };
+    }
+
+    let memoryResults: MemorySearchResult[] = [];
+    try {
+      memoryResults = memorySearch(this.workspacePath, userMessage, {
+        maxResults: this.memoryRuntime.searchMaxResults,
+      });
+    } catch {
+      memoryResults = [];
+    }
+
+    if (memoryResults.length === 0) {
+      return { messages: baseMessages, memoryResults: [] };
+    }
+
+    const memoryContext: ChatMessage = {
+      role: "system",
+      content: this.buildMemoryToolContext(memoryResults, userMessage),
+    };
+    const insertIndex = this.isManagedLandingPrompt(baseMessages[0]) ? 1 : 0;
+    baseMessages.splice(insertIndex, 0, memoryContext);
+    return { messages: baseMessages, memoryResults };
+  }
+
+  private handleMemorySearch(
+    ws: WebSocket,
+    requestId: string,
+    params: Record<string, unknown>,
+  ): void {
+    const query = typeof params.query === "string" ? params.query : "";
+    if (!query.trim()) {
+      this.sendError(ws, requestId, "query is required", 400);
+      return;
+    }
+
+    const sessionKey = typeof params.sessionKey === "string" ? params.sessionKey.trim() : "";
+    if (sessionKey && !isPrivateLandingSession(sessionKey)) {
+      this.sendResponse(ws, requestId, { results: [] });
+      return;
+    }
+
+    const maxResults =
+      typeof params.maxResults === "number" && Number.isFinite(params.maxResults)
+        ? params.maxResults
+        : undefined;
+    const minScore =
+      typeof params.minScore === "number" && Number.isFinite(params.minScore)
+        ? params.minScore
+        : undefined;
+
+    try {
+      const results = memorySearch(this.workspacePath, query, { maxResults, minScore });
+      this.sendResponse(ws, requestId, { results });
+    } catch (err) {
+      this.sendError(
+        ws,
+        requestId,
+        err instanceof Error ? err.message : String(err),
+        500,
+      );
+    }
+  }
+
+  private handleMemoryGet(
+    ws: WebSocket,
+    requestId: string,
+    params: Record<string, unknown>,
+  ): void {
+    const requestedPath = typeof params.path === "string" ? params.path : "";
+    if (!requestedPath.trim()) {
+      this.sendError(ws, requestId, "path is required", 400);
+      return;
+    }
+
+    const from =
+      typeof params.from === "number" && Number.isFinite(params.from) ? Math.floor(params.from) : undefined;
+    const lines =
+      typeof params.lines === "number" && Number.isFinite(params.lines)
+        ? Math.floor(params.lines)
+        : undefined;
+
+    try {
+      const result = memoryGet(this.workspacePath, {
+        path: requestedPath,
+        from,
+        lines,
+      });
+      this.sendResponse(ws, requestId, result);
+    } catch (err) {
+      this.sendError(
+        ws,
+        requestId,
+        err instanceof Error ? err.message : String(err),
+        400,
+      );
+    }
+  }
+
+  private async handleSessionRotate(
+    ws: WebSocket,
+    context: ConnectionContext,
+    requestId: string,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const fromSessionKey =
+      typeof params.fromSessionKey === "string" ? params.fromSessionKey.trim() : "";
+    if (!fromSessionKey) {
+      this.sendError(ws, requestId, "fromSessionKey is required", 400);
+      return;
+    }
+
+    const session = this.getExistingSession(context, fromSessionKey);
+    if (!session) {
+      this.sendResponse(ws, requestId, { saved: false, reason: "session-not-found" });
+      return;
+    }
+
+    try {
+      const result = this.persistSessionMemorySnapshot(session, "session-rotate", { force: true });
+      this.sendResponse(ws, requestId, result);
+    } catch (err) {
+      this.sendError(
+        ws,
+        requestId,
+        err instanceof Error ? err.message : String(err),
+        500,
+      );
+    }
+  }
+
   private async handleChatSend(
     ws: WebSocket,
     context: ConnectionContext,
@@ -903,6 +1240,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     this.syncLandingSystemPrompt(session);
 
     session.messages.push({ role: "user", content: message.trim() });
+    this.maybeRunPreCompactionFlush(session);
     this.trimSessionMessages(session);
 
     this.sendResponse(ws, requestId, {
@@ -917,7 +1255,9 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     if (!this.aiProvider) {
       const fallbackText = this.aiUnavailableReason;
       session.messages.push({ role: "assistant", content: fallbackText });
+      this.maybeRunPreCompactionFlush(session);
       this.trimSessionMessages(session);
+      this.maybeRunSessionMemoryAutoWrite(session);
       this.sendChatEvent(ws, {
         runId: idempotencyKey,
         sessionKey,
@@ -934,9 +1274,10 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     try {
       let seq = 0;
       let fullText = "";
+      const providerInput = this.buildMessagesForProvider(session, message.trim());
 
       await this.aiProvider.chat(
-        session.messages,
+        providerInput.messages,
         async (chunk) => {
           if (!chunk || context.closed || controller.signal.aborted) {
             return;
@@ -969,7 +1310,9 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
       }
 
       session.messages.push({ role: "assistant", content: fullText });
+      this.maybeRunPreCompactionFlush(session);
       this.trimSessionMessages(session);
+      this.maybeRunSessionMemoryAutoWrite(session);
 
       this.sendChatEvent(ws, {
         runId: idempotencyKey,

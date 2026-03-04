@@ -1999,13 +1999,22 @@ async function handleTaskCommand(
   switch (action) {
     case "complete": {
       const taskId = args[1];
-      const success = args[2]?.toLowerCase() === "success";
+      const statusArg = args[2]?.toLowerCase();
+      const success =
+        statusArg === undefined || statusArg === "success"
+          ? true
+          : statusArg === "fail" || statusArg === "failed"
+            ? false
+            : null;
       const patternId = args[3];
 
-      if (!taskId) {
+      if (!taskId || success === null) {
         writeHtml(terminal, `<span class="system-info">Usage: /task complete &lt;task-id&gt; [success|fail] [pattern-id]</span>`);
         writeLine(terminal, "");
-        writeHtml(terminal, `<span class="system-muted">Marks task as completed and updates pattern effectiveness</span>`);
+        writeHtml(
+          terminal,
+          `<span class="system-muted">Defaults to success when status is omitted. Also updates pattern effectiveness.</span>`,
+        );
         return;
       }
 

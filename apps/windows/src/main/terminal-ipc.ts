@@ -175,8 +175,16 @@ function findObsidianVault(): string | undefined {
   return undefined;
 }
 
-const getAgentManager = (projectPath?: string) =>
+type GetAgentManager = (projectPath?: string) => any;
+
+const defaultGetAgentManager: GetAgentManager = (projectPath?: string) =>
   require("./windows-agent-manager.js").getAgentManager(projectPath ?? getProjectPath());
+
+let getAgentManager: GetAgentManager = defaultGetAgentManager;
+
+export function registerTerminalIpcRuntimeDeps(deps: { getAgentManager?: GetAgentManager }): void {
+  getAgentManager = deps.getAgentManager ?? defaultGetAgentManager;
+}
 
 const ORCHESTRATION_MODULE_PATH: string = "../../../src/orchestration/index.js";
 const PROCESS_EXEC_MODULE_PATH: string = "../../process/exec.js";

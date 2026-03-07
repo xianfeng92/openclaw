@@ -32,6 +32,14 @@ type WeatherSnapshot = {
   }>;
 };
 
+type KnownWeatherLocation = {
+  aliases: string[];
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  label: string;
+};
+
 export type RealtimeResolution = {
   intent: Exclude<RealtimeIntent, null>;
   context?: string;
@@ -42,8 +50,199 @@ type RealtimeResolveOptions = {
   sessionMessages?: ChatMessage[];
 };
 
+const KNOWN_WEATHER_LOCATIONS: KnownWeatherLocation[] = [
+  {
+    aliases: ["上海", "上海市", "shanghai"],
+    latitude: 31.2304,
+    longitude: 121.4737,
+    timezone: "Asia/Shanghai",
+    label: "Shanghai, China",
+  },
+  {
+    aliases: ["北京", "北京市", "beijing"],
+    latitude: 39.9042,
+    longitude: 116.4074,
+    timezone: "Asia/Shanghai",
+    label: "Beijing, China",
+  },
+  {
+    aliases: ["广州", "广州市", "guangzhou"],
+    latitude: 23.1291,
+    longitude: 113.2644,
+    timezone: "Asia/Shanghai",
+    label: "Guangzhou, China",
+  },
+  {
+    aliases: ["深圳", "深圳市", "shenzhen"],
+    latitude: 22.5431,
+    longitude: 114.0579,
+    timezone: "Asia/Shanghai",
+    label: "Shenzhen, China",
+  },
+  {
+    aliases: ["杭州", "杭州市", "hangzhou"],
+    latitude: 30.2741,
+    longitude: 120.1551,
+    timezone: "Asia/Shanghai",
+    label: "Hangzhou, China",
+  },
+  {
+    aliases: ["南京", "南京市", "nanjing"],
+    latitude: 32.0603,
+    longitude: 118.7969,
+    timezone: "Asia/Shanghai",
+    label: "Nanjing, China",
+  },
+  {
+    aliases: ["苏州", "苏州市", "suzhou"],
+    latitude: 31.2989,
+    longitude: 120.5853,
+    timezone: "Asia/Shanghai",
+    label: "Suzhou, China",
+  },
+  {
+    aliases: ["武汉", "武汉市", "wuhan"],
+    latitude: 30.5928,
+    longitude: 114.3055,
+    timezone: "Asia/Shanghai",
+    label: "Wuhan, China",
+  },
+  {
+    aliases: ["成都", "成都市", "chengdu"],
+    latitude: 30.5728,
+    longitude: 104.0668,
+    timezone: "Asia/Shanghai",
+    label: "Chengdu, China",
+  },
+  {
+    aliases: ["重庆", "重庆市", "chongqing"],
+    latitude: 29.563,
+    longitude: 106.5516,
+    timezone: "Asia/Shanghai",
+    label: "Chongqing, China",
+  },
+  {
+    aliases: ["天津", "天津市", "tianjin"],
+    latitude: 39.0851,
+    longitude: 117.1994,
+    timezone: "Asia/Shanghai",
+    label: "Tianjin, China",
+  },
+  {
+    aliases: ["西安", "西安市", "xian", "xi'an"],
+    latitude: 34.3416,
+    longitude: 108.9398,
+    timezone: "Asia/Shanghai",
+    label: "Xi'an, China",
+  },
+  {
+    aliases: ["香港", "hongkong", "hong kong"],
+    latitude: 22.3193,
+    longitude: 114.1694,
+    timezone: "Asia/Hong_Kong",
+    label: "Hong Kong",
+  },
+  {
+    aliases: ["台北", "taipei"],
+    latitude: 25.033,
+    longitude: 121.5654,
+    timezone: "Asia/Taipei",
+    label: "Taipei",
+  },
+  {
+    aliases: ["东京", "tokyo"],
+    latitude: 35.6762,
+    longitude: 139.6503,
+    timezone: "Asia/Tokyo",
+    label: "Tokyo, Japan",
+  },
+  {
+    aliases: ["大阪", "osaka"],
+    latitude: 34.6937,
+    longitude: 135.5023,
+    timezone: "Asia/Tokyo",
+    label: "Osaka, Japan",
+  },
+  {
+    aliases: ["首尔", "seoul"],
+    latitude: 37.5665,
+    longitude: 126.978,
+    timezone: "Asia/Seoul",
+    label: "Seoul, South Korea",
+  },
+  {
+    aliases: ["新加坡", "singapore"],
+    latitude: 1.3521,
+    longitude: 103.8198,
+    timezone: "Asia/Singapore",
+    label: "Singapore",
+  },
+  {
+    aliases: ["纽约", "newyork", "new york", "nyc"],
+    latitude: 40.7128,
+    longitude: -74.006,
+    timezone: "America/New_York",
+    label: "New York, USA",
+  },
+  {
+    aliases: ["洛杉矶", "losangeles", "los angeles"],
+    latitude: 34.0522,
+    longitude: -118.2437,
+    timezone: "America/Los_Angeles",
+    label: "Los Angeles, USA",
+  },
+  {
+    aliases: ["旧金山", "sanfrancisco", "san francisco"],
+    latitude: 37.7749,
+    longitude: -122.4194,
+    timezone: "America/Los_Angeles",
+    label: "San Francisco, USA",
+  },
+  {
+    aliases: ["伦敦", "london"],
+    latitude: 51.5072,
+    longitude: -0.1276,
+    timezone: "Europe/London",
+    label: "London, UK",
+  },
+  {
+    aliases: ["巴黎", "paris"],
+    latitude: 48.8566,
+    longitude: 2.3522,
+    timezone: "Europe/Paris",
+    label: "Paris, France",
+  },
+  {
+    aliases: ["柏林", "berlin"],
+    latitude: 52.52,
+    longitude: 13.405,
+    timezone: "Europe/Berlin",
+    label: "Berlin, Germany",
+  },
+  {
+    aliases: ["悉尼", "sydney"],
+    latitude: -33.8688,
+    longitude: 151.2093,
+    timezone: "Australia/Sydney",
+    label: "Sydney, Australia",
+  },
+  {
+    aliases: ["墨尔本", "melbourne"],
+    latitude: -37.8136,
+    longitude: 144.9631,
+    timezone: "Australia/Melbourne",
+    label: "Melbourne, Australia",
+  },
+];
+
 function trimText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim();
+  }
+  return "";
 }
 
 function decodeXmlText(value: string): string {
@@ -132,6 +331,74 @@ function buildWeatherReply(snapshot: WeatherSnapshot): string {
   }
 
   return lines.join("\n").trim();
+}
+
+function normalizeLocationKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s,，。.'’·-]+/gu, "");
+}
+
+function resolveKnownWeatherLocation(location: string): KnownWeatherLocation | undefined {
+  const key = normalizeLocationKey(location);
+  return KNOWN_WEATHER_LOCATIONS.find((entry) =>
+    entry.aliases.some((alias) => normalizeLocationKey(alias) === key),
+  );
+}
+
+function describeWeatherCodeZh(code: unknown): string {
+  const normalized = typeof code === "number" ? code : Number(code);
+  switch (normalized) {
+    case 0:
+      return "晴";
+    case 1:
+      return "大致晴朗";
+    case 2:
+      return "局部多云";
+    case 3:
+      return "阴";
+    case 45:
+    case 48:
+      return "有雾";
+    case 51:
+    case 53:
+    case 55:
+    case 56:
+    case 57:
+      return "毛毛雨";
+    case 61:
+      return "小雨";
+    case 63:
+      return "中雨";
+    case 65:
+      return "大雨";
+    case 66:
+    case 67:
+      return "冻雨";
+    case 71:
+      return "小雪";
+    case 73:
+      return "中雪";
+    case 75:
+      return "大雪";
+    case 77:
+      return "雪粒";
+    case 80:
+      return "阵雨";
+    case 81:
+      return "较强阵雨";
+    case 82:
+      return "强阵雨";
+    case 85:
+      return "阵雪";
+    case 86:
+      return "强阵雪";
+    case 95:
+      return "雷暴";
+    case 96:
+    case 99:
+      return "雷暴伴冰雹";
+    default:
+      return "";
+  }
 }
 
 function isLikelyShortLocation(value: string): boolean {
@@ -254,6 +521,94 @@ async function fetchWeatherSnapshot(
     return undefined;
   }
 
+  const knownLocation = resolveKnownWeatherLocation(location);
+  if (knownLocation) {
+    return await fetchOpenMeteoWeatherSnapshot(query, knownLocation, signal);
+  }
+
+  return await fetchWttrWeatherSnapshot(query, location, signal);
+}
+
+async function fetchOpenMeteoWeatherSnapshot(
+  query: string,
+  knownLocation: KnownWeatherLocation,
+  signal?: AbortSignal,
+): Promise<WeatherSnapshot> {
+  const params = new URLSearchParams({
+    latitude: String(knownLocation.latitude),
+    longitude: String(knownLocation.longitude),
+    current: "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code",
+    daily: "weather_code,temperature_2m_max,temperature_2m_min",
+    timezone: knownLocation.timezone,
+    forecast_days: "3",
+  });
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
+    headers: {
+      "User-Agent": "CyDeck/1.0",
+      Accept: "application/json",
+    },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`Weather lookup error: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const current =
+    payload.current && typeof payload.current === "object"
+      ? (payload.current as Record<string, unknown>)
+      : {};
+  const daily =
+    payload.daily && typeof payload.daily === "object"
+      ? (payload.daily as Record<string, unknown>)
+      : {};
+
+  const dates = Array.isArray(daily.time) ? daily.time : [];
+  const minTemps = Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min : [];
+  const maxTemps = Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max : [];
+
+  return {
+    query,
+    fetchedAt: trimText(current.time) || new Date().toISOString(),
+    location: knownLocation.label,
+    condition: describeWeatherCodeZh(current.weather_code),
+    tempC: trimText(current.temperature_2m),
+    feelsLikeC: trimText(current.apparent_temperature),
+    humidity: trimText(current.relative_humidity_2m),
+    forecast: dates
+      .map((date, index) => ({
+        date: trimText(date),
+        minTempC: trimText(minTemps[index]),
+        maxTempC: trimText(maxTemps[index]),
+      }))
+      .filter((day) => day.date || day.minTempC || day.maxTempC),
+  };
+}
+
+function extractWttrDescription(currentRecord: Record<string, unknown>): string {
+  const zhCn = Array.isArray(currentRecord["lang_zh-cn"])
+    ? trimText(((currentRecord["lang_zh-cn"] as unknown[])[0] as Record<string, unknown> | undefined)?.value)
+    : "";
+  if (zhCn) {
+    return zhCn;
+  }
+  const zh = Array.isArray(currentRecord.lang_zh)
+    ? trimText((currentRecord.lang_zh[0] as Record<string, unknown> | undefined)?.value)
+    : "";
+  if (zh) {
+    return zh;
+  }
+  return Array.isArray(currentRecord.weatherDesc)
+    ? trimText((currentRecord.weatherDesc[0] as Record<string, unknown> | undefined)?.value)
+    : "";
+}
+
+async function fetchWttrWeatherSnapshot(
+  query: string,
+  location: string,
+  signal?: AbortSignal,
+): Promise<WeatherSnapshot> {
+
   const response = await fetch(
     `https://wttr.in/${encodeURIComponent(location)}?format=j1&lang=zh-cn`,
     {
@@ -286,11 +641,7 @@ async function fetchWeatherSnapshot(
   const country = Array.isArray(areaRecord.country)
     ? trimText((areaRecord.country[0] as Record<string, unknown> | undefined)?.value)
     : "";
-  const weatherDesc = Array.isArray(currentRecord.lang_zh)
-    ? trimText((currentRecord.lang_zh[0] as Record<string, unknown> | undefined)?.value)
-    : Array.isArray(currentRecord.weatherDesc)
-      ? trimText((currentRecord.weatherDesc[0] as Record<string, unknown> | undefined)?.value)
-      : "";
+  const weatherDesc = extractWttrDescription(currentRecord);
 
   return {
     query,

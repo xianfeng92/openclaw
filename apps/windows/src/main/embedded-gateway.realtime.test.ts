@@ -41,28 +41,23 @@ describe("embedded-gateway realtime helpers", () => {
     expect(messages).toHaveLength(3);
   });
 
-  it("builds weather context from wttr payloads", async () => {
-    const fetchMock = vi.fn(async () => {
+  it("builds weather context from open-meteo payloads for known cities", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toContain("api.open-meteo.com");
       return new Response(
         JSON.stringify({
-          nearest_area: [
-            {
-              areaName: [{ value: "Shanghai" }],
-              country: [{ value: "China" }],
-            },
-          ],
-          current_condition: [
-            {
-              temp_C: "19",
-              FeelsLikeC: "17",
-              humidity: "70",
-              lang_zh: [{ value: "多云" }],
-            },
-          ],
-          weather: [
-            { date: "2026-03-07", maxtempC: "21", mintempC: "13" },
-            { date: "2026-03-08", maxtempC: "22", mintempC: "15" },
-          ],
+          current: {
+            time: "2026-03-07T16:45",
+            temperature_2m: 19,
+            relative_humidity_2m: 70,
+            apparent_temperature: 17,
+            weather_code: 2,
+          },
+          daily: {
+            time: ["2026-03-07", "2026-03-08"],
+            temperature_2m_min: [13, 15],
+            temperature_2m_max: [21, 22],
+          },
         }),
       );
     });
@@ -72,29 +67,27 @@ describe("embedded-gateway realtime helpers", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(context).toContain("[cydeck:realtime-context]");
     expect(context).toContain("Location: Shanghai, China");
-    expect(context).toContain("Condition: 多云");
+    expect(context).toContain("Condition: 局部多云");
     expect(context).toContain("Forecast 2026-03-07");
   });
 
-  it("builds direct weather replies from wttr payloads", async () => {
-    const fetchMock = vi.fn(async () => {
+  it("builds direct weather replies from open-meteo payloads for known cities", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toContain("api.open-meteo.com");
       return new Response(
         JSON.stringify({
-          nearest_area: [
-            {
-              areaName: [{ value: "Shanghai" }],
-              country: [{ value: "China" }],
-            },
-          ],
-          current_condition: [
-            {
-              temp_C: "19",
-              FeelsLikeC: "17",
-              humidity: "70",
-              lang_zh: [{ value: "多云" }],
-            },
-          ],
-          weather: [{ date: "2026-03-07", maxtempC: "21", mintempC: "13" }],
+          current: {
+            time: "2026-03-07T16:45",
+            temperature_2m: 19,
+            relative_humidity_2m: 70,
+            apparent_temperature: 17,
+            weather_code: 2,
+          },
+          daily: {
+            time: ["2026-03-07"],
+            temperature_2m_min: [13],
+            temperature_2m_max: [21],
+          },
         }),
       );
     });
@@ -102,7 +95,7 @@ describe("embedded-gateway realtime helpers", () => {
 
     const resolution = await resolveRealtimeQuery("上海天气");
     expect(resolution?.assistantText).toContain("Shanghai, China 当前天气");
-    expect(resolution?.assistantText).toContain("天气：多云");
+    expect(resolution?.assistantText).toContain("天气：局部多云");
     expect(resolution?.assistantText).toContain("气温：19C");
   });
 
@@ -112,24 +105,22 @@ describe("embedded-gateway realtime helpers", () => {
   });
 
   it("treats a short city reply as weather follow-up when prior turn requested a city", async () => {
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toContain("api.open-meteo.com");
       return new Response(
         JSON.stringify({
-          nearest_area: [
-            {
-              areaName: [{ value: "Shanghai" }],
-              country: [{ value: "China" }],
-            },
-          ],
-          current_condition: [
-            {
-              temp_C: "19",
-              FeelsLikeC: "17",
-              humidity: "70",
-              lang_zh: [{ value: "多云" }],
-            },
-          ],
-          weather: [{ date: "2026-03-07", maxtempC: "21", mintempC: "13" }],
+          current: {
+            time: "2026-03-07T16:45",
+            temperature_2m: 19,
+            relative_humidity_2m: 70,
+            apparent_temperature: 17,
+            weather_code: 2,
+          },
+          daily: {
+            time: ["2026-03-07"],
+            temperature_2m_min: [13],
+            temperature_2m_max: [21],
+          },
         }),
       );
     });

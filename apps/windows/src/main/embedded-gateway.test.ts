@@ -930,25 +930,21 @@ describe("embedded-gateway session and lifecycle", () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn(async (input: string | URL | Request): Promise<Response> => {
       const url = String(input);
-      expect(url).toContain("wttr.in");
-      expect(url).toContain(encodeURIComponent("上海"));
+      expect(url).toContain("api.open-meteo.com");
       return new Response(
         JSON.stringify({
-          nearest_area: [
-            {
-              areaName: [{ value: "Shanghai" }],
-              country: [{ value: "China" }],
-            },
-          ],
-          current_condition: [
-            {
-              temp_C: "18",
-              FeelsLikeC: "16",
-              humidity: "72",
-              lang_zh: [{ value: "晴" }],
-            },
-          ],
-          weather: [{ date: "2026-03-07", maxtempC: "20", mintempC: "12" }],
+          current: {
+            time: "2026-03-07T16:45",
+            temperature_2m: 18,
+            relative_humidity_2m: 72,
+            apparent_temperature: 16,
+            weather_code: 0,
+          },
+          daily: {
+            time: ["2026-03-07"],
+            temperature_2m_min: [12],
+            temperature_2m_max: [20],
+          },
         }),
       );
     });
@@ -1005,21 +1001,18 @@ describe("embedded-gateway session and lifecycle", () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
-          nearest_area: [
-            {
-              areaName: [{ value: "Shanghai" }],
-              country: [{ value: "China" }],
-            },
-          ],
-          current_condition: [
-            {
-              temp_C: "20",
-              FeelsLikeC: "18",
-              humidity: "66",
-              lang_zh: [{ value: "阴" }],
-            },
-          ],
-          weather: [{ date: "2026-03-07", maxtempC: "23", mintempC: "14" }],
+          current: {
+            time: "2026-03-07T16:45",
+            temperature_2m: 20,
+            relative_humidity_2m: 66,
+            apparent_temperature: 18,
+            weather_code: 3,
+          },
+          daily: {
+            time: ["2026-03-07"],
+            temperature_2m_min: [14],
+            temperature_2m_max: [23],
+          },
         }),
       );
     });
@@ -1067,21 +1060,18 @@ describe("embedded-gateway session and lifecycle", () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
-          nearest_area: [
-            {
-              areaName: [{ value: "Shanghai" }],
-              country: [{ value: "China" }],
-            },
-          ],
-          current_condition: [
-            {
-              temp_C: "20",
-              FeelsLikeC: "18",
-              humidity: "66",
-              lang_zh: [{ value: "阴" }],
-            },
-          ],
-          weather: [{ date: "2026-03-07", maxtempC: "23", mintempC: "14" }],
+          current: {
+            time: "2026-03-07T16:45",
+            temperature_2m: 20,
+            relative_humidity_2m: 66,
+            apparent_temperature: 18,
+            weather_code: 3,
+          },
+          daily: {
+            time: ["2026-03-07"],
+            temperature_2m_min: [14],
+            temperature_2m_max: [23],
+          },
         }),
       );
     });

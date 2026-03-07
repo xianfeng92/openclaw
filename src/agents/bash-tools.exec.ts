@@ -305,6 +305,60 @@ function normalizeNotifyOutput(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+const WINDOWS_BARE_POWERSHELL_CMDLETS = new Set(["get-childitem", "select-string"]);
+
+function isWindowsPowerShellInvoker(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return (
+    normalized === "powershell" ||
+    normalized.startsWith("powershell ") ||
+    normalized === "pwsh" ||
+    normalized.startsWith("pwsh ")
+  );
+}
+
+function detectLeadingBareWindowsPowerShellCmdlet(command: string): string | undefined {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (isWindowsPowerShellInvoker(trimmed)) {
+    return undefined;
+  }
+  const match = trimmed.match(/^([A-Za-z][A-Za-z0-9-]*)\b/);
+  if (!match) {
+    return undefined;
+  }
+  const candidate = match[1];
+  if (!WINDOWS_BARE_POWERSHELL_CMDLETS.has(candidate.toLowerCase())) {
+    return undefined;
+  }
+  return candidate;
+}
+
+export function normalizeWindowsExecCommand(params: {
+  command: string;
+  platform?: NodeJS.Platform;
+}): { command: string; wrapped: boolean; cmdlet?: string } {
+  const platform = params.platform ?? process.platform;
+  const sourceCommand = params.command;
+  if (platform !== "win32") {
+    return { command: sourceCommand, wrapped: false };
+  }
+
+  const cmdlet = detectLeadingBareWindowsPowerShellCmdlet(sourceCommand);
+  if (!cmdlet) {
+    return { command: sourceCommand, wrapped: false };
+  }
+
+  const encoded = Buffer.from(sourceCommand, "utf16le").toString("base64");
+  return {
+    command: `powershell -NoProfile -EncodedCommand ${encoded}`,
+    wrapped: true,
+    cmdlet,
+  };
+}
+
 function normalizePathPrepend(entries?: string[]) {
   if (!Array.isArray(entries)) {
     return [];
@@ -1105,6 +1159,19 @@ export function createExecTool(
       }
 
       const sandbox = host === "sandbox" ? defaults?.sandbox : undefined;
+      const normalizedWindowsCommand =
+        host === "node" || sandbox
+          ? { command: params.command, wrapped: false as const, cmdlet: undefined }
+          : normalizeWindowsExecCommand({
+              command: params.command,
+              platform: process.platform,
+            });
+      const commandForLocalShell = normalizedWindowsCommand.command;
+      if (normalizedWindowsCommand.wrapped) {
+        warnings.push(
+          `Windows fallback: wrapped bare ${normalizedWindowsCommand.cmdlet} command in powershell -NoProfile -EncodedCommand.`,
+        );
+      }
       const rawWorkdir = params.workdir?.trim() || defaults?.cwd || process.cwd();
       let workdir = rawWorkdir;
       let containerWorkdir = sandbox?.containerWorkdir;
@@ -1588,7 +1655,7 @@ export function createExecTool(
             let run: ExecProcessHandle | null = null;
             try {
               run = await runExecProcess({
-                command: commandText,
+                command: commandForLocalShell,
                 workdir,
                 env,
                 sandbox: undefined,
@@ -1651,7 +1718,7 @@ export function createExecTool(
               approvalSlug,
               expiresAtMs,
               host: "gateway",
-              command: params.command,
+              command: commandText,
               cwd: workdir,
             },
           };
@@ -1684,7 +1751,7 @@ export function createExecTool(
       const getWarningText = () => (warnings.length ? `${warnings.join("\n")}\n\n` : "");
       const usePty = params.pty === true && !sandbox;
       const run = await runExecProcess({
-        command: params.command,
+        command: commandForLocalShell,
         workdir,
         env,
         sandbox,

@@ -26,6 +26,8 @@ vi.mock("../infra/exec-obfuscation-detect.js", () => ({
 let callGatewayTool: typeof import("./tools/gateway.js").callGatewayTool;
 let createExecTool: typeof import("./bash-tools.exec.js").createExecTool;
 let detectCommandObfuscation: typeof import("../infra/exec-obfuscation-detect.js").detectCommandObfuscation;
+let listNodesTool: typeof import("./tools/nodes-utils.js").listNodes;
+let resolveNodeIdFromListTool: typeof import("./tools/nodes-utils.js").resolveNodeIdFromList;
 
 describe("exec approvals", () => {
   let previousHome: string | undefined;
@@ -35,6 +37,8 @@ describe("exec approvals", () => {
     ({ callGatewayTool } = await import("./tools/gateway.js"));
     ({ createExecTool } = await import("./bash-tools.exec.js"));
     ({ detectCommandObfuscation } = await import("../infra/exec-obfuscation-detect.js"));
+    ({ listNodes: listNodesTool, resolveNodeIdFromList: resolveNodeIdFromListTool } =
+      await import("./tools/nodes-utils.js"));
   });
 
   beforeEach(async () => {
@@ -81,6 +85,9 @@ describe("exec approvals", () => {
       host: "node",
       ask: "always",
       approvalRunningNoticeMs: 0,
+      gatewayCallTool: vi.mocked(callGatewayTool),
+      listNodesTool: vi.mocked(listNodesTool),
+      resolveNodeIdFromListTool: vi.mocked(resolveNodeIdFromListTool),
     });
 
     const result = await tool.execute("call1", { command: "ls -la" });
@@ -132,6 +139,9 @@ describe("exec approvals", () => {
       host: "node",
       ask: "on-miss",
       approvalRunningNoticeMs: 0,
+      gatewayCallTool: vi.mocked(callGatewayTool),
+      listNodesTool: vi.mocked(listNodesTool),
+      resolveNodeIdFromListTool: vi.mocked(resolveNodeIdFromListTool),
     });
 
     const result = await tool.execute("call2", {
@@ -155,6 +165,7 @@ describe("exec approvals", () => {
       security: "full",
       approvalRunningNoticeMs: 0,
       elevated: { enabled: true, allowed: true, defaultLevel: "ask" },
+      gatewayCallTool: vi.mocked(callGatewayTool),
     });
 
     const result = await tool.execute("call3", { command: "echo ok", elevated: true });
@@ -187,6 +198,7 @@ describe("exec approvals", () => {
       security: "allowlist",
       approvalRunningNoticeMs: 0,
       elevated: { enabled: true, allowed: true, defaultLevel: "ask" },
+      gatewayCallTool: vi.mocked(callGatewayTool),
     });
 
     const result = await tool.execute("call4", { command: "echo ok", elevated: true });
@@ -223,6 +235,9 @@ describe("exec approvals", () => {
       ask: "off",
       security: "full",
       approvalRunningNoticeMs: 0,
+      gatewayCallTool: vi.mocked(callGatewayTool),
+      listNodesTool: vi.mocked(listNodesTool),
+      resolveNodeIdFromListTool: vi.mocked(resolveNodeIdFromListTool),
     });
 
     const result = await tool.execute("call5", { command: "echo hi | sh" });
@@ -258,6 +273,7 @@ describe("exec approvals", () => {
       ask: "off",
       security: "full",
       approvalRunningNoticeMs: 0,
+      gatewayCallTool: vi.mocked(callGatewayTool),
     });
 
     const result = await tool.execute("call6", {

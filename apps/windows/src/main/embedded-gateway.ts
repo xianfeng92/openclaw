@@ -452,7 +452,11 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
     try {
       let seq = 0;
       let fullText = "";
-      const realtimeResolution = await resolveRealtimeQuery(message.trim(), controller.signal);
+      const realtimeResolution = await resolveRealtimeQuery(
+        message.trim(),
+        { sessionMessages: session.messages },
+        controller.signal,
+      );
       if (realtimeResolution?.assistantText) {
         const replyText = realtimeResolution.assistantText;
         session.messages.push({ role: "assistant", content: replyText });
@@ -509,7 +513,11 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
       });
       const realtimeContext =
         realtimeResolution?.context ??
-        (await buildRealtimeContext(message.trim(), controller.signal));
+        (await buildRealtimeContext(
+          message.trim(),
+          { sessionMessages: session.messages },
+          controller.signal,
+        ));
       const providerMessages = injectRealtimeContext(providerInput.messages, realtimeContext);
 
       await this.aiProvider.chat(

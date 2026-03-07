@@ -38,6 +38,10 @@ export type RealtimeResolution = {
   assistantText: string;
 };
 
+type RealtimeResolveOptions = {
+  sessionMessages?: ChatMessage[];
+};
+
 function trimText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -128,6 +132,50 @@ function buildWeatherReply(snapshot: WeatherSnapshot): string {
   }
 
   return lines.join("\n").trim();
+}
+
+function isLikelyShortLocation(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 40 || normalized.includes("\n")) {
+    return false;
+  }
+  if (/[0-9]/u.test(normalized)) {
+    return false;
+  }
+  return true;
+}
+
+function inferFollowupIntent(query: string, sessionMessages?: ChatMessage[]): RealtimeIntent {
+  const explicitIntent = detectRealtimeIntent(query);
+  if (explicitIntent) {
+    return explicitIntent;
+  }
+
+  if (!sessionMessages || sessionMessages.length < 2) {
+    return null;
+  }
+
+  if (!isLikelyShortLocation(query)) {
+    return null;
+  }
+
+  const history = sessionMessages.slice(0, -1).filter((message) => message.role !== "system");
+  const lastAssistant = [...history].reverse().find((message) => message.role === "assistant");
+  const lastUser = [...history].reverse().find((message) => message.role === "user");
+
+  if (lastAssistant?.content.includes("请告诉我要查询的城市")) {
+    return "weather";
+  }
+
+  if (lastUser && detectRealtimeIntent(lastUser.content) === "weather") {
+    return "weather";
+  }
+
+  if (lastAssistant?.content.includes("当前天气")) {
+    return "weather";
+  }
+
+  return null;
 }
 
 function buildNewsContext(query: string, fetchedAt: string, items: NewsItem[]): string {
@@ -290,17 +338,19 @@ export function extractWeatherLocation(query: string): string | undefined {
 
 export async function buildRealtimeContext(
   query: string,
+  options?: RealtimeResolveOptions,
   signal?: AbortSignal,
 ): Promise<string | undefined> {
-  const resolution = await resolveRealtimeQuery(query, signal);
+  const resolution = await resolveRealtimeQuery(query, options, signal);
   return resolution?.context;
 }
 
 export async function resolveRealtimeQuery(
   query: string,
+  options?: RealtimeResolveOptions,
   signal?: AbortSignal,
 ): Promise<RealtimeResolution | undefined> {
-  const intent = detectRealtimeIntent(query);
+  const intent = inferFollowupIntent(query, options?.sessionMessages);
   if (intent === "weather") {
     const location = extractWeatherLocation(query);
     if (!location) {

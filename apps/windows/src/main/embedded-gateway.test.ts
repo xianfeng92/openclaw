@@ -1062,6 +1062,86 @@ describe("embedded-gateway session and lifecycle", () => {
     }
   });
 
+  it("serves weather for a city-only follow-up after asking for location", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          nearest_area: [
+            {
+              areaName: [{ value: "Shanghai" }],
+              country: [{ value: "China" }],
+            },
+          ],
+          current_condition: [
+            {
+              temp_C: "20",
+              FeelsLikeC: "18",
+              humidity: "66",
+              lang_zh: [{ value: "阴" }],
+            },
+          ],
+          weather: [{ date: "2026-03-07", maxtempC: "23", mintempC: "14" }],
+        }),
+      );
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: null,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "realtime-weather-ask-city",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "天气",
+          deliver: true,
+          idempotencyKey: "realtime-weather-ask-city-run",
+        },
+      });
+      await nextFrame(ws); // started
+      const askCityFrame = await waitForChatState(ws, "final");
+      const askCityPayload =
+        askCityFrame.payload && typeof askCityFrame.payload === "object"
+          ? (askCityFrame.payload as Record<string, unknown>)
+          : {};
+      expect(String(askCityPayload.text)).toContain("请告诉我要查询的城市");
+
+      sendRequest(ws, {
+        id: "realtime-weather-followup-city",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "上海",
+          deliver: true,
+          idempotencyKey: "realtime-weather-followup-city-run",
+        },
+      });
+      await nextFrame(ws); // started
+      const finalFrame = await waitForChatState(ws, "final");
+      const payload =
+        finalFrame.payload && typeof finalFrame.payload === "object"
+          ? (finalFrame.payload as Record<string, unknown>)
+          : {};
+      expect(String(payload.text)).toContain("Shanghai, China 当前天气");
+      expect(String(payload.text)).toContain("天气：阴");
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.fetch = originalFetch;
+      await gateway.stop();
+    }
+  });
+
   it("supports tools.memory.search and tools.memory.get request handlers", async () => {
     const workspace = createTempWorkspace();
     ensureLandingWorkspaceFiles(workspace);

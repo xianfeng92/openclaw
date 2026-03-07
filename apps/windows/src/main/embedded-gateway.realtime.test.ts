@@ -111,6 +111,47 @@ describe("embedded-gateway realtime helpers", () => {
     expect(resolution?.assistantText).toContain("请告诉我要查询的城市");
   });
 
+  it("treats a short city reply as weather follow-up when prior turn requested a city", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          nearest_area: [
+            {
+              areaName: [{ value: "Shanghai" }],
+              country: [{ value: "China" }],
+            },
+          ],
+          current_condition: [
+            {
+              temp_C: "19",
+              FeelsLikeC: "17",
+              humidity: "70",
+              lang_zh: [{ value: "多云" }],
+            },
+          ],
+          weather: [{ date: "2026-03-07", maxtempC: "21", mintempC: "13" }],
+        }),
+      );
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    const resolution = await resolveRealtimeQuery(
+      "上海",
+      {
+        sessionMessages: [
+          { role: "user", content: "天气" },
+          {
+            role: "assistant",
+            content: "请告诉我要查询的城市，例如“上海天气”或“Tokyo weather”。",
+          },
+          { role: "user", content: "上海" },
+        ],
+      },
+    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(resolution?.assistantText).toContain("Shanghai, China 当前天气");
+  });
+
   it("builds news context from rss feeds", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(`<?xml version="1.0" encoding="utf-8"?>

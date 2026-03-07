@@ -26,6 +26,55 @@ export type TerminalLandingFileStatus = {
   configured: boolean;
 };
 
+export type TerminalWorkflowStep = {
+  id: string;
+  type: string;
+  command: string;
+  description?: string;
+};
+
+export type TerminalWorkflowRunStepResult = {
+  step: TerminalWorkflowStep;
+  status?: "success" | "failed";
+  output?: string;
+  error?: string;
+  taskId?: string;
+  durationMs?: number;
+};
+
+export type TerminalTaskInfo = {
+  id: string;
+  description: string;
+  status: string;
+  agent: string;
+  startedAt: number;
+  completedAt?: number;
+  tmuxSession?: string;
+  branch?: string;
+  exitCode?: number | null;
+  failureReason?: string;
+  worktree?: string;
+  pid?: number;
+  details?: string;
+  message?: string;
+  worktreeCreated?: boolean;
+};
+
+export type TerminalOrchestralAgentResult = {
+  success: boolean;
+  error?: string;
+  message?: string;
+  tasks?: TerminalTaskInfo[];
+  task?: TerminalTaskInfo;
+  taskId?: string;
+  description?: string;
+  worktree?: string;
+  command?: string;
+  attachCommand?: string;
+  output?: string;
+  hasOutput?: boolean;
+};
+
 export interface TerminalAPI {
   // Shell execution
   execShell: (command: string) => Promise<{ runId: string }>;
@@ -192,11 +241,20 @@ export interface TerminalAPI {
       meetings: Array<{ title: string; score: number }>;
       patterns: Array<{ name: string; score: number }>;
     };
-  }) => Promise<{ success: boolean; task?: any; error?: string }>;
+  }) => Promise<{ success: boolean; task?: TerminalTaskInfo; error?: string }>;
 
-  orchestralAgents: (action: string, args: string[]) => Promise<any>;
+  orchestralAgents: (action: string, args: string[]) => Promise<TerminalOrchestralAgentResult>;
 
-  orchestralTasks: (filters: Record<string, string>, action?: string) => Promise<any>;
+  orchestralTasks: (filters: Record<string, string>, action?: string) => Promise<{
+    success: boolean;
+    tasks?: TerminalTaskInfo[];
+    task?: TerminalTaskInfo;
+    summary?: string;
+    hiddenCount?: number;
+    total?: number;
+    error?: string;
+    message?: string;
+  }>;
 
   // Agent process management
   agentStart: (opts: {
@@ -373,7 +431,7 @@ export interface TerminalAPI {
       id: string;
       name: string;
       description?: string;
-      steps: Array<{ id: string; type: string; command: string; description?: string }>;
+      steps: TerminalWorkflowStep[];
       createdAt: number;
       updatedAt: number;
       runCount: number;
@@ -384,12 +442,15 @@ export interface TerminalAPI {
   workflowCreate: (workflow: {
     name: string;
     description?: string;
-    steps: Array<{ id: string; type: string; command: string; description?: string }>;
+    steps: TerminalWorkflowStep[];
     tags?: string[];
   }) => Promise<{ success: boolean; id?: string; error?: string }>;
   workflowRun: (name: string) => Promise<{
     success: boolean;
-    result?: Array<{ step: { id: string; type: string; command: string; description?: string }; error?: string }>;
+    result?: TerminalWorkflowRunStepResult[];
+    steps?: TerminalWorkflowRunStepResult[];
+    completedSteps?: number;
+    totalSteps?: number;
     error?: string;
   }>;
   workflowShow: (name: string) => Promise<{
@@ -398,7 +459,7 @@ export interface TerminalAPI {
       id: string;
       name: string;
       description?: string;
-      steps: Array<{ id: string; type: string; command: string; description?: string }>;
+      steps: TerminalWorkflowStep[];
       createdAt: number;
       updatedAt: number;
       runCount: number;

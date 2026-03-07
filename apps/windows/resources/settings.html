@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw Settings</title>
+  <title>CyDeck Settings</title>
   <style>
     * {
       margin: 0;
@@ -224,7 +224,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>⚙️ OpenClaw Settings</h1>
+    <h1>⚙️ CyDeck Settings</h1>
 
     <!-- API Provider Section -->
     <div class="section">
@@ -289,8 +289,8 @@
     let selectedProvider = localStorage.getItem('openclaw_provider') || 'google';
 
     // Initialize UI
-    document.addEventListener('DOMContentLoaded', () => {
-      // Load saved settings
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Load cached settings first (fallback path when IPC bridge is unavailable).
       const savedApiKey = localStorage.getItem('openclaw_apiKey');
       const savedBaseUrl = localStorage.getItem('openclaw_baseUrl');
       const savedPort = localStorage.getItem('openclaw_gatewayPort');
@@ -308,6 +308,8 @@
       if (savedAutoStart === 'true') {
         document.getElementById('autoStartGateway').checked = true;
       }
+
+      await loadSettingsFromDesktop();
 
       // Select provider
       selectProvider(selectedProvider);
@@ -333,7 +335,7 @@
 	      const placeholders = {
 	        google: 'https://generativelanguage.googleapis.com/v1beta',
 	        openai: 'https://api.openai.com/v1',
-	        anthropic: 'https://api.anthropic.com'
+	        anthropic: 'https://api.anthropic.com/v1'
 	      };
 	      baseUrlInput.placeholder = placeholders[selectedProvider] || '';
 	    }
@@ -347,6 +349,53 @@
 
     function resolveDesktopBridge() {
       return window.__openclawDesktop || window.electron;
+    }
+
+    async function loadSettingsFromDesktop() {
+      try {
+        const desktop = resolveDesktopBridge();
+        if (!desktop || typeof desktop.getSettings !== 'function') {
+          return false;
+        }
+
+        const result = await desktop.getSettings();
+        if (!result || !result.success || !result.data) {
+          return false;
+        }
+
+        const data = result.data;
+        if (typeof data.provider === 'string' && data.provider.trim()) {
+          const provider = data.provider.trim().toLowerCase();
+          if (provider === 'google' || provider === 'openai' || provider === 'anthropic') {
+            selectedProvider = provider;
+          }
+          localStorage.setItem('openclaw_provider', selectedProvider);
+        }
+
+        if (typeof data.apiKey === 'string') {
+          document.getElementById('apiKey').value = data.apiKey;
+          localStorage.setItem('openclaw_apiKey', data.apiKey);
+        }
+
+        if (typeof data.baseUrl === 'string') {
+          document.getElementById('baseUrl').value = data.baseUrl;
+          localStorage.setItem('openclaw_baseUrl', data.baseUrl);
+        }
+
+        if (Number.isFinite(data.gatewayPort)) {
+          document.getElementById('gatewayPort').value = String(data.gatewayPort);
+          localStorage.setItem('openclaw_gatewayPort', String(data.gatewayPort));
+        }
+
+        if (typeof data.autoStartGateway === 'boolean') {
+          document.getElementById('autoStartGateway').checked = data.autoStartGateway;
+          localStorage.setItem('openclaw_autoStartGateway', data.autoStartGateway.toString());
+        }
+
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     async function saveSettings() {

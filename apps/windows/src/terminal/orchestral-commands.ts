@@ -464,14 +464,22 @@ export async function handleAgentsCommand(
 
       try {
         const result = await window.terminalAPI.orchestralAgents!("attach", [taskId]);
-        if (result.success && result.attachCommand) {
+        const attachCommand =
+          typeof result?.attachCommand === "string" && result.attachCommand.trim().length > 0
+            ? result.attachCommand
+            : typeof result?.command === "string" && result.command.trim().length > 0
+              ? result.command
+              : "";
+        if (result.success && attachCommand) {
           writeSection(terminal, "Attach to Session", "[tmux]", writeHtml);
           writeLine(terminal, `Task: ${taskId}`);
           writeLine(terminal, "");
           writeHtml(terminal, `<span style="color: var(--accent-cyan);">Run in another terminal:</span>`);
-          writeHtml(terminal, `<span style="color: var(--text-primary);">  ${result.attachCommand}</span>`);
+          writeHtml(terminal, `<span style="color: var(--text-primary);">  ${escapeHtml(attachCommand)}</span>`);
           writeLine(terminal, "");
           writeHtml(terminal, `<span class="system-info">(Press Ctrl+B, then D to detach without killing)</span>`);
+        } else if (result.success && result.message) {
+          writeHtml(terminal, `<span class="system-info">${escapeHtml(String(result.message))}</span>`);
         } else {
           writeHtml(
             terminal,

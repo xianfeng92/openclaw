@@ -89,6 +89,7 @@ export interface ElectronAPI {
     restart(): Promise<{ success: boolean; error?: string }>;
     onStateChanged(callback: (state: GatewayState) => void): () => void;
   };
+  getSettings(): Promise<{ success: boolean; data?: SettingsData; error?: string }>;
   saveSettings(data: SettingsData): Promise<{ success: boolean; error?: string }>;
 }
 
@@ -107,6 +108,7 @@ const api: ElectronAPI = {
       };
     },
   },
+  getSettings: () => ipcRenderer.invoke("settings:get"),
   saveSettings: (data) => ipcRenderer.invoke("settings:save", data),
 };
 

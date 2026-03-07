@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import type { GatewayLike, GatewayState } from "./gateway-like.js";
 import type { SettingsData } from "./settings.js";
-import { saveSettings } from "./settings.js";
+import { loadSettings, saveSettings } from "./settings.js";
 
 export function setupIpc(
   gatewayManager: GatewayLike
@@ -93,5 +93,17 @@ export function setupIpc(
       console.error("[IPC] settings:save error:", errorMessage);
       return { success: false, error: errorMessage };
     }
+  });
+
+  // Load settings from cydeck config
+  ipcMain.handle("settings:get", async (): Promise<{ success: boolean; data?: SettingsData; error?: string }> => {
+    const result = loadSettings();
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: result.data,
+    };
   });
 }

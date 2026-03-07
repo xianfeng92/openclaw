@@ -23,6 +23,27 @@ type OrchestralTasksHandler = (
   action?: string,
 ) => Promise<{ success: boolean; error?: string; message?: string }>;
 
+type OrchestralAgentsHandler = (
+  event: unknown,
+  action: string,
+  args: string[],
+) => Promise<Record<string, unknown>>;
+
+type WorkflowCreateHandler = (
+  event: unknown,
+  workflow: {
+    name: string;
+    description?: string;
+    steps: Array<{ id: string; type: string; command: string; description?: string }>;
+    tags?: string[];
+  },
+) => Promise<{ success: boolean; id?: string; error?: string }>;
+
+type WorkflowRunHandler = (
+  event: { sender?: unknown },
+  name: string,
+) => Promise<Record<string, unknown>>;
+
 function getIpcHandler<T>(channel: string): T {
   for (let i = ipcMainHandleMock.mock.calls.length - 1; i >= 0; i--) {
     const call = ipcMainHandleMock.mock.calls[i];
@@ -191,5 +212,104 @@ describe("terminal-ipc orchestral tasks", () => {
     const statusAfterClear = await statusHandler({});
     expect(statusAfterClear.success).toBe(true);
     expect(statusAfterClear.wizardStepIndex).toBeUndefined();
+  });
+
+  it("returns attachCommand for /agents attach responses", async () => {
+    const { registerTerminalIpcRuntimeDeps, setupTerminalIpc } = await import("./terminal-ipc.js");
+    getAgentManagerMock.mockReturnValue({
+      getAgent: vi.fn((taskId: string) => ({
+        id: taskId,
+        description: "demo task",
+        worktree: "C:/workspace/.openclaw/worktrees/task-1",
+      })),
+      listAgents: vi.fn(() => []),
+      killAgent: vi.fn(async () => ({ success: true })),
+      sendMessage: vi.fn(() => true),
+      getOutput: vi.fn(() => ""),
+      completeTask: vi.fn(),
+      clearCompletedTasks: vi.fn(() => 0),
+      clearAllTasks: vi.fn(() => ({ count: 0, worktreesCleaned: 0 })),
+    });
+    registerTerminalIpcRuntimeDeps({ getAgentManager: getAgentManagerMock });
+
+    setupTerminalIpc({
+      getState: () => ({ port: 18789 }),
+      getAuthToken: () => "token",
+    } as never);
+
+    const handler = getIpcHandler<OrchestralAgentsHandler>("terminal:orchestral-agents");
+    const result = await handler({}, "attach", ["task-1"]);
+
+    expect(result.success).toBe(true);
+    expect(result.command).toBe('cd "C:/workspace/.openclaw/worktrees/task-1"');
+    expect(result.attachCommand).toBe('cd "C:/workspace/.openclaw/worktrees/task-1"');
+  });
+
+  it("executes workflow steps for terminal:workflow-run instead of dry-run", async () => {
+    const { registerTerminalIpcRuntimeDeps, setupTerminalIpc } = await import("./terminal-ipc.js");
+    const workflows = new Map<string, Record<string, unknown>>();
+    const startAgent = vi.fn(async () => ({ success: true, pid: 1234 }));
+    getAgentManagerMock.mockReturnValue({
+      startAgent,
+      completeTask: vi.fn(),
+      clearCompletedTasks: vi.fn(() => 0),
+      clearAllTasks: vi.fn(() => ({ count: 0, worktreesCleaned: 0 })),
+      listAgents: vi.fn(() => []),
+      killAgent: vi.fn(async () => ({ success: true })),
+      sendMessage: vi.fn(() => true),
+      getOutput: vi.fn(() => ""),
+      getAgent: vi.fn(),
+    });
+    registerTerminalIpcRuntimeDeps({
+      getAgentManager: getAgentManagerMock,
+      importOrchestrationModule: async () => ({
+        createWorkflow: async (workflow: {
+          name: string;
+          description?: string;
+          steps: Array<{ id: string; type: string; command: string; description?: string }>;
+          tags?: string[];
+        }) => {
+          const record = {
+            id: "wf-1",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            runCount: 0,
+            ...workflow,
+          };
+          workflows.set(workflow.name.toLowerCase(), record);
+          return record;
+        },
+        getWorkflowByName: async (name: string) =>
+          workflows.get(name.toLowerCase()) || null,
+        incrementWorkflowRunCount: async (_id: string) => {},
+      }),
+    });
+
+    setupTerminalIpc({
+      getState: () => ({ port: 18789 }),
+      getAuthToken: () => "token",
+    } as never);
+
+    const createHandler = getIpcHandler<WorkflowCreateHandler>("terminal:workflow-create");
+    const runHandler = getIpcHandler<WorkflowRunHandler>("terminal:workflow-run");
+
+    const createResult = await createHandler({}, {
+      name: "phase-a-runner",
+      steps: [
+        { id: "step-1", type: "spawn", command: "Implement workflow smoke test" },
+        { id: "step-2", type: "delay", command: "1" },
+      ],
+    });
+    expect(createResult.success).toBe(true);
+
+    const runResult = await runHandler({ sender: {} }, "phase-a-runner");
+    const steps = (runResult.result as Array<Record<string, unknown>> | undefined) ?? [];
+    expect(runResult.success).toBe(true);
+    expect(steps.length).toBe(2);
+    expect(steps[0]?.status).toBe("success");
+    expect(steps[1]?.status).toBe("success");
+    expect(startAgent).toHaveBeenCalledTimes(1);
+    expect(runResult.completedSteps).toBe(2);
+    expect(runResult.totalSteps).toBe(2);
   });
 });

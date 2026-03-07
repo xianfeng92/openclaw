@@ -49,6 +49,18 @@ describe("landing bootstrap files", () => {
     expect(fs.existsSync(path.join(workspace, "MEMORY.md"))).toBe(true);
   });
 
+  it("creates OpenClaw-style SOUL.md template sections", () => {
+    const workspace = createTempWorkspace();
+    ensureLandingWorkspaceFiles(workspace);
+
+    const soul = fs.readFileSync(path.join(workspace, "SOUL.md"), "utf-8");
+    expect(soul).toContain("## Mission");
+    expect(soul).toContain("## Core Values");
+    expect(soul).toContain("## Response Contract");
+    expect(soul).toContain("## Safety Boundaries");
+    expect(soul).toContain("## Session Directives");
+  });
+
   it("reports status and completion after basic configuration", () => {
     const workspace = createTempWorkspace();
     ensureLandingWorkspaceFiles(workspace);
@@ -96,6 +108,19 @@ describe("landing content updates", () => {
     expect(soul).toContain("- Keep tone pragmatic");
     expect(agents).toContain("- Ask before destructive changes");
     expect(memory).toContain("- User likes numbered lists");
+
+    expect(soul.indexOf("## Session Directives")).toBeGreaterThanOrEqual(0);
+    expect(soul.indexOf("- Keep tone pragmatic")).toBeGreaterThan(
+      soul.indexOf("## Session Directives"),
+    );
+    expect(agents.indexOf("## Operating Rules")).toBeGreaterThanOrEqual(0);
+    expect(agents.indexOf("- Ask before destructive changes")).toBeGreaterThan(
+      agents.indexOf("## Operating Rules"),
+    );
+    expect(memory.indexOf("## Long-term Facts")).toBeGreaterThanOrEqual(0);
+    expect(memory.indexOf("- User likes numbered lists")).toBeGreaterThan(
+      memory.indexOf("## Long-term Facts"),
+    );
   });
 
   it("resolves the first missing wizard step in order", () => {

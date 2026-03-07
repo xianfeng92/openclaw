@@ -54,6 +54,8 @@ Behavior:
 - `MEMORY.md` is injected only for private sessions.
 - Private sessions: `default`, `main`, `direct` (and keys without shared markers).
 - Shared sessions (contains `group`, `channel`, `subagent`, `cron`) do not inject `MEMORY.md`.
+- `SOUL.md` uses an OpenClaw-style structure: Mission, Core Values, Response Contract, Safety Boundaries, Session Directives.
+- `/landing add soul <text>` appends into `SOUL.md` under `Session Directives`.
 - `/landing start` auto-jumps to the first missing wizard step.
 - `/landing start --reset` clears persisted wizard state and restarts from step 1.
 - Wizard progress is persisted in state dir, and `/landing resume` restores progress after restart.

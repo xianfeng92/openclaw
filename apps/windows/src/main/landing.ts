@@ -89,13 +89,29 @@ const LANDING_TEMPLATES: Record<LandingFileId, string> = {
 `,
   soul: `# SOUL.md
 
-## Core Principles
+## Mission
 
-- Be direct and useful.
-- Prefer evidence over assumptions.
-- Keep privacy boundaries explicit.
+- Deliver direct, useful, and trustworthy help.
 
-## Notes
+## Core Values
+
+- Clarity over flourish.
+- Pragmatism over ceremony.
+- Rigor over guesswork.
+
+## Response Contract
+
+- Lead with the answer, then provide supporting detail.
+- State assumptions when certainty is limited.
+- Surface risks and next actions explicitly.
+
+## Safety Boundaries
+
+- Never expose secrets or private data.
+- Ask before destructive or external side effects.
+- Prefer verification over confident speculation.
+
+## Session Directives
 `,
   identity: `# IDENTITY.md
 
@@ -122,6 +138,11 @@ const LANDING_TEMPLATES: Record<LandingFileId, string> = {
 };
 
 const LANDING_FILE_ORDER: LandingFileId[] = ["agents", "soul", "identity", "user", "memory"];
+const LANDING_APPEND_HEADINGS: Record<LandingAppendTarget, string> = {
+  agents: "Operating Rules",
+  soul: "Session Directives",
+  memory: "Long-term Facts",
+};
 
 export function resolveLandingFilePath(workspacePath: string, fileId: LandingFileId): string {
   return path.join(workspacePath, LANDING_FILE_NAMES[fileId]);
@@ -464,6 +485,49 @@ function upsertMarkdownField(content: string, label: string, value: string): str
   return `${content}${suffix}- ${label}: ${value}\n`;
 }
 
+function appendMarkdownListItemToHeading(content: string, heading: string, value: string): string {
+  const lineBreak = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content.split(/\r?\n/u);
+  const normalizedHeading = heading.trim().toLowerCase();
+
+  let headingIndex = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim().startsWith("##")) {
+      continue;
+    }
+    const title = line.trim().replace(/^##+\s*/u, "").trim().toLowerCase();
+    if (title === normalizedHeading) {
+      headingIndex = index;
+      break;
+    }
+  }
+
+  if (headingIndex < 0) {
+    const suffix = content.endsWith("\n") || content.endsWith("\r\n") ? "" : lineBreak;
+    return `${content}${suffix}- ${value}${lineBreak}`;
+  }
+
+  let insertIndex = lines.length;
+  for (let index = headingIndex + 1; index < lines.length; index += 1) {
+    if (lines[index].trim().startsWith("##")) {
+      insertIndex = index;
+      break;
+    }
+  }
+  while (insertIndex > headingIndex + 1 && lines[insertIndex - 1].trim() === "") {
+    insertIndex -= 1;
+  }
+
+  const updated = [...lines];
+  if (insertIndex > headingIndex + 1 && updated[insertIndex - 1].trim() !== "") {
+    updated.splice(insertIndex, 0, "");
+    insertIndex += 1;
+  }
+  updated.splice(insertIndex, 0, `- ${value}`);
+  return updated.join(lineBreak);
+}
+
 function readLandingFileWithTemplate(workspacePath: string, fileId: LandingFileId): {
   filePath: string;
   content: string;
@@ -514,9 +578,10 @@ export function appendLandingNote(
 
   const fileId: LandingFileId = target;
   const { filePath, content } = readLandingFileWithTemplate(workspacePath, fileId);
-  const suffix = content.endsWith("\n") ? "" : "\n";
-  const next = `${content}${suffix}- ${normalizedNote}\n`;
-  fs.writeFileSync(filePath, next, "utf-8");
+  const heading = LANDING_APPEND_HEADINGS[target];
+  const next = appendMarkdownListItemToHeading(content, heading, normalizedNote);
+  const withTrailingLineBreak = next.endsWith("\n") || next.endsWith("\r\n") ? next : `${next}\n`;
+  fs.writeFileSync(filePath, withTrailingLineBreak, "utf-8");
 
   return {
     filePath,

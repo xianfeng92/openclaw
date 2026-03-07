@@ -280,17 +280,23 @@ export class TerminalGatewayClient {
   async sendMessage(
     sessionKey: string,
     message: string,
-    opts?: { idempotencyKey?: string },
+    opts?: { idempotencyKey?: string; agentHint?: string },
   ): Promise<{ runId: string; status: string }> {
     const requestId = opts?.idempotencyKey ?? generateUUID();
+    const normalizedAgentHint =
+      typeof opts?.agentHint === "string" ? opts.agentHint.trim() : "";
+    const params: Record<string, unknown> = {
+      sessionKey,
+      message,
+      deliver: true,
+      idempotencyKey: requestId,
+    };
+    if (normalizedAgentHint) {
+      params.agentHint = normalizedAgentHint;
+    }
     const payload = await this.sendRequest<Record<string, unknown>>(
       "chat.send",
-      {
-        sessionKey,
-        message,
-        deliver: true,
-        idempotencyKey: requestId,
-      },
+      params,
       { requestId, timeoutMs: 60000 },
     );
     const runId = typeof payload.runId === "string" ? payload.runId : requestId;

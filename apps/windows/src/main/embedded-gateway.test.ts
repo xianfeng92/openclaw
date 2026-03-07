@@ -371,6 +371,72 @@ describe("embedded-gateway protocol", () => {
     }
   });
 
+  it("supports anthropic runtime provider", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const url = String(input);
+        expect(url).toContain("/messages");
+        expect((init?.headers as Record<string, string>)["x-api-key"]).toBe("anthropic-test-key");
+
+        const requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        expect(requestBody.model).toBe("claude-3-5-haiku-latest");
+        expect(Array.isArray(requestBody.messages)).toBe(true);
+
+        return new Response(
+          JSON.stringify({
+            content: [{ type: "text", text: "hello from anthropic" }],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      },
+    );
+
+    Object.assign(globalThis, { fetch: fetchMock });
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      runtimeProvider: {
+        provider: "anthropic",
+        apiKey: "anthropic-test-key",
+        baseUrl: "https://api.anthropic.com/v1",
+        model: "claude-3-5-haiku-latest",
+        maxTokens: 2048,
+      },
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "anthropic-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello from user",
+          deliver: true,
+          idempotencyKey: "anthropic-run-1",
+        },
+      });
+
+      await nextFrame(ws); // started
+      const delta = await waitForChatState(ws, "delta");
+      expect((delta.payload as Record<string, unknown>).text).toBe("hello from anthropic");
+      await waitForChatState(ws, "final");
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      await gateway.stop();
+      Object.assign(globalThis, { fetch: originalFetch });
+    }
+  });
+
   it("uses HTTPS_PROXY dispatcher for google runtime provider when proxy is configured", async () => {
     const originalFetch = globalThis.fetch;
     const originalHttpsProxy = process.env.HTTPS_PROXY;
@@ -670,6 +736,59 @@ describe("embedded-gateway session and lifecycle", () => {
       expect(systemPrompt).toContain("[cydeck:landing-system-prompt]");
       expect(systemPrompt).toContain("### SOUL.md");
       expect(systemPrompt).toContain("System soul token");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
+  it("injects agent-hint prompt into provider messages", async () => {
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const provider: AIProvider = {
+      chat: async (messages, onChunk) => {
+        capturedMessages = messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+        const text = "ok";
+        if (onChunk) {
+          await onChunk(text);
+        }
+        return text;
+      },
+    };
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: provider,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "hint-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "hello",
+          deliver: true,
+          idempotencyKey: "hint-run-1",
+          agentHint: "claude",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      const hintPrompt =
+        capturedMessages.find(
+          (message) =>
+            message.role === "system" && message.content.includes("[cydeck:agent-hint]"),
+        )?.content ?? "";
+      expect(hintPrompt).toContain("Preferred agent profile: claude");
     } finally {
       await gateway.stop();
     }

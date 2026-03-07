@@ -26,6 +26,14 @@ type AgentProcessStatus =
   | "exited"
   | "killed";
 
+type RelevantContext = {
+  customers: Array<{ name: string; score: number }>;
+  projects: Array<{ name: string; score: number }>;
+  decisions: Array<{ title: string; score: number }>;
+  meetings: Array<{ title: string; score: number }>;
+  patterns: Array<{ name: string; score: number }>;
+};
+
 export interface WindowsAgentProcess {
   id: string;
   pid: number;
@@ -56,13 +64,7 @@ interface AgentStartOptions {
   branch?: string;
   webContents: WebContents;
   useContext?: boolean;
-  relevantContext?: {
-    customers: Array<{ name: string; score: number }>;
-    projects: Array<{ name: string; score: number }>;
-    decisions: Array<{ title: string; score: number }>;
-    meetings: Array<{ title: string; score: number }>;
-    patterns: Array<{ name: string; score: number }>;
-  };
+  relevantContext?: RelevantContext;
 }
 
 interface AgentStartResult {
@@ -82,6 +84,93 @@ type AgentCliLaunch = {
   usesWorkspaceFlag: boolean;
   note?: string;
 };
+
+const CONTEXT_PROMPT_MAX_CHARS = 1200;
+const WINDOWS_RUNTIME_GUARD_LINES = [
+  "[cydeck:runtime] Windows shell (PowerShell/CMD).",
+  "[cydeck:tools] Shell defaults to cmd.exe. Use cmd-compatible commands (dir, findstr, type).",
+  "[cydeck:tools] Do not run bare PowerShell cmdlets (Get-ChildItem, Select-String). If needed, run: powershell -NoProfile -Command \"<script>\".",
+  "[cydeck:tools] Do not assume rg exists; if unavailable, use dir /s /b with findstr /s /i.",
+  "[cydeck:gateway] Do not use schtasks/systemctl/launchctl/pkill to control gateway unless the user explicitly asks.",
+  "[cydeck:gateway] Use CyDeck controls/commands instead (/status, /config apply, tray actions).",
+];
+
+function pickTopNames(
+  entries: Array<{ name: string; score: number }>,
+  limit = 3,
+): string[] {
+  return entries
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.name);
+}
+
+function pickTopTitles(
+  entries: Array<{ title: string; score: number }>,
+  limit = 3,
+): string[] {
+  return entries
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.title);
+}
+
+export function buildAgentMessageWithContext(
+  description: string,
+  opts: {
+    agent?: string;
+    useContext?: boolean;
+    relevantContext?: RelevantContext;
+  } = {},
+): string {
+  const agentHint = opts.agent?.trim();
+  const context = opts.relevantContext;
+  const contextLines: string[] = [];
+
+  if (opts.useContext && context) {
+    const customerNames = pickTopNames(context.customers ?? []);
+    const projectNames = pickTopNames(context.projects ?? []);
+    const meetingTitles = pickTopTitles(context.meetings ?? []);
+    const decisionTitles = pickTopTitles(context.decisions ?? []);
+    const patternNames = pickTopNames(context.patterns ?? []);
+
+    if (customerNames.length > 0) {
+      contextLines.push(`Customers: ${customerNames.join(", ")}`);
+    }
+    if (projectNames.length > 0) {
+      contextLines.push(`Projects: ${projectNames.join(", ")}`);
+    }
+    if (meetingTitles.length > 0) {
+      contextLines.push(`Meetings: ${meetingTitles.join(", ")}`);
+    }
+    if (decisionTitles.length > 0) {
+      contextLines.push(`Decisions: ${decisionTitles.join(", ")}`);
+    }
+    if (patternNames.length > 0) {
+      contextLines.push(`Patterns: ${patternNames.join(", ")}`);
+    }
+  }
+
+  const headerLines: string[] = [...WINDOWS_RUNTIME_GUARD_LINES];
+  if (agentHint) {
+    headerLines.push(`[cydeck:agent-profile] ${agentHint}`);
+  }
+  if (contextLines.length > 0) {
+    let contextBlock = contextLines.join("\n");
+    if (contextBlock.length > CONTEXT_PROMPT_MAX_CHARS) {
+      contextBlock =
+        `${contextBlock.slice(0, CONTEXT_PROMPT_MAX_CHARS).trimEnd()}\n... (truncated context)`;
+    }
+    headerLines.push("[cydeck:context]");
+    headerLines.push(contextBlock);
+  }
+
+  headerLines.push("Task:");
+  headerLines.push(description);
+  return headerLines.join("\n");
+}
 
 /**
  * Windows Agent Process Manager
@@ -546,30 +635,23 @@ export class WindowsAgentProcessManager {
       note?: string;
       agent?: string;
       useContext?: boolean;
-      relevantContext?: {
-        customers: Array<{ name: string; score: number }>;
-        projects: Array<{ name: string; score: number }>;
-        decisions: Array<{ title: string; score: number }>;
-        meetings: Array<{ title: string; score: number }>;
-        patterns: Array<{ name: string; score: number }>;
-      };
+      relevantContext?: RelevantContext;
     },
   ): AgentCliLaunch {
     // NOTE: `openclaw agent` requires both a target selector and `--message`.
     // We force local mode and pin workspace to the spawned worktree so execution
     // happens immediately in the isolated task environment.
     // taskId is used as session-id so each spawn gets an isolated session.
+    const agentMessage = buildAgentMessageWithContext(options.description, {
+      agent: options.agent,
+      useContext: options.useContext,
+      relevantContext: options.relevantContext,
+    });
     const agentArgs = ["agent", "--local"];
     if (options.includeWorkspaceFlag) {
       agentArgs.push("--workspace", options.workingDir);
     }
-    agentArgs.push("--session-id", options.taskId, "--message", options.description);
-
-    // Keep the orchestral agent label as metadata only. The CLI `--agent` flag expects
-    // a configured agent id, while orchestral labels are provider hints (claude/codex/gemini).
-    void options.agent;
-    void options.useContext;
-    void options.relevantContext;
+    agentArgs.push("--session-id", options.taskId, "--message", agentMessage);
 
     if (app.isPackaged) {
       const args = ["-y", "openclaw", "--profile", "desktop", ...agentArgs];

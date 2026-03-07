@@ -1,8 +1,14 @@
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { spawn } from "child_process";
 import fs from "fs";
+import type { CyDeckProvider } from "./cydeck-config.js";
+import { getEffectiveConfig } from "./cydeck-config.js";
+import { assignConfigPathValue } from "./cydeck-config-ipc.js";
+import {
+  loadEditableCyDeckConfigDocument,
+  writeCyDeckConfigDocument,
+} from "./cydeck-config-document.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,70 +23,62 @@ export type SettingsData = {
   autoStartGateway: boolean;
 };
 
-function redactSecret(value: string): string {
+export type SettingsLoadResult = {
+  success: boolean;
+  data?: SettingsData;
+  error?: string;
+};
+
+export type SettingsSaveResult = {
+  success: boolean;
+  error?: string;
+};
+
+const DEFAULT_PROVIDER_BASE_URLS: Record<CyDeckProvider, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  google: "https://generativelanguage.googleapis.com/v1beta",
+};
+
+const DEFAULT_PROVIDER_MODELS: Record<CyDeckProvider, string> = {
+  openai: "gpt-4o-mini",
+  anthropic: "claude-3-5-sonnet",
+  google: "gemini-2.0-flash",
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizeProvider(value: string): CyDeckProvider | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "openai" || normalized === "anthropic" || normalized === "google") {
+    return normalized;
+  }
+  return null;
+}
+
+function normalizeBaseUrl(provider: CyDeckProvider, value: string): string {
   const trimmed = value.trim();
-  if (trimmed.length <= 8) {
-    return "<redacted>";
-  }
-  return `${trimmed.slice(0, 4)}…${trimmed.slice(-4)}`;
+  return trimmed || DEFAULT_PROVIDER_BASE_URLS[provider];
 }
 
-function shouldRedactConfigPath(pathname: string): boolean {
-  const lower = pathname.toLowerCase();
-  return (
-    lower.endsWith(".apikey") ||
-    lower.includes(".apikey.") ||
-    lower.endsWith(".token") ||
-    lower.includes(".token.") ||
-    lower.endsWith(".secret") ||
-    lower.includes(".secret.") ||
-    lower.endsWith(".password") ||
-    lower.includes(".password.")
-  );
-}
-
-function redactArgsForLog(args: string[]): string[] {
-  // Redact values for `openclaw config set <path> <value>` when the path indicates a secret.
-  const out = [...args];
-  for (let i = 0; i < out.length; i += 1) {
-    if (out[i] !== "config" || out[i + 1] !== "set") {
-      continue;
-    }
-    const pathArg = out[i + 2];
-    const valueIdx = i + 3;
-    if (typeof pathArg === "string" && typeof out[valueIdx] === "string" && shouldRedactConfigPath(pathArg)) {
-      out[valueIdx] = redactSecret(out[valueIdx]);
-    }
+function getProviderModelFromDocument(
+  document: Record<string, unknown>,
+  provider: CyDeckProvider,
+): string | undefined {
+  const ai = asRecord(document.ai);
+  const providers = asRecord(ai?.providers);
+  const providerNode = asRecord(providers?.[provider]);
+  const model = providerNode?.model;
+  if (typeof model !== "string") {
+    return undefined;
   }
-  return out;
-}
-
-function findRepoRoot(startDir: string): string | null {
-  let dir = path.resolve(startDir);
-  for (let i = 0; i < 10; i += 1) {
-    const candidate = path.join(dir, "scripts", "run-node.mjs");
-    if (fs.existsSync(candidate)) {
-      return dir;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      break;
-    }
-    dir = parent;
-  }
-  return null;
-}
-
-function resolveRepoRoot(): string | null {
-  // Prefer Electron's app path (works in dev + packaged), then cwd, then this file's directory.
-  const candidates = [app.getAppPath(), process.cwd(), __dirname];
-  for (const start of candidates) {
-    const found = findRepoRoot(start);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
+  const trimmed = model.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 export class SettingsManager {
@@ -101,7 +99,7 @@ export class SettingsManager {
       width: 600,
       height: 700,
       resizable: false,
-      title: "OpenClaw Settings",
+      title: "CyDeck Settings",
       autoHideMenuBar: true,
       webPreferences: {
         preload: preloadPath,
@@ -148,110 +146,90 @@ export class SettingsManager {
 }
 
 /**
- * Save settings and update Gateway configuration
+ * Load settings from cydeck.json.
  */
-export async function saveSettings(data: SettingsData): Promise<{ success: boolean; error?: string }> {
+export function loadSettings(env: NodeJS.ProcessEnv = process.env): SettingsLoadResult {
   try {
-    console.log("[Settings] Saving settings:", { provider: data.provider, hasApiKey: !!data.apiKey });
+    const effective = getEffectiveConfig(env);
+    const provider = effective.config.ai.defaultProvider;
+    const providerConfig = effective.config.ai.providers[provider];
 
-    // Settings should apply to the same profile the desktop app runs the gateway with.
-    const profileArgs = ["--profile", "desktop"];
-
-    // Set provider based on selection
-    const providerConfigs: Record<string, { baseUrl: string; configPath: string }> = {
-      google: {
-        baseUrl: data.baseUrl || "https://generativelanguage.googleapis.com/v1beta",
-        configPath: "models.providers.google"
+    return {
+      success: true,
+      data: {
+        provider,
+        apiKey: providerConfig.apiKey,
+        baseUrl: providerConfig.baseUrl,
+        gatewayPort: effective.config.gateway.port,
+        autoStartGateway: effective.config.gateway.autoStart,
       },
-      openai: {
-        baseUrl: data.baseUrl || "https://api.openai.com/v1",
-        configPath: "models.providers.openai"
-      },
-      anthropic: {
-        baseUrl: data.baseUrl || "https://api.anthropic.com",
-        configPath: "models.providers.anthropic"
-      }
     };
-
-    const config = providerConfigs[data.provider] || providerConfigs.google;
-
-    // Set default model
-    const defaultModels: Record<string, string> = {
-      google: "google/gemini-2.0-flash-exp",
-      openai: "openai/gpt-4o-mini",
-      anthropic: "anthropic/claude-3-5-haiku-20241022"
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
     };
+  }
+}
 
-    const defaultModel = defaultModels[data.provider] || defaultModels.google;
-
-    const commands: string[][] = [
-      ["config", "set", `${config.configPath}.baseUrl`, config.baseUrl],
-      ["config", "set", `${config.configPath}.apiKey`, data.apiKey],
-      ["config", "set", "agents.defaults.model.primary", defaultModel],
-    ];
-
-    // Execute commands: prefer local repo runner, otherwise fall back to npx openclaw (packaged installs).
-    const repoRoot = resolveRepoRoot();
-    const localRunner = repoRoot ? path.join(repoRoot, "scripts", "run-node.mjs") : null;
-    const hasLocalRunner = Boolean(localRunner && fs.existsSync(localRunner));
-
-    for (const cmdArgs of commands) {
-      if (hasLocalRunner && repoRoot && localRunner) {
-        await executeConfigCommand({
-          command: "node",
-          args: [localRunner, ...profileArgs, ...cmdArgs],
-          cwd: repoRoot,
-        });
-      } else {
-        // Packaged app / no repo checkout available: rely on published CLI.
-        await executeConfigCommand({
-          command: "npx",
-          args: ["-y", "openclaw", ...profileArgs, ...cmdArgs],
-          cwd: process.cwd(),
-        });
-      }
+/**
+ * Save settings into cydeck.json.
+ */
+export async function saveSettings(
+  data: SettingsData,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<SettingsSaveResult> {
+  try {
+    const provider = normalizeProvider(data.provider);
+    if (!provider) {
+      return { success: false, error: `Unsupported provider: ${data.provider}` };
     }
 
-    console.log("[Settings] Settings saved successfully");
+    const apiKey = data.apiKey.trim();
+    if (!apiKey) {
+      return { success: false, error: "API key cannot be empty" };
+    }
+
+    if (!Number.isInteger(data.gatewayPort) || data.gatewayPort < 1 || data.gatewayPort > 65535) {
+      return { success: false, error: "gatewayPort must be an integer between 1 and 65535" };
+    }
+
+    const editable = loadEditableCyDeckConfigDocument(env);
+    if (!editable.success || !editable.document) {
+      return {
+        success: false,
+        error: editable.error ?? "Failed to load editable config document",
+      };
+    }
+
+    assignConfigPathValue(editable.document, "ai.defaultProvider", provider);
+    assignConfigPathValue(editable.document, `ai.providers.${provider}.apiKey`, apiKey);
+    assignConfigPathValue(editable.document, `ai.providers.${provider}.baseUrl`, normalizeBaseUrl(provider, data.baseUrl));
+    assignConfigPathValue(editable.document, "gateway.port", data.gatewayPort);
+    assignConfigPathValue(editable.document, "gateway.autoStart", data.autoStartGateway);
+
+    const existingModel = getProviderModelFromDocument(editable.document, provider);
+    if (!existingModel) {
+      assignConfigPathValue(editable.document, `ai.providers.${provider}.model`, DEFAULT_PROVIDER_MODELS[provider]);
+    }
+
+    const writeResult = writeCyDeckConfigDocument(editable.configPath, editable.stateDir, editable.document);
+    if (!writeResult.success) {
+      return {
+        success: false,
+        error: writeResult.error ?? "Failed to write settings",
+      };
+    }
+
+    console.log("[Settings] Saved to cydeck config:", {
+      provider,
+      gatewayPort: data.gatewayPort,
+      autoStartGateway: data.autoStartGateway,
+    });
     return { success: true };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error("[Settings] Error saving settings:", errorMsg);
     return { success: false, error: errorMsg };
   }
-}
-
-function executeConfigCommand(params: { command: string; args: string[]; cwd: string }): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(params.command, params.args, {
-      cwd: params.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: false,
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout?.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("error", (err) => {
-      reject(new Error(`Failed to execute: ${err.message}`));
-    });
-
-    child.on("exit", (code) => {
-      if (code === 0) {
-        const safeArgs = redactArgsForLog(params.args);
-        console.log(`[Settings] Config command success: ${params.command} ${safeArgs.join(" ")}`);
-        resolve();
-      } else {
-        reject(new Error(`Command failed (code ${code}): ${stderr || stdout}`));
-      }
-    });
-  });
 }

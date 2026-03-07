@@ -91,14 +91,15 @@ export class TerminalGatewayClient {
               minProtocol: 3,
               maxProtocol: 3,
               client: {
-                // Terminal window runs from file:// in Electron, so it should identify as CLI
-                // instead of Control UI (which enforces browser-origin checks).
+                // Terminal window runs from file:// in Electron, so it should identify as a
+                // local desktop client instead of Control UI (which enforces browser-origin checks).
                 id: "cli",
+                displayName: "CyDeck Terminal",
                 version: "1.0.0",
                 platform: navigator.platform,
-                mode: "cli",
+                mode: "cydeck",
               },
-              caps: [],
+              caps: ["desktop.cydeck"],
               commands: [],
               role: "operator",
               scopes: ["operator.admin"],

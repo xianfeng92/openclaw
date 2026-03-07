@@ -35,6 +35,7 @@ export const ChatSendParamsSchema = Type.Object(
   {
     sessionKey: NonEmptyString,
     message: Type.String(),
+    agentHint: Type.Optional(Type.String()),
     thinking: Type.Optional(Type.String()),
     deliver: Type.Optional(Type.Boolean()),
     attachments: Type.Optional(Type.Array(Type.Unknown())),

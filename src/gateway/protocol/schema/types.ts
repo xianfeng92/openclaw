@@ -56,6 +56,11 @@ import type {
   CronUpdateParamsSchema,
 } from "./cron.js";
 import type {
+  SessionRotateParamsSchema,
+  ToolsMemoryGetParamsSchema,
+  ToolsMemorySearchParamsSchema,
+} from "./cydeck.js";
+import type {
   DevicePairApproveParamsSchema,
   DevicePairListParamsSchema,
   DevicePairRejectParamsSchema,
@@ -198,6 +203,9 @@ export type ConfigApplyParams = Static<typeof ConfigApplyParamsSchema>;
 export type ConfigPatchParams = Static<typeof ConfigPatchParamsSchema>;
 export type ConfigSchemaParams = Static<typeof ConfigSchemaParamsSchema>;
 export type ConfigSchemaResponse = Static<typeof ConfigSchemaResponseSchema>;
+export type SessionRotateParams = Static<typeof SessionRotateParamsSchema>;
+export type ToolsMemorySearchParams = Static<typeof ToolsMemorySearchParamsSchema>;
+export type ToolsMemoryGetParams = Static<typeof ToolsMemoryGetParamsSchema>;
 export type WizardStartParams = Static<typeof WizardStartParamsSchema>;
 export type WizardNextParams = Static<typeof WizardNextParamsSchema>;
 export type WizardCancelParams = Static<typeof WizardCancelParamsSchema>;

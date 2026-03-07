@@ -22,6 +22,7 @@ export type GatewayClientName = GatewayClientId;
 export const GATEWAY_CLIENT_MODES = {
   WEBCHAT: "webchat",
   CLI: "cli",
+  CYDECK: "cydeck",
   UI: "ui",
   BACKEND: "backend",
   NODE: "node",
@@ -44,6 +45,7 @@ export type GatewayClientInfo = {
 
 export const GATEWAY_CLIENT_CAPS = {
   TOOL_EVENTS: "tool-events",
+  DESKTOP_CYDECK: "desktop.cydeck",
 } as const;
 
 export type GatewayClientCap = (typeof GATEWAY_CLIENT_CAPS)[keyof typeof GATEWAY_CLIENT_CAPS];

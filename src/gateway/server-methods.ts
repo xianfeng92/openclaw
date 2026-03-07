@@ -8,6 +8,7 @@ import { chatHandlers } from "./server-methods/chat.js";
 import { configHandlers } from "./server-methods/config.js";
 import { connectHandlers } from "./server-methods/connect.js";
 import { cronHandlers } from "./server-methods/cron.js";
+import { cydeckHandlers } from "./server-methods/cydeck.js";
 import { deviceHandlers } from "./server-methods/devices.js";
 import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
 import { healthHandlers } from "./server-methods/health.js";
@@ -73,6 +74,8 @@ const READ_METHODS = new Set([
   "node.list",
   "node.describe",
   "chat.history",
+  "tools.memory.search",
+  "tools.memory.get",
   "neuro.context.snapshot",
   "neuro.suggestion.list",
   "neuro.behavior.export",
@@ -94,6 +97,7 @@ const WRITE_METHODS = new Set([
   "node.invoke",
   "chat.send",
   "chat.abort",
+  "session.rotate",
   "browser.request",
   "neuro.context.ingest",
   "neuro.suggestion.upsert",
@@ -180,6 +184,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...healthHandlers,
   ...channelsHandlers,
   ...chatHandlers,
+  ...cydeckHandlers,
   ...cronHandlers,
   ...deviceHandlers,
   ...execApprovalsHandlers,

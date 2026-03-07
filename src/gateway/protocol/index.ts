@@ -75,6 +75,12 @@ import {
   CronStatusParamsSchema,
   type CronUpdateParams,
   CronUpdateParamsSchema,
+  type SessionRotateParams,
+  SessionRotateParamsSchema,
+  type ToolsMemoryGetParams,
+  ToolsMemoryGetParamsSchema,
+  type ToolsMemorySearchParams,
+  ToolsMemorySearchParamsSchema,
   type DevicePairApproveParams,
   DevicePairApproveParamsSchema,
   type DevicePairListParams,
@@ -368,6 +374,11 @@ export const validateChatHistoryParams = ajv.compile(ChatHistoryParamsSchema);
 export const validateChatSendParams = ajv.compile(ChatSendParamsSchema);
 export const validateChatAbortParams = ajv.compile<ChatAbortParams>(ChatAbortParamsSchema);
 export const validateChatInjectParams = ajv.compile<ChatInjectParams>(ChatInjectParamsSchema);
+export const validateSessionRotateParams = ajv.compile<SessionRotateParams>(SessionRotateParamsSchema);
+export const validateToolsMemorySearchParams =
+  ajv.compile<ToolsMemorySearchParams>(ToolsMemorySearchParamsSchema);
+export const validateToolsMemoryGetParams =
+  ajv.compile<ToolsMemoryGetParams>(ToolsMemoryGetParamsSchema);
 export const validateChatEvent = ajv.compile(ChatEventSchema);
 export const validateNeuroContextIngestParams = ajv.compile<NeuroContextIngestParams>(
   NeuroContextIngestParamsSchema,

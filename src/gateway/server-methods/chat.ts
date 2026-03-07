@@ -22,6 +22,17 @@ import {
 } from "../chat-abort.js";
 import { type ChatImageContent, parseMessageWithAttachments } from "../chat-attachments.js";
 import { stripEnvelopeFromMessages } from "../chat-sanitize.js";
+import {
+  buildCyDeckLandingSystemPrompt,
+  extractCyDeckTranscriptMessages,
+} from "../cydeck-memory.js";
+import { resolveCyDeckRealtimeQuery } from "../cydeck-realtime.js";
+import {
+  buildCyDeckAgentHintSystemPrompt,
+  isCyDeckClient,
+  normalizeCyDeckAgentHint,
+  resolveCyDeckWorkspacePath,
+} from "../cydeck-runtime.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
 import {
   ErrorCodes,
@@ -165,6 +176,30 @@ function broadcastChatFinal(params: {
   };
   params.context.broadcast("chat", payload);
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);
+}
+
+function buildCyDeckBodyForAgent(params: {
+  workspacePath: string | null;
+  sessionKey: string;
+  message: string;
+  agentHint?: string;
+}): string {
+  const sections: string[] = [];
+  if (params.workspacePath) {
+    const landingPrompt = buildCyDeckLandingSystemPrompt(params.workspacePath, params.sessionKey);
+    if (landingPrompt) {
+      sections.push("[cydeck:landing-system-prompt]\n" + landingPrompt);
+    }
+  }
+  const hintPrompt = buildCyDeckAgentHintSystemPrompt(params.agentHint);
+  if (hintPrompt) {
+    sections.push(hintPrompt);
+  }
+  if (sections.length === 0) {
+    return params.message;
+  }
+  sections.push("User request:", params.message);
+  return sections.join("\n\n");
 }
 
 function broadcastChatError(params: {
@@ -316,6 +351,7 @@ export const chatHandlers: GatewayRequestHandlers = {
     const p = params as {
       sessionKey: string;
       message: string;
+      agentHint?: string;
       thinking?: string;
       deliver?: boolean;
       attachments?: Array<{
@@ -370,7 +406,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         return;
       }
     }
-    const { cfg, entry } = loadSessionEntry(p.sessionKey);
+    const { cfg, entry, storePath } = loadSessionEntry(p.sessionKey);
     const timeoutMs = resolveAgentTimeoutMs({
       cfg,
       overrideMs: p.timeoutMs,
@@ -444,6 +480,79 @@ export const chatHandlers: GatewayRequestHandlers = {
       };
       respond(true, ackPayload, undefined, { runId: clientRunId });
 
+      const transcriptMessages =
+        entry?.sessionId && storePath
+          ? readSessionMessages(entry.sessionId, storePath, entry?.sessionFile)
+          : [];
+      const cydeckClient = isCyDeckClient(client);
+      if (cydeckClient) {
+        try {
+          const realtime = await resolveCyDeckRealtimeQuery(
+            parsedMessage.trim(),
+            {
+              sessionMessages: extractCyDeckTranscriptMessages(transcriptMessages),
+            },
+            abortController.signal,
+          );
+          if (realtime?.assistantText) {
+            const appended = appendAssistantTranscriptMessage({
+              message: realtime.assistantText,
+              sessionId: entry?.sessionId ?? clientRunId,
+              storePath,
+              sessionFile: entry?.sessionFile,
+              createIfMissing: true,
+            });
+            const message = appended.ok
+              ? appended.message
+              : {
+                  role: "assistant",
+                  content: [{ type: "text", text: realtime.assistantText }],
+                  timestamp: Date.now(),
+                  stopReason: "injected",
+                  usage: { input: 0, output: 0, totalTokens: 0 },
+                };
+            broadcastChatFinal({
+              context,
+              runId: clientRunId,
+              sessionKey: p.sessionKey,
+              message,
+            });
+            context.dedupe.set(`chat:${clientRunId}`, {
+              ts: Date.now(),
+              ok: true,
+              payload: { runId: clientRunId, status: "ok" as const },
+            });
+            context.chatAbortControllers.delete(clientRunId);
+            context.neuroMetrics.clearRun(clientRunId);
+            return;
+          }
+        } catch (err) {
+          if (abortController.signal.aborted) {
+            abortChatRunById(
+              {
+                chatAbortControllers: context.chatAbortControllers,
+                chatRunBuffers: context.chatRunBuffers,
+                chatDeltaSentAt: context.chatDeltaSentAt,
+                chatAbortedRuns: context.chatAbortedRuns,
+                removeChatRun: context.removeChatRun,
+                agentRunSeq: context.agentRunSeq,
+                broadcast: context.broadcast,
+                nodeSendToSession: context.nodeSendToSession,
+              },
+              {
+                runId: clientRunId,
+                sessionKey: p.sessionKey,
+                stopReason: "rpc",
+              },
+            );
+            context.chatAbortControllers.delete(clientRunId);
+            context.neuroMetrics.clearRun(clientRunId);
+            return;
+          }
+          context.logGateway.warn(`cydeck realtime resolution failed: ${formatForLog(err)}`);
+        }
+      }
+
       const trimmedMessage = parsedMessage.trim();
       const injectThinking = Boolean(
         p.thinking && trimmedMessage && !trimmedMessage.startsWith("/"),
@@ -454,10 +563,19 @@ export const chatHandlers: GatewayRequestHandlers = {
       // Only BodyForAgent gets the timestamp — Body stays raw for UI display.
       // See: https://github.com/moltbot/moltbot/issues/3658
       const stampedMessage = injectTimestamp(parsedMessage, timestampOptsFromConfig(cfg));
+      const cydeckBodyForAgent =
+        cydeckClient && !trimmedMessage.startsWith("/")
+          ? buildCyDeckBodyForAgent({
+              workspacePath: resolveCyDeckWorkspacePath(),
+              sessionKey: p.sessionKey,
+              message: stampedMessage,
+              agentHint: normalizeCyDeckAgentHint(p.agentHint),
+            })
+          : stampedMessage;
 
       const ctx: MsgContext = {
         Body: parsedMessage,
-        BodyForAgent: stampedMessage,
+        BodyForAgent: cydeckBodyForAgent,
         BodyForCommands: commandBody,
         RawBody: parsedMessage,
         CommandBody: commandBody,

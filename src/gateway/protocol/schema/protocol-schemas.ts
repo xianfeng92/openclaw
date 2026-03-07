@@ -58,6 +58,11 @@ import {
   CronUpdateParamsSchema,
 } from "./cron.js";
 import {
+  SessionRotateParamsSchema,
+  ToolsMemoryGetParamsSchema,
+  ToolsMemorySearchParamsSchema,
+} from "./cydeck.js";
+import {
   DevicePairApproveParamsSchema,
   DevicePairListParamsSchema,
   DevicePairRejectParamsSchema,
@@ -267,6 +272,9 @@ export const ProtocolSchemas: Record<string, TSchema> = {
   ChatSendParams: ChatSendParamsSchema,
   ChatAbortParams: ChatAbortParamsSchema,
   ChatInjectParams: ChatInjectParamsSchema,
+  SessionRotateParams: SessionRotateParamsSchema,
+  ToolsMemorySearchParams: ToolsMemorySearchParamsSchema,
+  ToolsMemoryGetParams: ToolsMemoryGetParamsSchema,
   ChatEvent: ChatEventSchema,
   NeuroContextIngestParams: NeuroContextIngestParamsSchema,
   NeuroContextIngestResult: NeuroContextIngestResultSchema,

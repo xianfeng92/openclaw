@@ -77,7 +77,9 @@ function resolveGatewayCommand(): { command: string; baseArgs: string[]; cwd: st
   const repoRoot = path.resolve(__dirname, "../../../../");
   if (!app.isPackaged) {
     return {
-      command: process.execPath,
+      // In Electron dev, process.execPath points at electron.exe, not node.exe.
+      // Match the proven agent launch path so the root gateway starts under Node.
+      command: "node",
       baseArgs: [path.join(repoRoot, "scripts", "run-node.mjs"), "--profile", "desktop", "gateway"],
       cwd: repoRoot,
     };

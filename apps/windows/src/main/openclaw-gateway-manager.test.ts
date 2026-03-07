@@ -133,6 +133,9 @@ describe("OpenClawGatewayManager", () => {
         cwd: string;
       },
     ];
+    expect(spawnArgs[0]).toBe("node");
+    expect(spawnArgs[1][0]).toContain("scripts");
+    expect(spawnArgs[1][0]).toContain("run-node.mjs");
     const options = spawnArgs?.[2] as {
       env: NodeJS.ProcessEnv;
       cwd: string;

@@ -36,6 +36,10 @@ Ignore these unless the task explicitly requires them:
 - Channels, routing, and extensions: `.ai/rules/channels.md`
 - Docs and Mintlify: `.ai/rules/docs.md`
 - Windows / CyDeck terminal work: `.ai/rules/windows.md`
+- CLI and terminal output: `.ai/rules/cli-terminal.md`
+- External messaging surfaces: `.ai/rules/messaging.md`
+- Tool schema work: `.ai/rules/tool-schema.md`
+- Dependency and package changes: `.ai/rules/dependencies.md`
 - Apple platforms: `.ai/rules/apple-platforms.md`
 - PR review workflow: `.ai/rules/review.md`
 - Release workflow: `.ai/rules/release.md`

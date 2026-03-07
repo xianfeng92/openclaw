@@ -11,6 +11,10 @@ Read only the files that match the current task.
 - Docs, README, Mintlify, docs links: `.ai/rules/docs.md`
 - Windows app, CyDeck terminal, spawn, IPC, preload: `.ai/rules/windows.md`
 - Channels, routing, message surfaces, extensions: `.ai/rules/channels.md`
+- CLI commands and terminal output: `.ai/rules/cli-terminal.md`
+- External messaging surfaces and session logs: `.ai/rules/messaging.md`
+- Tool schema definitions: `.ai/rules/tool-schema.md`
+- Dependency and package changes: `.ai/rules/dependencies.md`
 - iOS, macOS, Apple-specific release or runtime work: `.ai/rules/apple-platforms.md`
 - PR review only: `.ai/rules/review.md`
 - Release, publishing, versioning: `.ai/rules/release.md`

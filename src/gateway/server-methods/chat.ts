@@ -178,15 +178,18 @@ function broadcastChatFinal(params: {
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);
 }
 
-function buildCyDeckBodyForAgent(params: {
+async function buildCyDeckBodyForAgent(params: {
   workspacePath: string | null;
   sessionKey: string;
   message: string;
   agentHint?: string;
-}): string {
+}): Promise<string> {
   const sections: string[] = [];
   if (params.workspacePath) {
-    const landingPrompt = buildCyDeckLandingSystemPrompt(params.workspacePath, params.sessionKey);
+    const landingPrompt = await buildCyDeckLandingSystemPrompt(
+      params.workspacePath,
+      params.sessionKey,
+    );
     if (landingPrompt) {
       sections.push("[cydeck:landing-system-prompt]\n" + landingPrompt);
     }
@@ -565,7 +568,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       const stampedMessage = injectTimestamp(parsedMessage, timestampOptsFromConfig(cfg));
       const cydeckBodyForAgent =
         cydeckClient && !trimmedMessage.startsWith("/")
-          ? buildCyDeckBodyForAgent({
+          ? await buildCyDeckBodyForAgent({
               workspacePath: resolveCyDeckWorkspacePath(),
               sessionKey: p.sessionKey,
               message: stampedMessage,

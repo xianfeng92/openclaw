@@ -309,7 +309,7 @@ export async function handleLandingCommand(
 <span class="system-ok"><strong>Landing Commands</strong></span>
 
 <span class="system-info">Goal:</span>
-  Bootstrap and configure SOUL.md / IDENTITY.md / USER.md / AGENTS.md / MEMORY.md
+  Bootstrap and configure the shared OpenClaw workspace files used by CyDeck
 
 <span class="system-info">Usage:</span>
   /landing status
@@ -325,6 +325,9 @@ export async function handleLandingCommand(
 <span class="system-info">Wizard:</span>
   Run /landing start, then type answers directly (no slash command needed).
   Use /landing start --reset to force restart from step 1.
+
+<span class="system-info">Managed files:</span>
+  AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, HEARTBEAT.md, BOOTSTRAP.md, MEMORY.md
 
 <span class="system-info">Set keys:</span>
   identity.name

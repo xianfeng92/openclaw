@@ -1,5 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import { buildBootstrapContextFiles } from "../agents/pi-embedded-helpers.js";
+import { buildProjectContextSection } from "../agents/system-prompt.js";
+import {
+  filterBootstrapFilesForSession,
+  loadWorkspaceBootstrapFiles,
+} from "../agents/workspace.js";
 
 export type CyDeckMemorySearchResult = {
   path: string;
@@ -32,9 +38,6 @@ export type CyDeckTranscriptMessage = {
   content: string;
 };
 
-type LandingFileId = "agents" | "soul" | "identity" | "user" | "memory";
-
-const LANDING_PROMPT_MAX_CHARS = 20_000;
 const MEMORY_MAX_RESULTS_DEFAULT = 4;
 const MEMORY_MIN_SCORE_DEFAULT = 0.2;
 const MEMORY_SNIPPET_MAX_CHARS = 900;
@@ -75,40 +78,12 @@ const STOPWORDS = new Set([
   "your",
 ]);
 
-const LANDING_FILE_NAMES: Record<LandingFileId, string> = {
-  agents: "AGENTS.md",
-  soul: "SOUL.md",
-  identity: "IDENTITY.md",
-  user: "USER.md",
-  memory: "MEMORY.md",
-};
-
 function normalizeNewlines(value: string): string {
   return value.replace(/\r\n/g, "\n");
 }
 
 function normalizePath(value: string): string {
   return value.replace(/\\/g, "/");
-}
-
-function normalizeText(value: string): string {
-  return normalizeNewlines(value).trim();
-}
-
-function trimForPrompt(content: string, fileName: string): string {
-  const text = content.trimEnd();
-  if (text.length <= LANDING_PROMPT_MAX_CHARS) {
-    return text;
-  }
-  const headChars = Math.floor(LANDING_PROMPT_MAX_CHARS * 0.7);
-  const tailChars = Math.floor(LANDING_PROMPT_MAX_CHARS * 0.2);
-  return [
-    text.slice(0, headChars),
-    "",
-    `[...truncated, read ${fileName} for full content...]`,
-    "",
-    text.slice(-tailChars),
-  ].join("\n");
 }
 
 function tokenize(value: string): string[] {
@@ -156,14 +131,6 @@ function walkMemoryDir(memoryDir: string, output: string[]): void {
   }
 }
 
-function resolveLandingPromptFileIds(sessionKey?: string): LandingFileId[] {
-  const base: LandingFileId[] = ["agents", "soul", "identity", "user"];
-  if (isPrivateLandingSession(sessionKey)) {
-    base.push("memory");
-  }
-  return base;
-}
-
 function scoreChunk(query: string, queryTokens: string[], chunkText: string): number {
   if (!chunkText.trim()) {
     return 0;
@@ -203,30 +170,6 @@ function formatSnapshotMessage(content: string): string {
   return singleLine.length <= 600 ? singleLine : `${singleLine.slice(0, 600)}...`;
 }
 
-function resolveLandingFilePath(workspacePath: string, fileId: LandingFileId): string {
-  return path.join(workspacePath, LANDING_FILE_NAMES[fileId]);
-}
-
-function loadLandingPromptFiles(workspacePath: string, sessionKey?: string): Array<{
-  fileName: string;
-  content: string;
-}> {
-  return resolveLandingPromptFileIds(sessionKey).map((fileId) => {
-    const fileName = LANDING_FILE_NAMES[fileId];
-    const filePath = resolveLandingFilePath(workspacePath, fileId);
-    if (!fs.existsSync(filePath)) {
-      return {
-        fileName,
-        content: `[MISSING] Expected at: ${filePath}`,
-      };
-    }
-    return {
-      fileName,
-      content: trimForPrompt(fs.readFileSync(filePath, "utf-8"), fileName),
-    };
-  });
-}
-
 export function isPrivateLandingSession(sessionKey?: string): boolean {
   const key = (sessionKey ?? "").trim().toLowerCase();
   if (!key || key === "default" || key === "main" || key === "direct") {
@@ -241,30 +184,30 @@ export function isPrivateLandingSession(sessionKey?: string): boolean {
   return true;
 }
 
-export function buildCyDeckLandingSystemPrompt(
+function isMemoryBootstrapFile(fileName: string): boolean {
+  return fileName.trim().toLowerCase() === "memory.md";
+}
+
+async function loadCyDeckBootstrapContextFiles(
   workspacePath: string,
   sessionKey?: string,
-): string | null {
-  const files = loadLandingPromptFiles(workspacePath, sessionKey);
-  const lines: string[] = [
-    "CyDeck landing context is loaded from workspace files.",
-    "Apply these instructions unless higher-priority policy overrides them.",
-    "",
-    `Workspace: ${workspacePath}`,
-    `Session privacy: ${isPrivateLandingSession(sessionKey) ? "private(main/direct)" : "shared(group/channel/subagent/cron)"}`,
-    "",
-    "## Workspace Files",
-  ];
+): Promise<ReturnType<typeof buildBootstrapContextFiles>> {
+  let files = await loadWorkspaceBootstrapFiles(workspacePath);
+  files = filterBootstrapFilesForSession(files, sessionKey);
 
-  for (const file of files) {
-    if (!file.content.trim()) {
-      continue;
-    }
-    lines.push(`### ${file.fileName}`, "", file.content, "");
+  if (!isPrivateLandingSession(sessionKey)) {
+    files = files.filter((file) => !isMemoryBootstrapFile(file.name));
   }
 
-  const prompt = lines.join("\n").trim();
-  return prompt.length > 0 ? prompt : null;
+  return buildBootstrapContextFiles(files);
+}
+
+export async function buildCyDeckLandingSystemPrompt(
+  workspacePath: string,
+  sessionKey?: string,
+): Promise<string | null> {
+  const contextFiles = await loadCyDeckBootstrapContextFiles(workspacePath, sessionKey);
+  return buildProjectContextSection(contextFiles);
 }
 
 export function listCyDeckMemoryFiles(workspacePath: string): string[] {

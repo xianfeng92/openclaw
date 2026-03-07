@@ -1,7 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export type LandingFileId = "agents" | "soul" | "identity" | "user" | "memory";
+export type LandingFileId =
+  | "agents"
+  | "soul"
+  | "tools"
+  | "identity"
+  | "user"
+  | "heartbeat"
+  | "bootstrap"
+  | "memory";
 export type LandingAppendTarget = "agents" | "soul" | "memory";
 
 export type LandingSetKey =
@@ -38,6 +47,9 @@ export type LandingWizardProgress = {
   updatedAt: string;
 };
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const LANDING_PROMPT_MAX_CHARS = 20_000;
 const LANDING_WIZARD_STATE_FILE = "landing-wizard-state.json";
 const LANDING_WIZARD_TOTAL_STEPS = 6;
@@ -50,8 +62,11 @@ type LandingFieldTarget = {
 const LANDING_FILE_NAMES: Record<LandingFileId, string> = {
   agents: "AGENTS.md",
   soul: "SOUL.md",
+  tools: "TOOLS.md",
   identity: "IDENTITY.md",
   user: "USER.md",
+  heartbeat: "HEARTBEAT.md",
+  bootstrap: "BOOTSTRAP.md",
   memory: "MEMORY.md",
 };
 
@@ -62,74 +77,145 @@ const LANDING_FIELD_TARGETS: Record<LandingSetKey, LandingFieldTarget> = {
   "identity.emoji": { fileId: "identity", label: "Emoji" },
   "identity.avatar": { fileId: "identity", label: "Avatar" },
   "user.name": { fileId: "user", label: "Name" },
-  "user.preferredName": { fileId: "user", label: "Preferred Name" },
+  "user.preferredName": { fileId: "user", label: "What to call them" },
   "user.pronouns": { fileId: "user", label: "Pronouns" },
   "user.timezone": { fileId: "user", label: "Timezone" },
   "user.language": { fileId: "user", label: "Language" },
 };
 
-const LANDING_TEMPLATES: Record<LandingFileId, string> = {
-  agents: `# AGENTS.md
+type LandingTemplateFileId = Exclude<LandingFileId, "memory">;
 
-## Session Start
+const FALLBACK_LANDING_TEMPLATES: Record<LandingFileId, string> = {
+  agents: `# AGENTS.md - Your Workspace
 
-1. Read SOUL.md
-2. Read IDENTITY.md
-3. Read USER.md
-4. Read memory logs when needed
-5. Load MEMORY.md only in private main/direct sessions
+This folder is home. Treat it that way.
 
-## Operating Rules
+## First Run
 
-- Keep replies concise and actionable.
-- Ask before external side effects.
-- Protect user privacy and secrets.
+If \`BOOTSTRAP.md\` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
 
-## Notes
+## Every Session
+
+Before doing anything else:
+
+1. Read \`SOUL.md\` - this is who you are
+2. Read \`USER.md\` - this is who you're helping
+3. Read \`memory/YYYY-MM-DD.md\` (today + yesterday) for recent context
+4. **If in MAIN SESSION** (direct chat with your human): Also read \`MEMORY.md\`
+
+Don't ask permission. Just do it.
+
+## Memory
+
+You wake up fresh each session. These files are your continuity:
+
+- **Daily notes:** \`memory/YYYY-MM-DD.md\` (create \`memory/\` if needed) - raw logs of what happened
+- **Long-term:** \`MEMORY.md\` - your curated memories, like a human's long-term memory
+
+Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+
+## Safety
+
+- Don't exfiltrate private data. Ever.
+- Don't run destructive commands without asking.
+- \`trash\` > \`rm\` (recoverable beats gone forever)
+- When in doubt, ask.
+
+## Make It Yours
+
+This is a starting point. Add your own conventions, style, and rules as you figure out what works.
 `,
-  soul: `# SOUL.md
+  soul: `# SOUL.md - Who You Are
 
-## Mission
+_You're not a chatbot. You're becoming someone._
 
-- Deliver direct, useful, and trustworthy help.
+## Core Truths
 
-## Core Values
+**Be genuinely helpful, not performatively helpful.** Skip the filler and just help.
 
-- Clarity over flourish.
-- Pragmatism over ceremony.
-- Rigor over guesswork.
+**Have opinions.** You're allowed to prefer things and disagree when it matters.
 
-## Response Contract
+**Be resourceful before asking.** Try to figure it out before escalating.
 
-- Lead with the answer, then provide supporting detail.
-- State assumptions when certainty is limited.
-- Surface risks and next actions explicitly.
+**Earn trust through competence.** Be careful with external actions. Be bold with internal ones.
 
-## Safety Boundaries
+**Remember you're a guest.** Treat access to someone's life with respect.
 
-- Never expose secrets or private data.
-- Ask before destructive or external side effects.
-- Prefer verification over confident speculation.
+## Boundaries
 
-## Session Directives
+- Private things stay private.
+- When in doubt, ask before acting externally.
+- Never send half-baked replies to messaging surfaces.
+- You're not the user's voice.
+
+## Vibe
+
+Be the assistant you'd actually want to talk to. Concise when needed, thorough when it matters.
+
+## Continuity
+
+Each session, you wake up fresh. These files are your memory. Read them. Update them.
 `,
-  identity: `# IDENTITY.md
+  tools: `# TOOLS.md - Local Notes
 
-- Name:
-- Creature:
-- Vibe:
-- Emoji:
-- Avatar:
+Skills define how tools work. This file is for your setup-specific notes.
+
+## What Goes Here
+
+- Camera names and locations
+- SSH hosts and aliases
+- Preferred voices for TTS
+- Device nicknames
+- Anything environment-specific
 `,
-  user: `# USER.md
+  identity: `# IDENTITY.md - Who Am I?
 
-- Name:
-- Preferred Name:
-- Pronouns:
-- Timezone:
-- Language:
+_Fill this in during your first conversation. Make it yours._
 
-## Notes
+- **Name:**
+- **Creature:**
+- **Vibe:**
+- **Emoji:**
+- **Avatar:**
+`,
+  user: `# USER.md - About Your Human
+
+_Learn about the person you're helping. Update this as you go._
+
+- **Name:**
+- **What to call them:**
+- **Pronouns:** _(optional)_
+- **Timezone:**
+- **Notes:**
+
+## Context
+`,
+  heartbeat: `# HEARTBEAT.md
+
+# Keep this file empty (or with only comments) to skip heartbeat API calls.
+
+# Add tasks below when you want the agent to check something periodically.
+`,
+  bootstrap: `# BOOTSTRAP.md - Hello, World
+
+_You just woke up. Time to figure out who you are._
+
+There is no memory yet. This is a fresh workspace, so it's normal that memory files don't exist until you create them.
+
+## The Conversation
+
+Don't interrogate. Just talk.
+
+Then figure out together:
+
+1. Your name
+2. Your nature
+3. Your vibe
+4. Your emoji
+
+## When You're Done
+
+Delete this file. You don't need a bootstrap script anymore.
 `,
   memory: `# MEMORY.md
 
@@ -137,15 +223,88 @@ const LANDING_TEMPLATES: Record<LandingFileId, string> = {
 `,
 };
 
-const LANDING_FILE_ORDER: LandingFileId[] = ["agents", "soul", "identity", "user", "memory"];
+const LANDING_FILE_ORDER: LandingFileId[] = [
+  "agents",
+  "soul",
+  "tools",
+  "identity",
+  "user",
+  "heartbeat",
+  "bootstrap",
+  "memory",
+];
+const LANDING_REQUIRED_FILE_ORDER: LandingFileId[] = [
+  "agents",
+  "soul",
+  "identity",
+  "user",
+  "memory",
+];
 const LANDING_APPEND_HEADINGS: Record<LandingAppendTarget, string> = {
-  agents: "Operating Rules",
-  soul: "Session Directives",
+  agents: "Make It Yours",
+  soul: "CyDeck Directives",
   memory: "Long-term Facts",
 };
 
 export function resolveLandingFilePath(workspacePath: string, fileId: LandingFileId): string {
   return path.join(workspacePath, LANDING_FILE_NAMES[fileId]);
+}
+
+function stripTemplateFrontMatter(content: string): string {
+  if (!content.startsWith("---")) {
+    return content;
+  }
+  const endIndex = content.indexOf("\n---", 3);
+  if (endIndex === -1) {
+    return content;
+  }
+  return content.slice(endIndex + "\n---".length).replace(/^\s+/, "");
+}
+
+function resolveLandingTemplatePath(fileId: LandingTemplateFileId): string | null {
+  const fileName = LANDING_FILE_NAMES[fileId];
+  const candidates = [
+    path.resolve(__dirname, "../../../../docs/reference/templates", fileName),
+    path.resolve(process.cwd(), "docs/reference/templates", fileName),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function loadLandingTemplateContent(fileId: LandingFileId): string {
+  if (fileId === "memory") {
+    return FALLBACK_LANDING_TEMPLATES.memory;
+  }
+
+  const templatePath = resolveLandingTemplatePath(fileId);
+  if (templatePath) {
+    try {
+      return stripTemplateFrontMatter(fs.readFileSync(templatePath, "utf-8"));
+    } catch {
+      // Fall through to the embedded fallback template.
+    }
+  }
+
+  return FALLBACK_LANDING_TEMPLATES[fileId];
+}
+
+function isBrandNewLandingWorkspace(workspacePath: string): boolean {
+  const bootstrapSeedFiles: Array<LandingTemplateFileId> = [
+    "agents",
+    "soul",
+    "tools",
+    "identity",
+    "user",
+    "heartbeat",
+  ];
+  return bootstrapSeedFiles.every(
+    (fileId) => !fs.existsSync(resolveLandingFilePath(workspacePath, fileId)),
+  );
 }
 
 export function isLandingSetKey(value: string): value is LandingSetKey {
@@ -165,15 +324,19 @@ export function ensureLandingWorkspaceFiles(workspacePath: string): {
 
   const created: string[] = [];
   const existing: string[] = [];
+  const shouldCreateBootstrap = isBrandNewLandingWorkspace(workspacePath);
 
   for (const fileId of LANDING_FILE_ORDER) {
     const fileName = LANDING_FILE_NAMES[fileId];
     const filePath = resolveLandingFilePath(workspacePath, fileId);
+    if (fileId === "bootstrap" && !shouldCreateBootstrap && !fs.existsSync(filePath)) {
+      continue;
+    }
     if (fs.existsSync(filePath)) {
       existing.push(fileName);
       continue;
     }
-    fs.writeFileSync(filePath, LANDING_TEMPLATES[fileId], "utf-8");
+    fs.writeFileSync(filePath, loadLandingTemplateContent(fileId), "utf-8");
     created.push(fileName);
   }
 
@@ -221,7 +384,15 @@ export function isPrivateLandingSession(sessionKey?: string): boolean {
 }
 
 function resolveLandingPromptFileIds(sessionKey?: string): LandingFileId[] {
-  const base: LandingFileId[] = ["agents", "soul", "identity", "user"];
+  const base: LandingFileId[] = [
+    "agents",
+    "soul",
+    "tools",
+    "identity",
+    "user",
+    "heartbeat",
+    "bootstrap",
+  ];
   if (isPrivateLandingSession(sessionKey)) {
     base.push("memory");
   }
@@ -283,7 +454,7 @@ function isConfiguredFile(fileId: LandingFileId, content: string): boolean {
     return false;
   }
 
-  const template = normalizeText(LANDING_TEMPLATES[fileId]);
+  const template = normalizeText(loadLandingTemplateContent(fileId));
   if (normalized === template) {
     return false;
   }
@@ -292,7 +463,11 @@ function isConfiguredFile(fileId: LandingFileId, content: string): boolean {
     return /-\s*Name:\s*\S+/i.test(content) || /-\s*Emoji:\s*\S+/i.test(content);
   }
   if (fileId === "user") {
-    return /-\s*Name:\s*\S+/i.test(content) || /-\s*Preferred Name:\s*\S+/i.test(content);
+    return (
+      /-\s*Name:\s*\S+/i.test(content) ||
+      /-\s*What to call them:\s*\S+/i.test(content) ||
+      /-\s*Preferred Name:\s*\S+/i.test(content)
+    );
   }
   return true;
 }
@@ -327,7 +502,9 @@ export function getLandingWorkspaceStatus(workspacePath: string): {
     };
   });
 
-  const completed = files.every((file) => file.exists && file.configured);
+  const completed = files
+    .filter((file) => LANDING_REQUIRED_FILE_ORDER.includes(file.id))
+    .every((file) => file.exists && file.configured);
   return { files, completed };
 }
 
@@ -348,7 +525,7 @@ function clampLandingWizardStepIndex(value: number): number {
 function hasMarkdownFieldValue(content: string, label: string): boolean {
   const escaped = escapeRegex(label);
   const pattern = new RegExp(
-    `^[ \\t]*-[ \\t]*(?:\\*\\*)?${escaped}(?:\\*\\*)?[ \\t]*:[ \\t]*(.*)$`,
+    `^[ \\t]*-[ \\t]*(?:\\*\\*)?${escaped}:[ \\t]*(?:\\*\\*)?[ \\t]*(.*)$`,
     "im",
   );
   const match = content.match(pattern);
@@ -505,7 +682,7 @@ function appendMarkdownListItemToHeading(content: string, heading: string, value
 
   if (headingIndex < 0) {
     const suffix = content.endsWith("\n") || content.endsWith("\r\n") ? "" : lineBreak;
-    return `${content}${suffix}- ${value}${lineBreak}`;
+    return `${content}${suffix}${lineBreak}## ${heading}${lineBreak}${lineBreak}- ${value}${lineBreak}`;
   }
 
   let insertIndex = lines.length;
@@ -535,7 +712,7 @@ function readLandingFileWithTemplate(workspacePath: string, fileId: LandingFileI
   const filePath = resolveLandingFilePath(workspacePath, fileId);
   if (!fs.existsSync(filePath)) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, LANDING_TEMPLATES[fileId], "utf-8");
+    fs.writeFileSync(filePath, loadLandingTemplateContent(fileId), "utf-8");
   }
   return {
     filePath,

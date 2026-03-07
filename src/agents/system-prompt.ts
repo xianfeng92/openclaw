@@ -13,6 +13,36 @@ import { listDeliverableMessageChannels } from "../utils/message-channel.js";
  */
 export type PromptMode = "full" | "minimal" | "none";
 
+export function buildProjectContextSection(
+  contextFiles: EmbeddedContextFile[] | undefined,
+): string | null {
+  const files = (contextFiles ?? []).filter((file) => file.content.trim().length > 0);
+  if (files.length === 0) {
+    return null;
+  }
+
+  const hasSoulFile = files.some((file) => {
+    const normalizedPath = file.path.trim().replace(/\\/g, "/");
+    const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
+    return baseName.toLowerCase() === "soul.md";
+  });
+
+  const lines = ["# Project Context", "", "The following project context files have been loaded:"];
+  if (hasSoulFile) {
+    lines.push(
+      "If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.",
+    );
+  }
+  lines.push("");
+
+  for (const file of files) {
+    lines.push(`## ${file.path}`, "", file.content, "");
+  }
+
+  const section = lines.join("\n").trim();
+  return section.length > 0 ? section : null;
+}
+
 function buildSkillsSection(params: {
   skillsPrompt?: string;
   isMinimal: boolean;
@@ -546,22 +576,9 @@ export function buildAgentSystemPrompt(params: {
   }
 
   const contextFiles = params.contextFiles ?? [];
-  if (contextFiles.length > 0) {
-    const hasSoulFile = contextFiles.some((file) => {
-      const normalizedPath = file.path.trim().replace(/\\/g, "/");
-      const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
-      return baseName.toLowerCase() === "soul.md";
-    });
-    lines.push("# Project Context", "", "The following project context files have been loaded:");
-    if (hasSoulFile) {
-      lines.push(
-        "If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.",
-      );
-    }
-    lines.push("");
-    for (const file of contextFiles) {
-      lines.push(`## ${file.path}`, "", file.content, "");
-    }
+  const projectContextSection = buildProjectContextSection(contextFiles);
+  if (projectContextSection) {
+    lines.push(projectContextSection, "");
   }
 
   // Skip silent replies for subagent/none modes

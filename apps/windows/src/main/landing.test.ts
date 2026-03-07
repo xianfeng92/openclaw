@@ -40,12 +40,24 @@ describe("landing bootstrap files", () => {
     const result = ensureLandingWorkspaceFiles(workspace);
 
     expect(result.created).toEqual(
-      expect.arrayContaining(["AGENTS.md", "SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md"]),
+      expect.arrayContaining([
+        "AGENTS.md",
+        "SOUL.md",
+        "TOOLS.md",
+        "IDENTITY.md",
+        "USER.md",
+        "HEARTBEAT.md",
+        "BOOTSTRAP.md",
+        "MEMORY.md",
+      ]),
     );
     expect(fs.existsSync(path.join(workspace, "AGENTS.md"))).toBe(true);
     expect(fs.existsSync(path.join(workspace, "SOUL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(workspace, "TOOLS.md"))).toBe(true);
     expect(fs.existsSync(path.join(workspace, "IDENTITY.md"))).toBe(true);
     expect(fs.existsSync(path.join(workspace, "USER.md"))).toBe(true);
+    expect(fs.existsSync(path.join(workspace, "HEARTBEAT.md"))).toBe(true);
+    expect(fs.existsSync(path.join(workspace, "BOOTSTRAP.md"))).toBe(true);
     expect(fs.existsSync(path.join(workspace, "MEMORY.md"))).toBe(true);
   });
 
@@ -54,11 +66,29 @@ describe("landing bootstrap files", () => {
     ensureLandingWorkspaceFiles(workspace);
 
     const soul = fs.readFileSync(path.join(workspace, "SOUL.md"), "utf-8");
-    expect(soul).toContain("## Mission");
-    expect(soul).toContain("## Core Values");
-    expect(soul).toContain("## Response Contract");
-    expect(soul).toContain("## Safety Boundaries");
-    expect(soul).toContain("## Session Directives");
+    const agents = fs.readFileSync(path.join(workspace, "AGENTS.md"), "utf-8");
+    const tools = fs.readFileSync(path.join(workspace, "TOOLS.md"), "utf-8");
+    const bootstrap = fs.readFileSync(path.join(workspace, "BOOTSTRAP.md"), "utf-8");
+
+    expect(soul).toContain("## Core Truths");
+    expect(soul).toContain("## Boundaries");
+    expect(soul).toContain("## Vibe");
+    expect(soul).toContain("## Continuity");
+    expect(agents).toContain("## First Run");
+    expect(agents).toContain("## Every Session");
+    expect(tools).toContain("# TOOLS.md - Local Notes");
+    expect(bootstrap).toContain("# BOOTSTRAP.md - Hello, World");
+  });
+
+  it("does not recreate BOOTSTRAP.md for partially initialized workspaces", () => {
+    const workspace = createTempWorkspace();
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.writeFileSync(path.join(workspace, "AGENTS.md"), "# Existing workspace\n", "utf-8");
+
+    const result = ensureLandingWorkspaceFiles(workspace);
+
+    expect(result.created).not.toContain("BOOTSTRAP.md");
+    expect(fs.existsSync(path.join(workspace, "BOOTSTRAP.md"))).toBe(false);
   });
 
   it("reports status and completion after basic configuration", () => {
@@ -73,7 +103,13 @@ describe("landing bootstrap files", () => {
 
     const status = getLandingWorkspaceStatus(workspace);
     expect(status.files.every((file) => file.exists)).toBe(true);
-    expect(status.files.every((file) => file.configured)).toBe(true);
+    expect(
+      status.files
+        .filter((file) =>
+          ["agents", "soul", "identity", "user", "memory"].includes(file.id),
+        )
+        .every((file) => file.configured),
+    ).toBe(true);
     expect(status.completed).toBe(true);
   });
 });
@@ -109,13 +145,13 @@ describe("landing content updates", () => {
     expect(agents).toContain("- Ask before destructive changes");
     expect(memory).toContain("- User likes numbered lists");
 
-    expect(soul.indexOf("## Session Directives")).toBeGreaterThanOrEqual(0);
+    expect(soul.indexOf("## CyDeck Directives")).toBeGreaterThanOrEqual(0);
     expect(soul.indexOf("- Keep tone pragmatic")).toBeGreaterThan(
-      soul.indexOf("## Session Directives"),
+      soul.indexOf("## CyDeck Directives"),
     );
-    expect(agents.indexOf("## Operating Rules")).toBeGreaterThanOrEqual(0);
+    expect(agents.indexOf("## Make It Yours")).toBeGreaterThanOrEqual(0);
     expect(agents.indexOf("- Ask before destructive changes")).toBeGreaterThan(
-      agents.indexOf("## Operating Rules"),
+      agents.indexOf("## Make It Yours"),
     );
     expect(memory.indexOf("## Long-term Facts")).toBeGreaterThanOrEqual(0);
     expect(memory.indexOf("- User likes numbered lists")).toBeGreaterThan(
@@ -176,6 +212,8 @@ describe("landing prompt builder", () => {
 
     expect(privatePrompt).toContain("### MEMORY.md");
     expect(privatePrompt).toContain("Private memory token");
+    expect(privatePrompt).toContain("### TOOLS.md");
+    expect(privatePrompt).toContain("### HEARTBEAT.md");
     expect(sharedPrompt).not.toContain("### MEMORY.md");
     expect(sharedPrompt).not.toContain("Private memory token");
   });

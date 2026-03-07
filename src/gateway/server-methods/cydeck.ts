@@ -28,6 +28,8 @@ function requireWorkspacePath() {
 }
 
 export const cydeckHandlers: GatewayRequestHandlers = {
+  // TODO(cydeck-phase3): Replace these CyDeck-specific memory handlers with the
+  // native OpenClaw memory manager so search/get share one backend with agents.
   "tools.memory.search": ({ params, respond }) => {
     const workspace = requireWorkspacePath();
     if (!workspace.ok) {

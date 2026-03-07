@@ -1,0 +1,8 @@
+.openclaw/worktrees/
+node_modules/
+dist/
+coverage/
+docs/zh-CN/
+docs/.i18n/
+apps/windows/.openclaw/
+*.log

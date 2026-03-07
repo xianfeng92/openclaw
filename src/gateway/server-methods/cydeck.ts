@@ -1,10 +1,9 @@
 import {
   appendCyDeckSessionMemorySnapshot,
-  cydeckMemoryGet,
-  cydeckMemorySearch,
   extractCyDeckTranscriptMessages,
   isPrivateLandingSession,
 } from "../cydeck-memory.js";
+import { getCyDeckMemoryManager } from "../cydeck-native-memory.js";
 import { resolveCyDeckWorkspacePath } from "../cydeck-runtime.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { loadSessionEntry, readSessionMessages } from "../session-utils.js";
@@ -28,9 +27,7 @@ function requireWorkspacePath() {
 }
 
 export const cydeckHandlers: GatewayRequestHandlers = {
-  // TODO(cydeck-phase3): Replace these CyDeck-specific memory handlers with the
-  // native OpenClaw memory manager so search/get share one backend with agents.
-  "tools.memory.search": ({ params, respond }) => {
+  "tools.memory.search": async ({ params, respond }) => {
     const workspace = requireWorkspacePath();
     if (!workspace.ok) {
       respond(false, undefined, workspace.error);
@@ -59,10 +56,24 @@ export const cydeckHandlers: GatewayRequestHandlers = {
         : undefined;
 
     try {
+      const { manager, error } = await getCyDeckMemoryManager({
+        workspacePath: workspace.workspacePath,
+        sessionKey,
+      });
+      if (!manager) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, error ?? "CyDeck memory search is unavailable"),
+        );
+        return;
+      }
+
       respond(true, {
-        results: cydeckMemorySearch(workspace.workspacePath, query, {
+        results: await manager.search(query, {
           maxResults,
           minScore,
+          sessionKey,
         }),
       });
     } catch (err) {
@@ -73,7 +84,7 @@ export const cydeckHandlers: GatewayRequestHandlers = {
       );
     }
   },
-  "tools.memory.get": ({ params, respond }) => {
+  "tools.memory.get": async ({ params, respond }) => {
     const workspace = requireWorkspacePath();
     if (!workspace.ok) {
       respond(false, undefined, workspace.error);
@@ -96,7 +107,26 @@ export const cydeckHandlers: GatewayRequestHandlers = {
         : undefined;
 
     try {
-      respond(true, cydeckMemoryGet(workspace.workspacePath, { path: requestedPath, from, lines }));
+      const { manager, error } = await getCyDeckMemoryManager({
+        workspacePath: workspace.workspacePath,
+      });
+      if (!manager) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, error ?? "CyDeck memory read is unavailable"),
+        );
+        return;
+      }
+
+      respond(
+        true,
+        await manager.readFile({
+          relPath: requestedPath,
+          from,
+          lines,
+        }),
+      );
     } catch (err) {
       respond(
         false,

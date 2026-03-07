@@ -926,6 +926,89 @@ describe("embedded-gateway session and lifecycle", () => {
     }
   });
 
+  it("injects realtime context before provider chat for weather prompts", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async (input: string | URL | Request): Promise<Response> => {
+      const url = String(input);
+      expect(url).toContain("wttr.in");
+      expect(url).toContain(encodeURIComponent("上海"));
+      return new Response(
+        JSON.stringify({
+          nearest_area: [
+            {
+              areaName: [{ value: "Shanghai" }],
+              country: [{ value: "China" }],
+            },
+          ],
+          current_condition: [
+            {
+              temp_C: "18",
+              FeelsLikeC: "16",
+              humidity: "72",
+              lang_zh: [{ value: "晴" }],
+            },
+          ],
+          weather: [{ date: "2026-03-07", maxtempC: "20", mintempC: "12" }],
+        }),
+      );
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const provider: AIProvider = {
+      chat: async (messages, onChunk) => {
+        capturedMessages = messages.map((chatMessage) => ({
+          role: chatMessage.role,
+          content: chatMessage.content,
+        }));
+        const text = "weather-ok";
+        if (onChunk) {
+          await onChunk(text);
+        }
+        return text;
+      },
+    };
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: provider,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "realtime-weather-chat",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "上海天气",
+          deliver: true,
+          idempotencyKey: "realtime-weather-run",
+        },
+      });
+      await nextFrame(ws); // started
+      await waitForChatState(ws, "final");
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const realtimeContext = capturedMessages.find(
+        (chatMessage) =>
+          chatMessage.role === "system" &&
+          chatMessage.content.includes("[cydeck:realtime-context]"),
+      )?.content;
+      expect(realtimeContext).toContain("Realtime weather context for query: 上海天气");
+      expect(realtimeContext).toContain("Location: Shanghai, China");
+      expect(realtimeContext).toContain("Condition: 晴");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await gateway.stop();
+    }
+  });
+
   it("supports tools.memory.search and tools.memory.get request handlers", async () => {
     const workspace = createTempWorkspace();
     ensureLandingWorkspaceFiles(workspace);

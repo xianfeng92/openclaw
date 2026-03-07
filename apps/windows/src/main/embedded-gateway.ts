@@ -30,6 +30,10 @@ import {
   type AIProvider,
 } from "./embedded-gateway.providers.js";
 import {
+  buildRealtimeContext,
+  injectRealtimeContext,
+} from "./embedded-gateway.realtime.js";
+import {
   handleMemoryGetRequest,
   handleMemorySearchRequest,
   handleSessionRotateRequest,
@@ -477,9 +481,11 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
         workspacePath: this.workspacePath,
         memoryRuntime: this.memoryRuntime,
       });
+      const realtimeContext = await buildRealtimeContext(message.trim(), controller.signal);
+      const providerMessages = injectRealtimeContext(providerInput.messages, realtimeContext);
 
       await this.aiProvider.chat(
-        providerInput.messages,
+        providerMessages,
         async (chunk) => {
           if (!chunk || context.closed || controller.signal.aborted) {
             return;

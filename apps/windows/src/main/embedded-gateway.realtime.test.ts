@@ -4,6 +4,7 @@ import {
   detectRealtimeIntent,
   extractWeatherLocation,
   injectRealtimeContext,
+  resolveRealtimeQuery,
 } from "./embedded-gateway.realtime.js";
 import type { ChatMessage } from "./embedded-gateway.providers.js";
 
@@ -75,6 +76,41 @@ describe("embedded-gateway realtime helpers", () => {
     expect(context).toContain("Forecast 2026-03-07");
   });
 
+  it("builds direct weather replies from wttr payloads", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          nearest_area: [
+            {
+              areaName: [{ value: "Shanghai" }],
+              country: [{ value: "China" }],
+            },
+          ],
+          current_condition: [
+            {
+              temp_C: "19",
+              FeelsLikeC: "17",
+              humidity: "70",
+              lang_zh: [{ value: "多云" }],
+            },
+          ],
+          weather: [{ date: "2026-03-07", maxtempC: "21", mintempC: "13" }],
+        }),
+      );
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    const resolution = await resolveRealtimeQuery("上海天气");
+    expect(resolution?.assistantText).toContain("Shanghai, China 当前天气");
+    expect(resolution?.assistantText).toContain("天气：多云");
+    expect(resolution?.assistantText).toContain("气温：19C");
+  });
+
+  it("asks for a city when weather query has no location", async () => {
+    const resolution = await resolveRealtimeQuery("天气");
+    expect(resolution?.assistantText).toContain("请告诉我要查询的城市");
+  });
+
   it("builds news context from rss feeds", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(`<?xml version="1.0" encoding="utf-8"?>
@@ -101,5 +137,26 @@ describe("embedded-gateway realtime helpers", () => {
     expect(context).toContain("Top Story");
     expect(context).toContain("https://example.com/top-story");
     expect(context).toContain("Second Story");
+  });
+
+  it("builds direct news replies from rss feeds", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(`<?xml version="1.0" encoding="utf-8"?>
+<rss>
+  <channel>
+    <item>
+      <title>Top Story</title>
+      <link>https://example.com/top-story</link>
+      <pubDate>Sat, 07 Mar 2026 08:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`);
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    const resolution = await resolveRealtimeQuery("今天的热点新闻");
+    expect(resolution?.assistantText).toContain("今天的热点新闻");
+    expect(resolution?.assistantText).toContain("Top Story");
+    expect(resolution?.assistantText).toContain("https://example.com/top-story");
   });
 });

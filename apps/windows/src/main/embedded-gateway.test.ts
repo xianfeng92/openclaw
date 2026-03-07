@@ -926,7 +926,7 @@ describe("embedded-gateway session and lifecycle", () => {
     }
   });
 
-  it("injects realtime context before provider chat for weather prompts", async () => {
+  it("serves direct realtime weather replies without provider chat", async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn(async (input: string | URL | Request): Promise<Response> => {
       const url = String(input);
@@ -954,18 +954,9 @@ describe("embedded-gateway session and lifecycle", () => {
     });
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
-    let capturedMessages: Array<{ role: string; content: string }> = [];
     const provider: AIProvider = {
-      chat: async (messages, onChunk) => {
-        capturedMessages = messages.map((chatMessage) => ({
-          role: chatMessage.role,
-          content: chatMessage.content,
-        }));
-        const text = "weather-ok";
-        if (onChunk) {
-          await onChunk(text);
-        }
-        return text;
+      chat: async () => {
+        throw new Error("provider chat should not run for direct weather replies");
       },
     };
 
@@ -992,17 +983,79 @@ describe("embedded-gateway session and lifecycle", () => {
         },
       });
       await nextFrame(ws); // started
-      await waitForChatState(ws, "final");
+      const finalFrame = await waitForChatState(ws, "final");
 
       expect(fetchMock).toHaveBeenCalledOnce();
-      const realtimeContext = capturedMessages.find(
-        (chatMessage) =>
-          chatMessage.role === "system" &&
-          chatMessage.content.includes("[cydeck:realtime-context]"),
-      )?.content;
-      expect(realtimeContext).toContain("Realtime weather context for query: 上海天气");
-      expect(realtimeContext).toContain("Location: Shanghai, China");
-      expect(realtimeContext).toContain("Condition: 晴");
+      const payload =
+        finalFrame.payload && typeof finalFrame.payload === "object"
+          ? (finalFrame.payload as Record<string, unknown>)
+          : {};
+      expect(payload.text).toBeTypeOf("string");
+      expect(String(payload.text)).toContain("Shanghai, China 当前天气");
+      expect(String(payload.text)).toContain("天气：晴");
+      expect(String(payload.text)).toContain("气温：18C");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await gateway.stop();
+    }
+  });
+
+  it("serves direct realtime weather replies even when ai provider is unavailable", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          nearest_area: [
+            {
+              areaName: [{ value: "Shanghai" }],
+              country: [{ value: "China" }],
+            },
+          ],
+          current_condition: [
+            {
+              temp_C: "20",
+              FeelsLikeC: "18",
+              humidity: "66",
+              lang_zh: [{ value: "阴" }],
+            },
+          ],
+          weather: [{ date: "2026-03-07", maxtempC: "23", mintempC: "14" }],
+        }),
+      );
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    const port = await getFreePort();
+    const gateway = new EmbeddedGateway(port, "test-token", {
+      aiProviderOverride: null,
+    });
+
+    try {
+      await gateway.start();
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      activeSockets.add(ws);
+      await waitForSocketOpen(ws);
+      expect((await connectClient(ws, "test-token")).ok).toBe(true);
+
+      sendRequest(ws, {
+        id: "realtime-weather-no-provider",
+        method: "chat.send",
+        params: {
+          sessionKey: "default",
+          message: "上海天气",
+          deliver: true,
+          idempotencyKey: "realtime-weather-no-provider-run",
+        },
+      });
+      await nextFrame(ws); // started
+      const finalFrame = await waitForChatState(ws, "final");
+      const payload =
+        finalFrame.payload && typeof finalFrame.payload === "object"
+          ? (finalFrame.payload as Record<string, unknown>)
+          : {};
+      expect(String(payload.text)).toContain("Shanghai, China 当前天气");
+      expect(String(payload.text)).toContain("天气：阴");
+      expect(fetchMock).toHaveBeenCalledOnce();
     } finally {
       globalThis.fetch = originalFetch;
       await gateway.stop();

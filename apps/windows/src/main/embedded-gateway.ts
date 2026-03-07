@@ -32,6 +32,7 @@ import {
 import {
   buildRealtimeContext,
   injectRealtimeContext,
+  resolveRealtimeQuery,
 } from "./embedded-gateway.realtime.js";
 import {
   handleMemoryGetRequest,
@@ -445,43 +446,70 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
       return;
     }
 
-    if (!this.aiProvider) {
-      const fallbackText = this.aiUnavailableReason;
-      session.messages.push({ role: "assistant", content: fallbackText });
-      maybeRunPreCompactionFlush({
-        session,
-        workspacePath: this.workspacePath,
-        memoryRuntime: this.memoryRuntime,
-      });
-      trimSessionMessages(session);
-      maybeRunSessionMemoryAutoWrite({
-        session,
-        workspacePath: this.workspacePath,
-        memoryRuntime: this.memoryRuntime,
-      });
-      sendGatewayChatEvent(ws, {
-        runId: idempotencyKey,
-        sessionKey,
-        seq: 0,
-        state: "final",
-        text: fallbackText,
-      });
-      return;
-    }
-
     const controller = new AbortController();
     context.activeRuns.set(idempotencyKey, controller);
 
     try {
       let seq = 0;
       let fullText = "";
+      const realtimeResolution = await resolveRealtimeQuery(message.trim(), controller.signal);
+      if (realtimeResolution?.assistantText) {
+        const replyText = realtimeResolution.assistantText;
+        session.messages.push({ role: "assistant", content: replyText });
+        maybeRunPreCompactionFlush({
+          session,
+          workspacePath: this.workspacePath,
+          memoryRuntime: this.memoryRuntime,
+        });
+        trimSessionMessages(session);
+        maybeRunSessionMemoryAutoWrite({
+          session,
+          workspacePath: this.workspacePath,
+          memoryRuntime: this.memoryRuntime,
+        });
+        sendGatewayChatEvent(ws, {
+          runId: idempotencyKey,
+          sessionKey,
+          seq,
+          state: "final",
+          text: replyText,
+        });
+        return;
+      }
+
+      if (!this.aiProvider) {
+        const fallbackText = this.aiUnavailableReason;
+        session.messages.push({ role: "assistant", content: fallbackText });
+        maybeRunPreCompactionFlush({
+          session,
+          workspacePath: this.workspacePath,
+          memoryRuntime: this.memoryRuntime,
+        });
+        trimSessionMessages(session);
+        maybeRunSessionMemoryAutoWrite({
+          session,
+          workspacePath: this.workspacePath,
+          memoryRuntime: this.memoryRuntime,
+        });
+        sendGatewayChatEvent(ws, {
+          runId: idempotencyKey,
+          sessionKey,
+          seq,
+          state: "final",
+          text: fallbackText,
+        });
+        return;
+      }
+
       const providerInput = buildMessagesForProvider({
         session,
         userMessage: message.trim(),
         workspacePath: this.workspacePath,
         memoryRuntime: this.memoryRuntime,
       });
-      const realtimeContext = await buildRealtimeContext(message.trim(), controller.signal);
+      const realtimeContext =
+        realtimeResolution?.context ??
+        (await buildRealtimeContext(message.trim(), controller.signal));
       const providerMessages = injectRealtimeContext(providerInput.messages, realtimeContext);
 
       await this.aiProvider.chat(

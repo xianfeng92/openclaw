@@ -13,10 +13,13 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname } from "node:path";
 import type { TerminalAdapter, HistoryEntry } from "./adapter-types.js";
 import type { SessionInfo } from "../tui/tui-types.js";
-import { resolveStateDir } from "../config/paths.js";
+import {
+  resolveLocalSessionHistoryPath,
+  resolveLocalSessionMetadataPath,
+} from "./local-session-paths.js";
 
 /**
  * 会话元数据（与 Gateway 格式兼容）
@@ -49,16 +52,14 @@ export type SessionTransferResult = {
  * 解析会话文件路径
  */
 function resolveSessionFilePath(sessionKey: string): string {
-  const stateDir = resolveStateDir();
-  return join(stateDir, "sessions", `${sessionKey}.jsonl`);
+  return resolveLocalSessionHistoryPath(sessionKey);
 }
 
 /**
  * 解析会话元数据路径
  */
 function resolveSessionMetaPath(sessionKey: string): string {
-  const stateDir = resolveStateDir();
-  return join(stateDir, "sessions", `${sessionKey}.json`);
+  return resolveLocalSessionMetadataPath(sessionKey);
 }
 
 /**
@@ -101,7 +102,7 @@ export async function writeSessionHistory(
   options?: { append?: boolean }
 ): Promise<void> {
   const path = resolveSessionFilePath(sessionKey);
-  await mkdir(join(path, ".."), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
 
   const lines = entries.map((e) => JSON.stringify(e));
   const content = lines.join("\n") + "\n";
@@ -140,7 +141,7 @@ export async function writeSessionMetadata(
   metadata: SessionMetadata
 ): Promise<void> {
   const path = resolveSessionMetaPath(sessionKey);
-  await mkdir(join(path, ".."), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(metadata, null, 2), "utf-8");
 }
 

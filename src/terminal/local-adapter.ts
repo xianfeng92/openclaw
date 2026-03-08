@@ -42,13 +42,16 @@ import {
 } from "../agents/agent-scope.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded-runner/run.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
+import {
+  decodeLocalSessionKey,
+  resolveLocalSessionHistoryPath,
+} from "./local-session-paths.js";
 
 /**
  * Local session storage path
  */
 function resolveLocalSessionPath(sessionKey: string): string {
-  const openclawDir = resolveStateDir();
-  return join(openclawDir, "sessions", `${sessionKey}.jsonl`);
+  return resolveLocalSessionHistoryPath(sessionKey);
 }
 
 /**
@@ -272,7 +275,7 @@ export class LocalAdapter implements TerminalAdapter {
     for (const file of files) {
       if (!file.endsWith(".jsonl")) continue;
 
-      const sessionKey = file.replace(".jsonl", "");
+      const sessionKey = decodeLocalSessionKey(file.replace(".jsonl", ""));
       const store = new LocalSessionStore(sessionKey);
       const { entries } = await store.load(1);
 

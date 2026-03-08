@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { encodeLocalSessionKey } from "./local-session-paths.js";
 
 const mocks = vi.hoisted(() => ({
   loadConfig: vi.fn(),
@@ -107,7 +108,11 @@ describe("LocalAdapter", () => {
       expect.objectContaining({
         sessionId: "agent:main:main",
         sessionKey: "agent:main:main",
-        sessionFile: path.join(stateDir, "sessions", "agent:main:main.jsonl"),
+        sessionFile: path.join(
+          stateDir,
+          "sessions",
+          `${encodeLocalSessionKey("agent:main:main")}.jsonl`,
+        ),
         workspaceDir: path.join(stateDir, "workspace-main"),
         agentId: "main",
         prompt: "hello",
@@ -130,5 +135,33 @@ describe("LocalAdapter", () => {
         }),
       }),
     );
+  });
+
+  it("reads legacy unencoded local session transcripts", async () => {
+    const legacyTranscriptPath = path.join(stateDir, "sessions", "main session.jsonl");
+    fs.mkdirSync(path.dirname(legacyTranscriptPath), { recursive: true });
+    fs.writeFileSync(
+      legacyTranscriptPath,
+      `${JSON.stringify({
+        role: "assistant",
+        content: "legacy transcript",
+        timestamp: 123,
+      })}\n`,
+      "utf-8",
+    );
+
+    const adapter = new LocalAdapter();
+    const history = await adapter.loadHistory({
+      sessionKey: "main session",
+      limit: 10,
+    });
+
+    expect(history.entries).toEqual([
+      {
+        role: "assistant",
+        content: "legacy transcript",
+        timestamp: 123,
+      },
+    ]);
   });
 });

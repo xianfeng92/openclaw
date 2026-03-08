@@ -21,6 +21,10 @@ import {
   mergeSessionHistories,
   extractMetadataFromHistory,
 } from "./session-sync.js";
+import {
+  resolveLocalSessionHistoryPath,
+  resolveLocalSessionMetadataPath,
+} from "./local-session-paths.js";
 
 async function testSessionSync() {
   console.log("🦞 Testing Session Sync\n");
@@ -107,10 +111,8 @@ async function testSessionSync() {
   // Cleanup
   console.log("Cleanup: Removing test session files...");
   const fs = await import("node:fs/promises");
-  const path = await import("node:path");
-  const stateDir = process.env.OPENCLAW_STATE_DIR || path.join(process.env.HOME ?? "", ".openclaw");
-  const sessionFile = path.join(stateDir, "sessions", `${testSessionKey}.jsonl`);
-  const metaFile = path.join(stateDir, "sessions", `${testSessionKey}.json`);
+  const sessionFile = resolveLocalSessionHistoryPath(testSessionKey);
+  const metaFile = resolveLocalSessionMetadataPath(testSessionKey);
 
   try {
     await fs.unlink(sessionFile);

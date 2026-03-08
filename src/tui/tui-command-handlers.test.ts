@@ -17,6 +17,7 @@ describe("tui command handlers", () => {
       state: {
         currentSessionKey: "agent:main:main",
         activeChatRunId: null,
+        isConnected: true,
         sessionInfo: {},
       } as never,
       deliverDefault: false,

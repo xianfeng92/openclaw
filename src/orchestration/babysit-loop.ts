@@ -205,6 +205,7 @@ async function respawnAgent(
     agent: task.agent,
     description: `Retry of ${task.id}: ${task.description}`,
     repo: task.repo,
+    startedAt: Date.now(),
     spawnedBy: task.id,
     notifyOnComplete: task.notifyOnComplete,
     retryCount: task.retryCount + 1,

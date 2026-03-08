@@ -155,7 +155,7 @@ export async function getTask(taskId: string): Promise<ActiveTask | null> {
 
 export async function listTasks(): Promise<ActiveTask[]> {
   const registry = await load();
-  return registry.tasks.filter((t) => t.status !== "killed");
+  return registry.tasks;
 }
 
 export async function updateTask(

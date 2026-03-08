@@ -72,6 +72,7 @@ export interface Pattern {
   category: "coding" | "debugging" | "architecture" | "communication" | "other";
   effectiveness?: number; // 0-1 score, updated based on CI/review success
   usageCount?: number;
+  updatedAt?: number;
   sourceFile: string;
 }
 

@@ -70,8 +70,8 @@ export async function loadWorkflows(): Promise<Workflow[]> {
 
   try {
     const content = fs.readFileSync(workflowsPath, "utf-8");
-    workflowsCache = JSON.parse(content);
-    return workflowsCache;
+    workflowsCache = JSON.parse(content) as Workflow[];
+    return workflowsCache ?? [];
   } catch {
     workflowsCache = [];
     return [];
@@ -196,7 +196,7 @@ export async function dryRunWorkflow(id: string): Promise<{
   const workflow = await getWorkflow(id);
 
   if (!workflow) {
-    return { success: false, error: "Workflow not found" };
+    return { success: false, steps: [], error: "Workflow not found" };
   }
 
   const steps = workflow.steps.map((step) => ({

@@ -181,7 +181,7 @@ function quickActionToPaletteItem(action: QuickAction): PaletteItem {
     id: `quick-action:${action.name}`,
     type: "quick-action",
     name: action.name,
-    description: action.description,
+    description: action.description ?? action.command,
     icon: TYPE_ICONS["quick-action"],
     execute: async () => {
       // For quick actions, we return the command that should be executed
@@ -210,13 +210,13 @@ export async function loadPaletteItems(workspaceDir?: string): Promise<PaletteIt
   }
 
   // Load aliases
-  const aliases = await searchAliases("", workspaceDir);
+  const aliases = await searchAliases("");
   for (const alias of aliases) {
     items.push(aliasToPaletteItem(alias));
   }
 
   // Load quick actions
-  const quickActions = await getQuickActions(workspaceDir);
+  const quickActions = await getQuickActions();
   for (const action of quickActions) {
     items.push(quickActionToPaletteItem(action));
   }

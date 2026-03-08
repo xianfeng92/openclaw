@@ -198,7 +198,7 @@ export async function transferSessionToLocal(params: {
       model: sessionInfo.model,
       thinkingLevel: sessionInfo.thinkingLevel,
       lastMessage: history[history.length - 1]?.content?.slice(0, 100) ?? "",
-      totalTokens: sessionInfo.totalTokens,
+      totalTokens: sessionInfo.totalTokens ?? undefined,
     };
 
     await writeSessionMetadata(sessionKey, metadata);
@@ -271,7 +271,7 @@ export async function getSessionSummary(sessionKey: string): Promise<{
     entryCount: history.length,
     lastMessage: history[history.length - 1]?.content,
     totalTokens: metadata?.totalTokens,
-    metadata,
+    metadata: metadata ?? undefined,
   };
 }
 

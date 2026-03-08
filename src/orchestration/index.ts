@@ -52,7 +52,6 @@ export {
   listSessions,
   getAttachCommand,
   detachSession,
-  type TmuxSessionOptions,
 } from "./tmux-manager.js";
 
 // Definition of Done checker
@@ -102,7 +101,6 @@ export {
 export {
   syncFromObsidian,
   findObsidianVault,
-  type ObsidianConfig,
 } from "./obsidian-sync.js";
 
 // Context schema

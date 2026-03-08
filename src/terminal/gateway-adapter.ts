@@ -1,94 +1,109 @@
 /**
  * Gateway Adapter - WebSocket Gateway Mode
  *
- * Wraps GatewayChatClient to implement TerminalAdapter interface.
- * Enables TUI to work with existing Gateway connection.
- *
- * Features:
- * - Heartbeat monitoring for connection health
- * - Automatic degradation detection
- * - Reconnect capability
+ * Wraps GatewayChatClient to implement TerminalAdapter.
  */
 
 import type {
-  TerminalAdapter,
+  AbortOptions,
+  AdapterConnection,
+  AdapterEvent,
+  AdapterStatus,
+  AgentsListResult,
   ChatSendOptions,
   ChatSendResult,
-  AbortOptions,
+  EventListener,
   HistoryOptions,
   HistoryResult,
+  ModelsListResult,
   SessionListOptions,
   SessionListResult,
   SessionPatchOptions,
   SessionPatchResult,
-  AgentsListResult,
-  ModelsListResult,
-  AdapterStatus,
-  AdapterEvent,
-  EventListener,
-  AdapterConnection,
+  TerminalAdapter,
 } from "./adapter-types.js";
-import type {
-  GatewaySessionList,
-  GatewayAgentsList,
-  GatewayModelChoice,
+import {
+  GatewayChatClient,
+  type GatewayEvent,
+  type GatewayAgentsList,
+  type GatewayModelChoice,
+  type GatewaySessionList,
 } from "../tui/gateway-chat.js";
-import { GatewayChatClient } from "../tui/gateway-chat.js";
 
-/**
- * Heartbeat configuration
- */
-const HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
-const HEARTBEAT_TIMEOUT_MS = 5000; // 5 seconds
-const MAX_MISSED_HEARTBEATS = 2; // Trigger degraded after 2 missed
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_TIMEOUT_MS = 5_000;
+const MAX_MISSED_HEARTBEATS = 2;
 
-/**
- * Gateway Adapter wraps GatewayChatClient
- */
+function extractText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.text === "string") {
+    return record.text;
+  }
+  if (typeof record.content === "string") {
+    return record.content;
+  }
+  if (Array.isArray(record.content)) {
+    return record.content.map((entry) => extractText(entry)).join("");
+  }
+  return "";
+}
+
 export class GatewayAdapter implements TerminalAdapter {
   readonly mode = "gateway" as const;
 
-  private client: GatewayChatClient;
-  private eventListeners: Set<EventListener> = new Set();
+  private readonly client: GatewayChatClient;
+  private readonly eventListeners = new Set<EventListener>();
+  private readonly connectedListeners = new Set<() => void>();
+  private readonly disconnectedListeners = new Set<(reason: string) => void>();
   private heartbeatTimer?: NodeJS.Timeout;
   private missedHeartbeats = 0;
   private isStarted = false;
-
-  // Expose connection info for TUI compatibility
-  readonly connection: AdapterConnection;
-
-  // Degradation state
   private degraded = false;
+
+  readonly connection: AdapterConnection;
 
   constructor(opts: { url?: string; token?: string; password?: string }) {
     this.client = new GatewayChatClient(opts);
-    this.connection = {
-      url: opts.url ?? "ws://localhost:18789",
-      token: opts.token,
-      password: opts.password,
-    };
+    this.connection = this.client.connection;
 
-    // Forward gateway events to adapter listeners
-    this.client.onEvent((event) => {
+    this.client.onEvent = (event: GatewayEvent) => {
+      const type = event.event === "agent" ? "agent" : event.event === "chat" ? "chat" : "status";
       this.emitEvent({
-        type: event.event as "chat" | "agent",
+        type,
         payload: event.payload,
       });
-    });
+    };
 
-    this.client.onConnected(() => {
+    this.client.onConnected = () => {
       this.missedHeartbeats = 0;
       this.degraded = false;
       this.emitEvent({ type: "status", payload: { connected: true } });
-    });
+      for (const listener of this.connectedListeners) {
+        listener();
+      }
+    };
 
-    this.client.onDisconnected((reason) => {
-      this.emitEvent({ type: "status", payload: { connected: false, reason } });
-    });
+    this.client.onDisconnected = (reason) => {
+      const message = reason?.trim() || "closed";
+      this.emitEvent({ type: "status", payload: { connected: false, reason: message } });
+      for (const listener of this.disconnectedListeners) {
+        listener(message);
+      }
+    };
   }
 
   async start(): Promise<void> {
-    await this.client.ready();
+    if (this.isStarted) {
+      return;
+    }
+    this.client.start();
+    await this.client.waitForReady();
     this.startHeartbeat();
     this.isStarted = true;
   }
@@ -96,11 +111,11 @@ export class GatewayAdapter implements TerminalAdapter {
   stop(): void {
     this.stopHeartbeat();
     this.isStarted = false;
-    this.client.close();
+    this.client.stop();
   }
 
   isReady(): boolean {
-    return this.client.isConnected() && !this.degraded;
+    return this.isStarted && Boolean(this.client.hello) && !this.degraded;
   }
 
   getStatus(): AdapterStatus {
@@ -111,29 +126,21 @@ export class GatewayAdapter implements TerminalAdapter {
         message: "Gateway degraded (connection issues)",
       };
     }
+    const connected = Boolean(this.client.hello);
     return {
-      connected: this.client.isConnected(),
+      connected,
       mode: "gateway",
-      message: this.client.isConnected()
-        ? "Connected to Gateway"
-        : "Connecting to Gateway...",
+      message: connected ? "Connected to Gateway" : "Connecting to Gateway...",
     };
   }
 
-  /**
-   * Start heartbeat monitoring
-   */
   private startHeartbeat(): void {
     this.stopHeartbeat();
-
-    this.heartbeatTimer = setInterval(async () => {
-      await this.performHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      void this.performHeartbeat();
     }, HEARTBEAT_INTERVAL_MS);
   }
 
-  /**
-   * Stop heartbeat monitoring
-   */
   private stopHeartbeat(): void {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
@@ -141,24 +148,19 @@ export class GatewayAdapter implements TerminalAdapter {
     }
   }
 
-  /**
-   * Perform a single heartbeat check
-   */
   private async performHeartbeat(): Promise<void> {
     if (!this.isStarted) {
       return;
     }
 
     try {
-      // Quick health check - listSessions should be fast
       await Promise.race([
         this.client.listSessions(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Heartbeat timeout")), HEARTBEAT_TIMEOUT_MS)
+          setTimeout(() => reject(new Error("Heartbeat timeout")), HEARTBEAT_TIMEOUT_MS),
         ),
       ]);
 
-      // Heartbeat successful - reset missed counter
       if (this.missedHeartbeats > 0) {
         this.missedHeartbeats = 0;
         if (this.degraded) {
@@ -167,9 +169,7 @@ export class GatewayAdapter implements TerminalAdapter {
         }
       }
     } catch (err) {
-      this.missedHeartbeats++;
-      console.warn(`Gateway heartbeat failed (${this.missedHeartbeats}/${MAX_MISSED_HEARTBEATS})`);
-
+      this.missedHeartbeats += 1;
       if (this.missedHeartbeats >= MAX_MISSED_HEARTBEATS && !this.degraded) {
         this.degraded = true;
         this.emitEvent({
@@ -183,16 +183,10 @@ export class GatewayAdapter implements TerminalAdapter {
     }
   }
 
-  /**
-   * Check if adapter is in degraded state
-   */
   isDegraded(): boolean {
     return this.degraded;
   }
 
-  /**
-   * Reset degraded state (after reconnection)
-   */
   resetDegraded(): void {
     this.degraded = false;
     this.missedHeartbeats = 0;
@@ -210,9 +204,8 @@ export class GatewayAdapter implements TerminalAdapter {
       });
 
       return {
-        runId: result.runId ?? "",
-        status: result.error ? "error" : "started",
-        error: result.error,
+        runId: result.runId,
+        status: "started",
       };
     } catch (err) {
       return {
@@ -231,15 +224,22 @@ export class GatewayAdapter implements TerminalAdapter {
   }
 
   async loadHistory(opts: HistoryOptions): Promise<HistoryResult> {
-    const result = await this.client.loadHistory({
+    const result = (await this.client.loadHistory({
       sessionKey: opts.sessionKey,
       limit: opts.limit,
-    });
+    })) as {
+      messages?: Array<{
+        role: "user" | "assistant" | "system";
+        content: unknown;
+        timestamp?: number;
+        runId?: string;
+      }>;
+    };
 
     return {
       entries: (result.messages ?? []).map((msg) => ({
         role: msg.role,
-        content: msg.content,
+        content: extractText(msg.content),
         timestamp: msg.timestamp,
         runId: msg.runId,
       })),
@@ -247,30 +247,27 @@ export class GatewayAdapter implements TerminalAdapter {
   }
 
   async listSessions(opts?: SessionListOptions): Promise<SessionListResult> {
-    const result: GatewaySessionList = await this.client.listSessions();
+    const result = (await this.client.listSessions({
+      limit: opts?.limit,
+    })) as GatewaySessionList;
 
-    let sessions = result.sessions.map((s) => ({
-      key: s.key,
-      updatedAt: s.updatedAt ?? undefined,
-      lastMessagePreview: s.lastMessagePreview,
-      model: s.model,
-      totalTokens: s.totalTokens ?? undefined,
-    }));
-
-    if (opts?.limit) {
-      sessions = sessions.slice(0, opts.limit);
-    }
-
-    return { sessions };
+    return {
+      sessions: result.sessions.map((session) => ({
+        key: session.key,
+        updatedAt: session.updatedAt ?? undefined,
+        lastMessagePreview: session.lastMessagePreview,
+        model: session.model,
+        totalTokens: session.totalTokens ?? undefined,
+      })),
+    };
   }
 
   async patchSession(opts: SessionPatchOptions): Promise<SessionPatchResult> {
     const result = await this.client.patchSession({
-      sessionKey: opts.sessionKey,
-      updates: opts.updates,
+      key: opts.sessionKey,
+      ...opts.updates,
     });
-
-    return { ok: result.ok ?? false };
+    return { ok: Boolean(result?.ok) };
   }
 
   async resetSession(sessionKey: string): Promise<void> {
@@ -278,27 +275,25 @@ export class GatewayAdapter implements TerminalAdapter {
   }
 
   async listAgents(): Promise<AgentsListResult> {
-    const result: GatewayAgentsList = await this.client.listAgents();
-
+    const result = (await this.client.listAgents()) as GatewayAgentsList;
     return {
       defaultId: result.defaultId,
-      agents: result.agents.map((a) => ({
-        id: a.id,
-        name: a.name,
+      agents: result.agents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
       })),
     };
   }
 
   async listModels(): Promise<ModelsListResult> {
-    const result: GatewayModelChoice[] = await this.client.listModels();
-
+    const result = (await this.client.listModels()) as GatewayModelChoice[];
     return {
-      models: result.map((m) => ({
-        id: m.id,
-        name: m.name,
-        provider: m.provider,
-        contextWindow: m.contextWindow,
-        reasoning: m.reasoning,
+      models: result.map((model) => ({
+        id: model.id,
+        name: model.name,
+        provider: model.provider,
+        contextWindow: model.contextWindow,
+        reasoning: model.reasoning,
       })),
     };
   }
@@ -308,11 +303,11 @@ export class GatewayAdapter implements TerminalAdapter {
   }
 
   onConnected(callback: () => void): void {
-    this.client.onConnected(callback);
+    this.connectedListeners.add(callback);
   }
 
   onDisconnected(callback: (reason: string) => void): void {
-    this.client.onDisconnected(callback);
+    this.disconnectedListeners.add(callback);
   }
 
   private emitEvent(event: AdapterEvent): void {
@@ -320,7 +315,7 @@ export class GatewayAdapter implements TerminalAdapter {
       try {
         listener(event);
       } catch {
-        // Ignore listener errors
+        // Ignore listener errors.
       }
     }
   }

@@ -87,7 +87,7 @@ async function readJsonlFromPath(params: {
       if (err.code === "not-found") {
         throw new Error("jsonlPath file not found.", { cause: err });
       }
-      if (err.code === "not-file") {
+      if (err.code === "invalid-path") {
         throw new Error("jsonlPath must be a regular file.", { cause: err });
       }
       throw new Error("jsonlPath must be a regular file within an allowed directory.", {

@@ -15,6 +15,7 @@ import type {
   Pattern,
   Project,
 } from "./context-schema.js";
+export type { ObsidianConfig } from "./context-schema.js";
 
 const DEFAULT_FOLDERS = ["Customers", "Projects", "Meetings", "Decisions", "Patterns"];
 
@@ -70,7 +71,11 @@ function parseCustomerNote(filePath: string, content: string): Customer | null {
   const notes = body || frontmatter?.notes || "";
   const contact = frontmatter?.contact || frontmatter?.email || undefined;
   const email = frontmatter?.email || undefined;
-  const config = frontmatter?.config || frontmatter?.configuration;
+  const rawConfig = frontmatter?.config || frontmatter?.configuration;
+  const configuration =
+    rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig)
+      ? (rawConfig as Record<string, unknown>)
+      : undefined;
   const tags = parseArrayField(frontmatter?.tags);
 
   // Extract ID from filename or use slugified name
@@ -82,7 +87,7 @@ function parseCustomerNote(filePath: string, content: string): Customer | null {
     notes,
     contact,
     email,
-    configuration: config,
+    configuration,
     tags,
     sourceFile: filePath,
   };
@@ -150,9 +155,11 @@ function parseDecisionNote(filePath: string, content: string): Decision | null {
   const alternatives = frontmatter?.alternatives || frontmatter?.alt || [];
   const alternativesArray = Array.isArray(alternatives) ? alternatives : [alternatives].filter(Boolean);
 
-  const status = frontmatter?.status || "accepted";
-  const validStatuses = ["proposed", "accepted", "deprecated", "superseded"];
-  const finalStatus = validStatuses.includes(status) ? status : "accepted";
+  const status = String(frontmatter?.status || "accepted");
+  const validStatuses: Decision["status"][] = ["proposed", "accepted", "deprecated", "superseded"];
+  const finalStatus: Decision["status"] = validStatuses.includes(status as Decision["status"])
+    ? (status as Decision["status"])
+    : "accepted";
 
   const id = frontmatter?.id || toSlug(`${dateStr}-${title}`);
 
@@ -179,10 +186,18 @@ function parsePatternNote(filePath: string, content: string): Pattern | null {
   const name = frontmatter?.title || frontmatter?.name || path.basename(filePath, ".md");
   const description = frontmatter?.description || frontmatter?.desc || "";
   const prompt = frontmatter?.prompt || body || "";
-  const category = frontmatter?.category || "other";
+  const category = String(frontmatter?.category || "other");
 
-  const validCategories = ["coding", "debugging", "architecture", "communication", "other"];
-  const finalCategory = validCategories.includes(category) ? category : "other";
+  const validCategories: Pattern["category"][] = [
+    "coding",
+    "debugging",
+    "architecture",
+    "communication",
+    "other",
+  ];
+  const finalCategory: Pattern["category"] = validCategories.includes(category as Pattern["category"])
+    ? (category as Pattern["category"])
+    : "other";
 
   const effectiveness = typeof frontmatter?.effectiveness === "number" ? frontmatter.effectiveness : undefined;
   const usageCount = typeof frontmatter?.usageCount === "number" ? frontmatter.usageCount : 0;
@@ -321,9 +336,11 @@ function parseProjectNote(filePath: string, content: string): Project | null {
   const name = frontmatter?.title || frontmatter?.name || path.basename(filePath, ".md");
   const description = frontmatter?.description || frontmatter?.desc || body || "";
   const customer = frontmatter?.customer || undefined;
-  const status = frontmatter?.status || "active";
-  const validStatuses = ["active", "paused", "completed", "cancelled"];
-  const finalStatus = validStatuses.includes(status) ? status : "active";
+  const status = String(frontmatter?.status || "active");
+  const validStatuses: Project["status"][] = ["active", "paused", "completed", "cancelled"];
+  const finalStatus: Project["status"] = validStatuses.includes(status as Project["status"])
+    ? (status as Project["status"])
+    : "active";
 
   const startDateStr = frontmatter?.startDate || frontmatter?.["start-date"];
   const startDate = startDateStr ? new Date(startDateStr) : undefined;

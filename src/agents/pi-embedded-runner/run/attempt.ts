@@ -13,7 +13,6 @@ import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import type {
   PluginHookAgentContext,
   PluginHookBeforeAgentStartResult,
-  PluginHookBeforePromptBuildResult,
 } from "../../../plugins/types.js";
 import { isSubagentSessionKey, normalizeAgentId } from "../../../routing/session-key.js";
 import { resolveSignalReactionLevel } from "../../../signal/reaction-level.js";

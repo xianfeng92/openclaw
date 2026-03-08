@@ -24,7 +24,6 @@ import {
 import { getSlashCommands } from "./commands.js";
 import { ChatLog } from "./components/chat-log.js";
 import { CustomEditor } from "./components/custom-editor.js";
-import { GatewayChatClient } from "./gateway-chat.js";
 import { editorTheme, theme } from "./theme/theme.js";
 import { createCommandHandlers } from "./tui-command-handlers.js";
 import { createEventHandlers } from "./tui-event-handlers.js";
@@ -35,12 +34,8 @@ import { createSessionActions } from "./tui-session-actions.js";
 import { buildWaitingStatusMessage, defaultWaitingPhrases } from "./tui-waiting.js";
 
 // Adapter support
-import type { TerminalAdapter } from "../terminal/adapter-types.js";
 import {
   createAdapter,
-  switchToLocalMode,
-  switchAdapter,
-  type SessionSyncResult,
 } from "../terminal/adapter-factory.js";
 import { handleFallback } from "../terminal/tui-fallback.js";
 import { TuiAdapterClient, type DegradedEventPayload } from "../terminal/tui-adapter-client.js";
@@ -88,31 +83,6 @@ export function createEditorSubmitHandler(params: {
   };
 }
 
-/**
- * 处理 Gateway 降级（运行时）
- *
- * 当 Gateway 连续心跳失败时，提示用户切换到本地模式
- */
-async function handleDegradedGateway(reason: string): Promise<void> {
-  if (degradationNotified || adapterMode === "local") {
-    return;
-  }
-
-  degradationNotified = true;
-
-  // 显示降级提示
-  const { formatFallbackScreen } = await import("../terminal/tui-fallback.js");
-  console.log(formatFallbackScreen(`Gateway degraded: ${reason}`));
-
-  // 简化：直接切换到本地模式，不再询问
-  console.log("\n🔄 Automatically switching to local mode...\n");
-
-  // TODO: 在实际 TUI 中应该使用内置的交互式选择
-  // 目前简化为直接切换
-  console.log("  ✓ Switched to local mode (offline)");
-  console.log("  Note: Type /exit to return to Gateway mode\n");
-}
-
 export async function runTui(opts: TuiOptions) {
   // Create adapter with fallback logic
   console.log("🦞 Connecting to Gateway...");
@@ -158,6 +128,20 @@ export async function runTui(opts: TuiOptions) {
   const localRunIds = new Set<string>();
   let adapterMode: "gateway" | "local" = "gateway";
   let degradationNotified = false;  // Track if we've notified about degraded state
+
+  const handleDegradedGateway = async (reason: string): Promise<void> => {
+    if (degradationNotified || adapterMode === "local") {
+      return;
+    }
+
+    degradationNotified = true;
+
+    const { formatFallbackScreen } = await import("../terminal/tui-fallback.js");
+    console.log(formatFallbackScreen(`Gateway degraded: ${reason}`));
+    console.log("\nAutomatically switching to local mode...\n");
+    console.log("  switched to local mode (offline)");
+    console.log("  type /exit to return to gateway mode\n");
+  };
 
   const deliverDefault = opts.deliver ?? false;
   const autoMessage = opts.message?.trim();

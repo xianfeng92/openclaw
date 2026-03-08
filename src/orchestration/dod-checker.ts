@@ -107,7 +107,7 @@ async function checkScreenshotsIncluded(task: ActiveTask): Promise<boolean> {
   // For now, this is a placeholder
   // In a real implementation, this could check for image files
   // in the worktree or in PR attachments
-  return undefined;
+  return false;
 }
 
 /**

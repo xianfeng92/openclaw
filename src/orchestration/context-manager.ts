@@ -13,10 +13,11 @@ import type {
   Customer,
   Decision,
   Meeting,
+  ObsidianConfig,
   Pattern,
   Project,
 } from "./context-schema.js";
-import { syncFromObsidian, type ObsidianConfig } from "./obsidian-sync.js";
+import { syncFromObsidian } from "./obsidian-sync.js";
 import { resolveStateDir } from "../config/paths.js";
 import { categorizeTask, type TaskCategory } from "./agent-selector.js";
 

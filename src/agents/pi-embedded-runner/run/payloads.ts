@@ -45,6 +45,7 @@ export function buildEmbeddedRunPayloads(params: {
     text: string;
     media?: string[];
     isError?: boolean;
+    isReasoning?: boolean;
     audioAsVoice?: boolean;
     replyToId?: string;
     replyToTag?: boolean;

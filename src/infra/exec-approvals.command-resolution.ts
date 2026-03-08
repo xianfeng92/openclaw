@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expandHome } from "./exec-approvals.store.js";
 import type { ExecAllowlistEntry } from "./exec-approvals.store.js";
+import type { ExecCommandSegment } from "./exec-approvals.shell-analysis.js";
 export type CommandResolution = {
   rawExecutable: string;
   resolvedPath?: string;
@@ -669,4 +670,3 @@ export function matchAllowlist(
   }
   return null;
 }
-

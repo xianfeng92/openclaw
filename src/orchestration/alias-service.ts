@@ -18,6 +18,7 @@ export interface Alias {
   description?: string;
   createdAt: number;
   usageCount: number;
+  tags?: string[];
 }
 
 /**
@@ -30,6 +31,7 @@ export interface QuickAction {
   command: string;
   description?: string;
   category?: string;
+  tags?: string[];
 }
 
 const ALIASES_FILE = "aliases.json";
@@ -103,8 +105,8 @@ export async function loadAliases(): Promise<Alias[]> {
 
   try {
     const content = fs.readFileSync(aliasesPath, "utf-8");
-    aliasesCache = JSON.parse(content);
-    return aliasesCache;
+    aliasesCache = JSON.parse(content) as Alias[];
+    return aliasesCache ?? [];
   } catch {
     aliasesCache = [];
     return [];

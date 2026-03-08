@@ -162,8 +162,7 @@ export async function createPR(
 
     const result = await runCommandWithTimeout(
       [resolveCommand("gh"), ...args],
-      60_000,
-      { cwd: worktree },
+      { timeoutMs: 60_000, cwd: worktree },
     );
 
     if (result.code !== 0) {
@@ -241,6 +240,7 @@ export async function completeAgentWorkAndCreatePR(
   const prResult = await createPR(worktree, {
     title: options.prTitle || description,
     description: prDescription,
+    branch: task.branch || (await getCurrentBranch(worktree)) || "main",
     baseBranch: options.baseBranch,
     draft: options.draft,
     labels: options.labels,
@@ -306,8 +306,7 @@ export async function listOpenPRs(worktree: string): Promise<Array<{
   try {
     const result = await runCommandWithTimeout(
       [resolveCommand("gh"), "pr", "list", "--json", "number,title,url,state,author", "--limit", "20"],
-      30_000,
-      { cwd: worktree },
+      { timeoutMs: 30_000, cwd: worktree },
     );
 
     if (result.code !== 0) {
@@ -341,8 +340,7 @@ export async function getPRDetails(worktree: string, prNumber: number): Promise<
   try {
     const result = await runCommandWithTimeout(
       [resolveCommand("gh"), "pr", "view", prNumber.toString(), "--json", "number,title,body,state,url,mergeable"],
-      30_000,
-      { cwd: worktree },
+      { timeoutMs: 30_000, cwd: worktree },
     );
 
     if (result.code !== 0) {

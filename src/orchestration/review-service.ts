@@ -172,14 +172,6 @@ async function performAgentReview(
 ): Promise<ReviewComment[]> {
   // Import the AI client dynamically
   try {
-    // Map model names to agent types
-    const agentType: "claude" | "codex" | "gemini" =
-      model === "codex" ? "codex" :
-      model === "gemini" ? "gemini" : "claude";
-
-    // Import the AI client (using the gateway's internal client)
-    const { getGatewayInfo } = await import("../gateway/server-methods-list.js");
-
     // Try to get a response from an AI model
     // For now, fall back to intelligent analysis since we need actual API access
     const comments = analyzeDiffForIssues(model, files, diff);

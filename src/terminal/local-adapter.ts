@@ -31,10 +31,15 @@ import type {
   AdapterEvent,
   EventListener,
   AdapterConnection,
+  ModelChoice,
 } from "./adapter-types.js";
 import { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
-import { resolveAgentWorkspaceDir } from "../agents/agent-paths.js";
+import {
+  listAgentIds,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded-runner/run.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 
@@ -80,7 +85,19 @@ class LocalSessionStore {
     const entries = lines
       .map((line) => {
         try {
-          return JSON.parse(line) as HistoryResult["entries"][number];
+          const parsed = JSON.parse(line) as
+            | (HistoryResult["entries"][number] & { type?: string })
+            | null;
+          if (!parsed || parsed.type === "session") {
+            return null;
+          }
+          if (
+            (parsed.role === "user" || parsed.role === "assistant" || parsed.role === "system") &&
+            typeof parsed.content === "string"
+          ) {
+            return parsed;
+          }
+          return null;
         } catch {
           return null;
         }
@@ -166,52 +183,64 @@ export class LocalAdapter implements TerminalAdapter {
     this.activeRuns.set(runId, controller);
 
     try {
-      // Create session store for history
-      const store = new LocalSessionStore(opts.sessionKey);
+      const agentId = resolveDefaultAgentId(this.config);
+      const sessionFile = resolveLocalSessionPath(opts.sessionKey);
+      const workspaceDir = resolveAgentWorkspaceDir(this.config, agentId);
 
-      // Load existing history for context
-      const { entries } = await store.load();
-      const messages = entries.map((e) => ({
-        role: e.role,
-        content: e.content,
-      }));
-
-      // Add current message
-      messages.push({ role: "user", content: opts.message });
-
-      // Run embedded agent
       const result = await runEmbeddedPiAgent({
-        message: opts.message,
+        sessionId: opts.sessionKey,
         sessionKey: opts.sessionKey,
-        agentId: this.config.agents?.defaultId ?? "main",
-        model: this.config.agents?.defaultModel,
-        modelProvider: this.config.agents?.defaultModelProvider,
-        messages,
-        signal: controller.signal,
-      });
-
-      // Store assistant response
-      await store.append({
-        role: "assistant",
-        content: result.reply,
+        agentId,
+        sessionFile,
+        workspaceDir,
+        config: this.config,
+        prompt: opts.message,
+        timeoutMs: opts.timeoutMs ?? 300_000,
         runId,
+        abortSignal: controller.signal,
       });
 
-      // Emit chat event for streaming
+      const reply = (result.payloads ?? [])
+        .flatMap((payload) => {
+          const chunks: string[] = [];
+          if (typeof payload.text === "string" && payload.text.trim()) {
+            chunks.push(payload.text.trim());
+          }
+          if (Array.isArray(payload.mediaUrls)) {
+            chunks.push(...payload.mediaUrls.filter((value): value is string => Boolean(value)));
+          } else if (typeof payload.mediaUrl === "string" && payload.mediaUrl.trim()) {
+            chunks.push(payload.mediaUrl.trim());
+          }
+          return chunks;
+        })
+        .join("\n\n");
+
       this.emitEvent({
         type: "chat",
         payload: {
           runId,
           sessionKey: opts.sessionKey,
-          reply: result.reply,
-          usage: result.usage,
+          state: "final",
+          message: {
+            role: "assistant",
+            content: reply,
+            stopReason: result.meta.stopReason,
+          },
         },
       });
 
       return { runId, status: "complete" };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      this.emitEvent({ type: "error", payload: { error } });
+      this.emitEvent({
+        type: "chat",
+        payload: {
+          runId,
+          sessionKey: opts.sessionKey,
+          state: "error",
+          errorMessage: error,
+        },
+      });
       return { runId, status: "error", error };
     } finally {
       this.activeRuns.delete(runId);
@@ -295,28 +324,27 @@ export class LocalAdapter implements TerminalAdapter {
       agents.push({ id: "main", name: "Main" });
     }
 
+    for (const id of listAgentIds(this.config)) {
+      if (!agents.find((agent) => agent.id === id)) {
+        agents.push({ id, name: id });
+      }
+    }
+
     return {
-      defaultId: this.config.agents?.defaultId ?? "main",
+      defaultId: resolveDefaultAgentId(this.config),
       agents,
     };
   }
 
   async listModels(): Promise<ModelsListResult> {
     const catalog = await loadModelCatalog({ config: this.config });
-    const models: ModelChoice[] = [];
-
-    for (const [provider, providerModels] of Object.entries(catalog)) {
-      for (const model of providerModels) {
-        models.push({
-          id: model.id,
-          name: model.name,
-          provider,
-          contextWindow: model.contextWindow,
-          reasoning: model.reasoning,
-        });
-      }
-    }
-
+    const models: ModelChoice[] = catalog.map((model) => ({
+      id: model.id,
+      name: model.name,
+      provider: model.provider,
+      contextWindow: model.contextWindow,
+      reasoning: model.reasoning,
+    }));
     return { models };
   }
 

@@ -219,8 +219,7 @@ export async function spawnAgentInWorktree(
   },
 ): Promise<{ success: boolean; tmuxSession?: string; error?: string }> {
   try {
-    const { createTmuxSession } = await import("./tmux-manager.js");
-    const { resolveCommand } = await import("../process/exec.js");
+    const { createSession } = await import("./tmux-manager.js");
 
     // Get or create worktree for this task
     const branchName = `task-${task.id.slice(0, 8)}`;
@@ -228,10 +227,11 @@ export async function spawnAgentInWorktree(
 
     // Check if we need a worktree
     if (task.id.includes("-") && !repoPath.includes(task.id)) {
+      worktreeDir = path.join(repoPath, ".openclaw", "worktrees", task.id);
       const worktreeResult = await createWorktree({
         repoPath,
         branch: branchName,
-        force: true,
+        worktreeDir,
       });
 
       if (!worktreeResult.success) {
@@ -241,13 +241,14 @@ export async function spawnAgentInWorktree(
         };
       }
 
-      worktreeDir = worktreeResult.worktree;
+      worktreeDir = worktreeResult.path ?? worktreeDir;
     }
 
     // Create a tmux session for the agent
     const sessionName = `task-${task.id.slice(0, 12)}`;
-    const sessionResult = await createTmuxSession({
+    const sessionResult = await createSession({
       name: sessionName,
+      command: "",
       cwd: worktreeDir,
     });
 

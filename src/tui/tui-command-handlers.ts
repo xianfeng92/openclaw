@@ -285,7 +285,11 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         }
         break;
       case "agents":
-        await openAgentSelector();
+        if (!args) {
+          await openAgentSelector();
+        } else {
+          await handleAgentsCommand(args, chatLog);
+        }
         break;
       case "session":
         if (!args) {
@@ -458,9 +462,6 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         break;
       case "spawn":
         await handleSpawnCommand(args, state, chatLog, setActivityStatus);
-        break;
-      case "agents":
-        await handleAgentsCommand(args, chatLog);
         break;
       case "tasks":
         await handleTasksCommand(args, chatLog);

@@ -2,6 +2,7 @@ import type { TUI } from "@mariozechner/pi-tui";
 import type { SessionsPatchResult } from "../gateway/protocol/index.js";
 import type { ChatLog } from "./components/chat-log.js";
 import type { GatewayAgentsList, GatewayChatClient } from "./gateway-chat.js";
+import type { TuiAdapterClient } from "../terminal/tui-adapter-client.js";
 import type { TuiOptions, TuiStateAccess } from "./tui-types.js";
 import {
   normalizeAgentId,
@@ -11,7 +12,7 @@ import {
 import { asString, extractTextFromMessage, isCommandMessage } from "./tui-formatters.js";
 
 type SessionActionContext = {
-  client: GatewayChatClient;
+  client: GatewayChatClient | TuiAdapterClient;
   chatLog: ChatLog;
   tui: TUI;
   opts: TuiOptions;

@@ -280,7 +280,7 @@ export async function handleSpawnCommand(
           writeLine(terminal, "");
           writeHtml(terminal, `<span style="color: var(--accent-cyan);">Opening VS Code...</span>`);
           try {
-            await window.terminalAPI.execShell(`code --add "${result.task.worktree}"`);
+            await window.terminalAPI.openInEditor(result.task.worktree);
             writeHtml(terminal, `<span class="system-ok">[ok] VS Code launch command sent</span>`);
           } catch (codeError) {
             console.error("[Orchestral] VS Code error:", codeError);

@@ -102,7 +102,7 @@ export class TerminalGatewayClient {
               caps: ["desktop.cydeck"],
               commands: [],
               role: "operator",
-              scopes: ["operator.admin"],
+              scopes: ["operator.read", "operator.write"],
               auth: {
                 token: this.token,
               },

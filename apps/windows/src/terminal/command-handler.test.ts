@@ -175,6 +175,7 @@ function installDomGlobals(api: TerminalApiMock): void {
       terminalAPI: {
         ...api,
         execShell: vi.fn(),
+        openInEditor: vi.fn(async () => ({ success: true })),
         onShellOutput: vi.fn(() => () => {}),
       },
       setInterval,

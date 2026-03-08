@@ -29,6 +29,9 @@ export type CyDeckConfig = {
   ui: {
     theme: string;
   };
+  terminal: {
+    allowShell: boolean;
+  };
 };
 
 export type CyDeckConfigIssueCode =
@@ -126,6 +129,9 @@ export const DEFAULT_CYDECK_CONFIG: CyDeckConfig = {
   },
   ui: {
     theme: "cydeck",
+  },
+  terminal: {
+    allowShell: false,
   },
 };
 
@@ -359,6 +365,7 @@ function mergeWithDefaults(rawConfig: unknown): CyDeckConfig {
   const workspace = asRecord(root.workspace) ?? {};
   const gateway = asRecord(root.gateway) ?? {};
   const ui = asRecord(root.ui) ?? {};
+  const terminal = asRecord(root.terminal) ?? {};
 
   const defaultProviderRaw = parseString(ai.defaultProvider, DEFAULT_CYDECK_CONFIG.ai.defaultProvider);
   const defaultProvider = isSupportedProvider(defaultProviderRaw)
@@ -388,6 +395,9 @@ function mergeWithDefaults(rawConfig: unknown): CyDeckConfig {
     },
     ui: {
       theme: parseString(ui.theme, DEFAULT_CYDECK_CONFIG.ui.theme),
+    },
+    terminal: {
+      allowShell: parseBoolean(terminal.allowShell, DEFAULT_CYDECK_CONFIG.terminal.allowShell),
     },
   };
 }

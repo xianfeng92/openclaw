@@ -79,6 +79,7 @@ export interface TerminalAPI {
   // Shell execution
   execShell: (command: string) => Promise<{ runId: string }>;
   abortShell: (runId: string) => Promise<{ success: boolean }>;
+  openInEditor: (targetPath: string) => Promise<{ success: boolean }>;
   onShellOutput: (
     callback: (data: { runId: string; type: string; data: string; exitCode?: number | null }) => void,
   ) => () => void;
@@ -473,6 +474,7 @@ export interface TerminalAPI {
 const api: TerminalAPI = {
   execShell: (command: string) => ipcRenderer.invoke("terminal:exec-shell", command),
   abortShell: (runId: string) => ipcRenderer.invoke("terminal:abort-shell", runId),
+  openInEditor: (targetPath: string) => ipcRenderer.invoke("terminal:open-in-editor", targetPath),
   onShellOutput: (callback) => {
     const listener = (_event: unknown, data: unknown) => callback(data as { runId: string; type: string; data: string; exitCode?: number | null });
     ipcRenderer.on("terminal:shell-output", listener);

@@ -10,6 +10,7 @@ describe("cydeck-config-ipc key allowlist", () => {
     expect(isCyDeckMutableConfigKey("gateway.port")).toBe(true);
     expect(isCyDeckMutableConfigKey("workspace.path")).toBe(true);
     expect(isCyDeckMutableConfigKey("ai.providers.openai.model")).toBe(true);
+    expect(isCyDeckMutableConfigKey("terminal.allowShell")).toBe(true);
   });
 
   it("rejects unsupported keys", () => {
@@ -22,9 +23,11 @@ describe("cydeck-config-ipc value coercion", () => {
   it("coerces booleans", () => {
     const trueValue = coerceCyDeckConfigValue("gateway.autoStart", "true");
     const falseValue = coerceCyDeckConfigValue("workspace.autoCreate", "0");
+    const shellValue = coerceCyDeckConfigValue("terminal.allowShell", "yes");
 
     expect(trueValue).toEqual({ ok: true, value: true });
     expect(falseValue).toEqual({ ok: true, value: false });
+    expect(shellValue).toEqual({ ok: true, value: true });
   });
 
   it("coerces numeric values", () => {

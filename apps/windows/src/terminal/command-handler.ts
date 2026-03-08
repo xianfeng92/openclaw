@@ -724,8 +724,9 @@ function showHelp(terminal: HTMLElement): void {
   /disconnect     - Disconnect from gateway
 
 <span class="system-info"><strong>Shell Commands:</strong></span>
-  !&lt;command&gt;      - Execute shell command
+  !&lt;command&gt;      - Execute shell command (disabled by default)
   Example: !ls, !pwd, !git status
+  Enable: /config set terminal.allowShell true
 
 <span class="system-info"><strong>Agent Messages:</strong></span>
   Type a message to send it to the current agent

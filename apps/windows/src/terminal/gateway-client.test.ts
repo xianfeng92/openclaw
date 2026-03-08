@@ -66,12 +66,15 @@ describe("TerminalGatewayClient.sendMessage", () => {
         params?: {
           client?: Record<string, unknown>;
           caps?: string[];
+          scopes?: string[];
         };
       };
       expect(connectFrame.method).toBe("connect");
       expect(connectFrame.params?.client?.mode).toBe("cydeck");
       expect(connectFrame.params?.client?.displayName).toBe("CyDeck Terminal");
       expect(connectFrame.params?.caps).toContain("desktop.cydeck");
+      expect(connectFrame.params?.scopes).toEqual(["operator.read", "operator.write"]);
+      expect(connectFrame.params?.scopes).not.toContain("operator.admin");
     } finally {
       if (originalWebSocket) {
         globalThis.WebSocket = originalWebSocket;

@@ -80,6 +80,7 @@ describe("cydeck-config load + env substitution", () => {
     expect(result.fromFile).toBe(false);
     expect(fs.existsSync(path.join(tempDir, "cydeck.json"))).toBe(true);
     expect(result.config.ai.providers.openai.apiKey).toBe("sk-openai");
+    expect(result.config.terminal.allowShell).toBe(false);
   });
 
   it("resolves ${ENV_VAR} and keeps $${ENV_VAR} as literal", () => {

@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import { ipcMain } from "electron";
 import { v4 as uuidv4 } from "uuid";
+import { getEffectiveConfig } from "./cydeck-config.js";
 
 type ShellOutputEvent = {
   runId: string;
@@ -16,6 +17,7 @@ type PendingShell = {
 };
 
 const activeShells = new Map<string, PendingShell>();
+const VS_CODE_COMMAND = process.platform === "win32" ? "code.cmd" : "code";
 
 function getShellCommand(): string {
   if (process.platform === "win32") {
@@ -28,6 +30,11 @@ export function registerTerminalShellIpcHandlers(): void {
   ipcMain.handle(
     "terminal:exec-shell",
     async (event, command: string): Promise<{ runId: string }> => {
+      if (!getEffectiveConfig().config.terminal.allowShell) {
+        throw new Error(
+          'Shell execution is disabled. Enable it with "/config set terminal.allowShell true" if you accept the risk.',
+        );
+      }
       const runId = uuidv4();
       const shellCommand = getShellCommand();
       const isWindows = process.platform === "win32";
@@ -88,6 +95,26 @@ export function registerTerminalShellIpcHandlers(): void {
       });
 
       return { runId };
+    },
+  );
+
+  ipcMain.handle(
+    "terminal:open-in-editor",
+    async (_event, targetPath: string): Promise<{ success: boolean }> => {
+      const normalizedPath = typeof targetPath === "string" ? targetPath.trim() : "";
+      if (!normalizedPath) {
+        throw new Error("Path is required");
+      }
+
+      const proc = spawn(VS_CODE_COMMAND, ["--add", normalizedPath], {
+        shell: false,
+        cwd: process.cwd(),
+        env: process.env,
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      proc.unref();
+      return { success: true };
     },
   );
 

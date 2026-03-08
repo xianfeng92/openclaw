@@ -75,6 +75,9 @@ function makeEffectiveConfig(stateDir: string): CyDeckEffectiveConfig {
       ui: {
         theme: "cydeck",
       },
+      terminal: {
+        allowShell: false,
+      },
     },
     configPath: path.join(stateDir, "cydeck.json"),
     stateDir,

@@ -15,6 +15,7 @@ export const CYDECK_MUTABLE_CONFIG_KEYS = [
   "gateway.port",
   "gateway.autoStart",
   "ui.theme",
+  "terminal.allowShell",
 ] as const;
 
 const MUTABLE_CONFIG_KEY_SET = new Set<string>(CYDECK_MUTABLE_CONFIG_KEYS);
@@ -80,7 +81,7 @@ export function coerceCyDeckConfigValue(
     };
   }
 
-  if (key === "workspace.autoCreate" || key === "gateway.autoStart") {
+  if (key === "workspace.autoCreate" || key === "gateway.autoStart" || key === "terminal.allowShell") {
     const parsed = parseBoolean(value);
     if (parsed === undefined) {
       return { ok: false, error: `${key} must be true or false` };

@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createTray } from "./tray.js";
-import { EmbeddedGateway } from "./embedded-gateway.js";
 import type { GatewayLike } from "./gateway-like.js";
 import { OpenClawGatewayManager } from "./openclaw-gateway-manager.js";
 import { SettingsManager } from "./settings.js";
@@ -11,7 +10,6 @@ import { setupIpc } from "./ipc.js";
 import { TerminalWindowManager } from "./terminal-window.js";
 import { setupTerminalIpc } from "./terminal-ipc.js";
 import { getEffectiveConfig } from "./cydeck-config.js";
-import { resolveCyDeckChatRuntime } from "./cydeck-chat-runtime.js";
 import { loadOrCreateGatewayAuth } from "./gateway-auth.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -141,25 +139,18 @@ void app
     const gatewayPort = Number.isInteger(parsedOverride)
       ? parsedOverride
       : effectiveConfig.config.gateway.port;
-    const chatRuntime = resolveCyDeckChatRuntime();
-    gatewayManager =
-      chatRuntime === "legacy"
-        ? new EmbeddedGateway(gatewayPort, auth.token, {
-            runtimeProvider: effectiveConfig.runtimeProvider,
-            workspacePath: effectiveConfig.workspacePath,
-          })
-        : new OpenClawGatewayManager(gatewayPort, auth.token, {
-            effectiveConfig: {
-              ...effectiveConfig,
-              config: {
-                ...effectiveConfig.config,
-                gateway: {
-                  ...effectiveConfig.config.gateway,
-                  port: gatewayPort,
-                },
-              },
-            },
-          });
+    gatewayManager = new OpenClawGatewayManager(gatewayPort, auth.token, {
+      effectiveConfig: {
+        ...effectiveConfig,
+        config: {
+          ...effectiveConfig.config,
+          gateway: {
+            ...effectiveConfig.config.gateway,
+            port: gatewayPort,
+          },
+        },
+      },
+    });
 
     if (effectiveConfig.workspacePath && effectiveConfig.config.workspace.autoCreate) {
       try {

@@ -65,6 +65,8 @@ export type GatewayClientOptions = {
   onGap?: (info: { expected: number; received: number }) => void;
 };
 
+const DEFAULT_OPERATOR_SCOPES: string[] = [];
+
 export const GATEWAY_CLOSE_CODE_HINTS: Readonly<Record<number, string>> = {
   1000: "normal closure",
   1006: "abnormal closure (no close frame)",
@@ -199,7 +201,7 @@ export class GatewayClient {
         : undefined;
     const signedAtMs = Date.now();
     const nonce = this.connectNonce ?? undefined;
-    const scopes = this.opts.scopes ?? ["operator.admin"];
+    const scopes = this.opts.scopes ?? DEFAULT_OPERATOR_SCOPES;
     const device = (() => {
       if (!this.opts.deviceIdentity) {
         return undefined;

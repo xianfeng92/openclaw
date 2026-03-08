@@ -19,6 +19,7 @@ type TerminalApiMock = {
   patternSave: ReturnType<typeof vi.fn>;
   configSet: ReturnType<typeof vi.fn>;
   prCreate: ReturnType<typeof vi.fn>;
+  auditHighRiskAction: ReturnType<typeof vi.fn>;
   landingInit: ReturnType<typeof vi.fn>;
   landingSet: ReturnType<typeof vi.fn>;
   landingAdd: ReturnType<typeof vi.fn>;
@@ -134,6 +135,12 @@ function createTerminalApiMock(
         prNumber: 123,
         prUrl: "https://example.test/pr/123",
       })),
+    auditHighRiskAction:
+      overrides.auditHighRiskAction ??
+      vi.fn(async () => ({
+        success: true,
+        auditPath: "C:/mock/state/audit/high-risk-actions.jsonl",
+      })),
     landingInit:
       overrides.landingInit ??
       vi.fn(async () => ({
@@ -208,6 +215,8 @@ function installDomGlobals(api: TerminalApiMock): void {
       },
       setInterval,
       clearInterval,
+      setTimeout,
+      clearTimeout,
     },
   });
 }
@@ -223,6 +232,7 @@ describe("command-handler task/session/history command flows", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Reflect.deleteProperty(globalThis, "document");
     Reflect.deleteProperty(globalThis, "window");
   });
@@ -324,7 +334,13 @@ describe("command-handler task/session/history command flows", () => {
     );
 
     await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+    expect(handleSpawnCommandMock).not.toHaveBeenCalled();
+    lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Final confirmation: /spawn phasea smoke"))).toBe(
+      true,
+    );
 
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
     expect(handleSpawnCommandMock).toHaveBeenCalledTimes(1);
     lines = collectOutputLines(terminal);
     expect(lines.some((line) => line.includes("Confirmed: /spawn phasea smoke"))).toBe(true);
@@ -353,7 +369,15 @@ describe("command-handler task/session/history command flows", () => {
     ).toBe(true);
 
     await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+    expect(configSet).not.toHaveBeenCalled();
+    lines = collectOutputLines(terminal);
+    expect(
+      lines.some((line) =>
+        line.includes("Final confirmation: /config set terminal.allowShell true"),
+      ),
+    ).toBe(true);
 
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
     expect(configSet).toHaveBeenCalledWith("terminal.allowShell", "true");
     lines = collectOutputLines(terminal);
     expect(lines.some((line) => line.includes("Updated terminal.allowShell = true"))).toBe(true);
@@ -380,7 +404,11 @@ describe("command-handler task/session/history command flows", () => {
     expect(lines.some((line) => line.includes("Confirmation required: /pr create"))).toBe(true);
 
     await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+    expect(prCreate).not.toHaveBeenCalled();
+    lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Final confirmation: /pr create"))).toBe(true);
 
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
     expect(prCreate).toHaveBeenCalledTimes(1);
     lines = collectOutputLines(terminal);
     expect(lines.some((line) => line.includes("PR created successfully"))).toBe(true);
@@ -408,8 +436,30 @@ describe("command-handler task/session/history command flows", () => {
 
     await commandHandler.handleCommand(terminal as unknown as HTMLElement, "!dir");
     await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+    expect(execShell).not.toHaveBeenCalled();
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
 
     expect(execShell).toHaveBeenCalledWith("dir");
+  });
+
+  it("expires pending confirmations after the timeout window", async () => {
+    vi.useFakeTimers();
+    const api = createTerminalApiMock();
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/tasks clear-all");
+    await vi.advanceTimersByTimeAsync(30_500);
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+
+    const lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("[expired] /tasks clear-all"))).toBe(true);
+    expect(
+      api.auditHighRiskAction.mock.calls.some(
+        ([entry]) => entry.phase === "expired" && entry.commandPreview === "/tasks clear-all",
+      ),
+    ).toBe(true);
   });
 
   it("renders /task status details from orchestral tasks payload", async () => {

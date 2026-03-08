@@ -190,6 +190,7 @@ async function connectClient(params: { url: string; token: string }) {
       clientName: "vitest-live-cli-backend",
       clientVersion: "dev",
       mode: "test",
+      scopes: ["operator.read", "operator.write", "operator.admin"],
       onHelloOk: () => stop(undefined, client),
       onConnectError: (err) => stop(err),
       onClose: (code, reason) =>

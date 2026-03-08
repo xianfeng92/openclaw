@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { buildDeviceAuthPayload } from "./device-auth.js";
@@ -6,9 +6,11 @@ import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { getHandshakeTimeoutMs } from "./server-constants.js";
 import {
   connectReq,
+  connectOk,
   getFreePort,
   installGatewayTestHooks,
   onceMessage,
+  rpcReq,
   startGatewayServer,
   startServerWithClient,
   testTailscaleWhois,
@@ -257,6 +259,19 @@ describe("gateway server auth/connect", () => {
       const res = await connectReq(ws, { token: "wrong" });
       expect(res.ok).toBe(false);
       expect(res.error?.message ?? "").toContain("unauthorized");
+      ws.close();
+    });
+
+    test("does not grant implicit admin access when operator scopes are omitted", async () => {
+      const ws = await openWs(port);
+      const hello = await connectReq(ws, { device: null });
+      expect(hello.ok).toBe(true);
+      expect((hello.payload as { type?: unknown } | undefined)?.type).toBe("hello-ok");
+
+      const res = await rpcReq(ws, "config.get", {});
+      expect(res.ok).toBe(false);
+      expect(res.error?.message).toBe("missing scope: operator.admin");
+
       ws.close();
     });
 

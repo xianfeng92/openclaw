@@ -27,6 +27,7 @@ export async function connectGatewayClient(params: {
   clientDisplayName?: string;
   clientVersion?: string;
   mode?: GatewayClientMode;
+  scopes?: string[];
 }) {
   return await new Promise<InstanceType<typeof GatewayClient>>((resolve, reject) => {
     let settled = false;
@@ -49,6 +50,7 @@ export async function connectGatewayClient(params: {
       clientDisplayName: params.clientDisplayName ?? "vitest",
       clientVersion: params.clientVersion ?? "dev",
       mode: params.mode ?? GATEWAY_CLIENT_MODES.TEST,
+      scopes: params.scopes ?? ["operator.read", "operator.write", "operator.admin"],
       onHelloOk: () => stop(undefined, client),
       onConnectError: (err) => stop(err),
       onClose: (code, reason) =>

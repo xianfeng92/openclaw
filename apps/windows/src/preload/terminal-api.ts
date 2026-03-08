@@ -42,6 +42,26 @@ export type TerminalWorkflowRunStepResult = {
   durationMs?: number;
 };
 
+export type TerminalHighRiskAuditPhase =
+  | "queued"
+  | "armed"
+  | "confirmed"
+  | "cancelled"
+  | "expired"
+  | "completed"
+  | "failed";
+
+export type TerminalHighRiskAuditRecord = {
+  actionType: string;
+  commandPreview: string;
+  riskSummary: string;
+  secondSummary?: string;
+  phase: TerminalHighRiskAuditPhase;
+  sessionKey?: string;
+  agent?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type TerminalTaskInfo = {
   id: string;
   description: string;
@@ -83,6 +103,11 @@ export interface TerminalAPI {
   onShellOutput: (
     callback: (data: { runId: string; type: string; data: string; exitCode?: number | null }) => void,
   ) => () => void;
+  auditHighRiskAction: (record: TerminalHighRiskAuditRecord) => Promise<{
+    success: boolean;
+    auditPath?: string;
+    error?: string;
+  }>;
 
   // Gateway info
   getGatewayInfo: () => Promise<{ port?: number; token?: string }>;
@@ -482,6 +507,7 @@ const api: TerminalAPI = {
       ipcRenderer.removeListener("terminal:shell-output", listener);
     };
   },
+  auditHighRiskAction: (record) => ipcRenderer.invoke("terminal:audit-high-risk", record),
   getGatewayInfo: () => ipcRenderer.invoke("terminal:get-gateway-info"),
   getGatewayAuthSync: () => {
     try {

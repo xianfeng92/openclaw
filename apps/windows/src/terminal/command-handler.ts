@@ -1,4 +1,8 @@
-import type { TerminalLandingFileStatus } from "../preload/terminal-api";
+import type {
+  TerminalHighRiskAuditRecord,
+  TerminalHighRiskAuditPhase,
+  TerminalLandingFileStatus,
+} from "../preload/terminal-api";
 import { TerminalGatewayClient, type GatewayChatState } from "./gateway-client.js";
 import {
   handleSpawnCommand,
@@ -22,6 +26,8 @@ const TYPEWRITER_MIN_DELAY_MS = 10;
 const TYPEWRITER_MAX_DELAY_MS = 30;
 const CHAT_TIMEOUT_MS = 180_000;
 const CHAT_TIMEOUT_SECONDS = Math.round(CHAT_TIMEOUT_MS / 1000);
+const HIGH_RISK_CONFIRMATION_TTL_MS = 30_000;
+const HIGH_RISK_FINAL_CONFIRMATION_TTL_MS = 15_000;
 const USER_PROMPT_HTML =
   '<span class="prompt-host">[User@CyDeck]</span> <span class="prompt-home">~</span> <span class="prompt-dollar">$</span>';
 
@@ -36,9 +42,28 @@ type TerminalCommandRuntimeHooks = {
   listHistory?: () => string[];
 };
 
+type HighRiskActionType =
+  | "shell.exec"
+  | "spawn"
+  | "pr.create"
+  | "agents.kill"
+  | "tasks.clear-all"
+  | "workflow.delete"
+  | "config.reset"
+  | "config.workspace-path"
+  | "config.enable-shell";
+
+type ConfirmationTimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
+
 type PendingTerminalConfirmation = {
+  actionType: HighRiskActionType;
   commandPreview: string;
   riskSummary: string;
+  secondSummary: string;
+  stage: "initial" | "final";
+  createdAtMs: number;
+  expiresAtMs: number;
+  timeoutHandle: ConfirmationTimerHandle | null;
   execute: () => Promise<void>;
 };
 
@@ -58,6 +83,91 @@ function buildSlashCommandPreview(command: string, args: string[]): string {
   return [command, ...args].join(" ").trim();
 }
 
+function getNowMs(): number {
+  return Date.now();
+}
+
+function setTimeoutCompat(callback: () => void, delayMs: number): ConfirmationTimerHandle {
+  if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+    return window.setTimeout(callback, delayMs);
+  }
+  return globalThis.setTimeout(callback, delayMs);
+}
+
+function clearTimeoutCompat(timeoutHandle: ConfirmationTimerHandle | null): void {
+  if (!timeoutHandle) {
+    return;
+  }
+  if (typeof window !== "undefined" && typeof window.clearTimeout === "function") {
+    window.clearTimeout(timeoutHandle);
+    return;
+  }
+  globalThis.clearTimeout(timeoutHandle);
+}
+
+async function auditHighRiskAction(
+  phase: TerminalHighRiskAuditPhase,
+  pending: Pick<
+    PendingTerminalConfirmation,
+    "actionType" | "commandPreview" | "riskSummary" | "secondSummary"
+  >,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const record: TerminalHighRiskAuditRecord = {
+      actionType: pending.actionType,
+      commandPreview: pending.commandPreview,
+      riskSummary: pending.riskSummary,
+      secondSummary: pending.secondSummary,
+      phase,
+      sessionKey: currentSessionKey,
+      agent: currentAgent,
+      metadata,
+    };
+    await window.terminalAPI.auditHighRiskAction(record);
+  } catch {
+    // Best-effort audit path; do not block the terminal UI.
+  }
+}
+
+function clearPendingConfirmationTimer(pending: PendingTerminalConfirmation | null): void {
+  if (!pending) {
+    return;
+  }
+  clearTimeoutCompat(pending.timeoutHandle);
+  pending.timeoutHandle = null;
+}
+
+function schedulePendingConfirmationExpiry(
+  terminal: HTMLElement,
+  pending: PendingTerminalConfirmation,
+): void {
+  clearPendingConfirmationTimer(pending);
+  const delayMs = Math.max(1, pending.expiresAtMs - getNowMs());
+  pending.timeoutHandle = setTimeoutCompat(() => {
+    if (pendingConfirmation !== pending) {
+      return;
+    }
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[expired] ${escapeHtml(pending.commandPreview)}</span>`,
+    );
+    writeHtml(
+      terminal,
+      `<span class="system-info">High-risk confirmation timed out. Re-run the command to queue it again.</span>`,
+    );
+    pendingConfirmation = null;
+    void auditHighRiskAction("expired", pending, {
+      stage: pending.stage,
+    });
+  }, delayMs);
+}
+
+function formatConfirmationDeadlineText(expiresAtMs: number): string {
+  const seconds = Math.max(1, Math.ceil((expiresAtMs - getNowMs()) / 1000));
+  return `${seconds}s`;
+}
+
 function writeConfirmationPrompt(terminal: HTMLElement, pending: PendingTerminalConfirmation): void {
   writeHtml(
     terminal,
@@ -66,7 +176,11 @@ function writeConfirmationPrompt(terminal: HTMLElement, pending: PendingTerminal
   writeHtml(terminal, `<span class="system-warn">${escapeHtml(pending.riskSummary)}</span>`);
   writeHtml(
     terminal,
-    `<span class="system-info">Run /confirm to continue or /cancel to abort.</span>`,
+    `<span class="system-info">${escapeHtml(pending.secondSummary)}</span>`,
+  );
+  writeHtml(
+    terminal,
+    `<span class="system-info">Run /confirm within ${formatConfirmationDeadlineText(pending.expiresAtMs)} to continue, or /cancel to abort.</span>`,
   );
 }
 
@@ -74,6 +188,15 @@ function queuePendingConfirmation(
   terminal: HTMLElement,
   pending: PendingTerminalConfirmation,
 ): boolean {
+  if (pendingConfirmation && pendingConfirmation.expiresAtMs <= getNowMs()) {
+    clearPendingConfirmationTimer(pendingConfirmation);
+    void auditHighRiskAction("expired", pendingConfirmation, {
+      stage: pendingConfirmation.stage,
+      expiredWhileQueuingNext: true,
+    });
+    pendingConfirmation = null;
+  }
+
   if (pendingConfirmation) {
     writeHtml(
       terminal,
@@ -87,7 +210,12 @@ function queuePendingConfirmation(
   }
 
   pendingConfirmation = pending;
+  schedulePendingConfirmationExpiry(terminal, pending);
   writeConfirmationPrompt(terminal, pending);
+  void auditHighRiskAction("queued", pending, {
+    stage: pending.stage,
+    expiresAtMs: pending.expiresAtMs,
+  });
   return true;
 }
 
@@ -98,12 +226,59 @@ async function confirmPendingAction(terminal: HTMLElement): Promise<void> {
   }
 
   const pending = pendingConfirmation;
+  if (pending.expiresAtMs <= getNowMs()) {
+    clearPendingConfirmationTimer(pending);
+    pendingConfirmation = null;
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[expired] ${escapeHtml(pending.commandPreview)}</span>`,
+    );
+    writeHtml(
+      terminal,
+      `<span class="system-info">High-risk confirmation timed out. Re-run the command to queue it again.</span>`,
+    );
+    await auditHighRiskAction("expired", pending, {
+      stage: pending.stage,
+    });
+    return;
+  }
+
+  if (pending.stage === "initial") {
+    pending.stage = "final";
+    pending.expiresAtMs = getNowMs() + HIGH_RISK_FINAL_CONFIRMATION_TTL_MS;
+    schedulePendingConfirmationExpiry(terminal, pending);
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[confirm] Final confirmation: ${escapeHtml(pending.commandPreview)}</span>`,
+    );
+    writeHtml(terminal, `<span class="system-warn">${escapeHtml(pending.riskSummary)}</span>`);
+    writeHtml(terminal, `<span class="system-info">${escapeHtml(pending.secondSummary)}</span>`);
+    writeHtml(
+      terminal,
+      `<span class="system-info">Run /confirm again within ${formatConfirmationDeadlineText(pending.expiresAtMs)} to execute, or /cancel to abort.</span>`,
+    );
+    await auditHighRiskAction("armed", pending, {
+      expiresAtMs: pending.expiresAtMs,
+    });
+    return;
+  }
+
   pendingConfirmation = null;
+  clearPendingConfirmationTimer(pending);
   writeHtml(
     terminal,
     `<span class="system-ok">[ok] Confirmed: ${escapeHtml(pending.commandPreview)}</span>`,
   );
-  await pending.execute();
+  await auditHighRiskAction("confirmed", pending);
+  try {
+    await pending.execute();
+    await auditHighRiskAction("completed", pending);
+  } catch (err) {
+    await auditHighRiskAction("failed", pending, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 }
 
 function cancelPendingAction(terminal: HTMLElement): void {
@@ -116,31 +291,46 @@ function cancelPendingAction(terminal: HTMLElement): void {
     terminal,
     `<span class="system-warn">[cancelled] ${escapeHtml(pendingConfirmation.commandPreview)}</span>`,
   );
+  clearPendingConfirmationTimer(pendingConfirmation);
+  void auditHighRiskAction("cancelled", pendingConfirmation, {
+    stage: pendingConfirmation.stage,
+  });
   pendingConfirmation = null;
 }
 
 function describeHighRiskSlashCommand(
   command: string,
   args: string[],
-): { commandPreview: string; riskSummary: string } | null {
+): {
+  actionType: HighRiskActionType;
+  commandPreview: string;
+  riskSummary: string;
+  secondSummary: string;
+} | null {
   if (command === "/spawn") {
     return {
+      actionType: "spawn",
       commandPreview: buildSlashCommandPreview(command, args),
       riskSummary: "This creates a git worktree and starts an agent process.",
+      secondSummary: "Review the task description, agent target, and branch before continuing.",
     };
   }
 
   if (command === "/pr" && args[0]?.toLowerCase() === "create") {
     return {
+      actionType: "pr.create",
       commandPreview: buildSlashCommandPreview(command, args),
       riskSummary: "This publishes a pull request to the remote repository.",
+      secondSummary: "Verify the PR title, target branch, and current git state before publishing.",
     };
   }
 
   if (command === "/agents" && args[0]?.toLowerCase() === "kill") {
     return {
+      actionType: "agents.kill",
       commandPreview: buildSlashCommandPreview(command, args),
       riskSummary: "This terminates one or more running agent processes.",
+      secondSummary: "Check the task id or --all target carefully; in-flight work may be lost.",
     };
   }
 
@@ -149,22 +339,28 @@ function describeHighRiskSlashCommand(
     (args[0]?.toLowerCase() === "purge-all" || args[0]?.toLowerCase() === "clear-all")
   ) {
     return {
+      actionType: "tasks.clear-all",
       commandPreview: buildSlashCommandPreview(command, args),
       riskSummary: "This permanently removes all tracked tasks from local storage.",
+      secondSummary: "This is destructive and not reversible from the terminal UI.",
     };
   }
 
   if (command === "/workflow" && args[0]?.toLowerCase() === "delete") {
     return {
+      actionType: "workflow.delete",
       commandPreview: buildSlashCommandPreview(command, args),
       riskSummary: "This permanently deletes a saved workflow definition.",
+      secondSummary: "Confirm the workflow name before deleting it from local storage.",
     };
   }
 
   if (command === "/config" && args[0]?.toLowerCase() === "reset") {
     return {
+      actionType: "config.reset",
       commandPreview: buildSlashCommandPreview(command, args),
       riskSummary: "This resets cydeck.json back to default values.",
+      secondSummary: "Current CyDeck settings will be overwritten with defaults.",
     };
   }
 
@@ -173,14 +369,18 @@ function describeHighRiskSlashCommand(
     const value = args.slice(2).join(" ").trim().toLowerCase();
     if (key === "workspace.path") {
       return {
+        actionType: "config.workspace-path",
         commandPreview: buildSlashCommandPreview(command, args),
         riskSummary: "This switches the shared workspace used by CyDeck and OpenClaw.",
+        secondSummary: "Both CyDeck and OpenClaw will point at the new workspace path.",
       };
     }
     if (key === "terminal.allowshell" && value === "true") {
       return {
+        actionType: "config.enable-shell",
         commandPreview: buildSlashCommandPreview(command, args),
         riskSummary: "This enables raw local shell execution from the terminal UI.",
+        secondSummary: "After enabling shell, each !command can run with your current user permissions.",
       };
     }
   }
@@ -331,8 +531,14 @@ export async function handleCommand(terminal: HTMLElement, input: string): Promi
 async function handleShellCommand(terminal: HTMLElement, command: string): Promise<void> {
   const commandPreview = `!${command}`;
   queuePendingConfirmation(terminal, {
+    actionType: "shell.exec",
     commandPreview,
     riskSummary: "This executes a local shell command with your current user permissions.",
+    secondSummary: "Review the exact command text and current working directory before executing.",
+    stage: "initial",
+    createdAtMs: getNowMs(),
+    expiresAtMs: getNowMs() + HIGH_RISK_CONFIRMATION_TTL_MS,
+    timeoutHandle: null,
     execute: async () => {
       await executeShellCommand(terminal, command);
     },
@@ -568,6 +774,10 @@ async function handleSlashCommand(
   if (pending) {
     queuePendingConfirmation(terminal, {
       ...pending,
+      stage: "initial",
+      createdAtMs: getNowMs(),
+      expiresAtMs: getNowMs() + HIGH_RISK_CONFIRMATION_TTL_MS,
+      timeoutHandle: null,
       execute: async () => {
         await executeSlashCommand(terminal, command, args);
       },

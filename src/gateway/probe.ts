@@ -64,6 +64,7 @@ export async function probeGateway(opts: {
       clientVersion: "dev",
       mode: GATEWAY_CLIENT_MODES.PROBE,
       instanceId,
+      scopes: ["operator.read", "operator.admin"],
       onConnectError: (err) => {
         connectError = formatError(err);
       },

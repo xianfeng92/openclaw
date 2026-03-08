@@ -359,6 +359,7 @@ async function connectClient(params: { url: string; token: string }) {
       clientDisplayName: "vitest-live",
       clientVersion: "dev",
       mode: GATEWAY_CLIENT_MODES.TEST,
+      scopes: ["operator.read", "operator.write", "operator.admin"],
       onHelloOk: () => stop(undefined, client),
       onConnectError: (err) => stop(err),
       onClose: (code, reason) =>

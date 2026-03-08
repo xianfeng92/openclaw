@@ -6,6 +6,7 @@ import * as path from "path";
 import type { GatewayLike } from "./gateway-like.js";
 import { registerTerminalConfigIpcHandlers } from "./terminal-ipc.config.js";
 import { registerTerminalOrchestrationIpcHandlers } from "./terminal-ipc.orchestration.js";
+import { registerTerminalAuditIpcHandlers } from "./terminal-ipc.audit.js";
 import { registerTerminalShellIpcHandlers } from "./terminal-ipc.shell.js";
 // Note: Orchestration modules are imported dynamically via IPC or at runtime
 // Static imports are removed to avoid build issues
@@ -180,6 +181,7 @@ export function setupTerminalIpc(gatewayManager: GatewayLike): void {
   // Note: Agent manager loads existing tasks on startup via its constructor
 
   registerTerminalShellIpcHandlers();
+  registerTerminalAuditIpcHandlers();
   registerTerminalConfigIpcHandlers({
     getGatewayManager: () => gatewayManager,
   });

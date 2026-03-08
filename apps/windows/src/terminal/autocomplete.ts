@@ -46,6 +46,8 @@ const TOP_LEVEL_SLASH_COMMANDS = [
   "history",
   "connect",
   "disconnect",
+  "confirm",
+  "cancel",
   "spawn",
   "agents",
   "tasks",
@@ -93,6 +95,7 @@ const CONFIG_SET_KEYS = [
   "workspace.autoCreate",
   "gateway.port",
   "gateway.autoStart",
+  "terminal.allowShell",
   "ui.theme",
 ] as const;
 
@@ -220,7 +223,7 @@ function getCommandArgumentCandidates(
       if (key === "ai.defaultProvider") {
         return PROVIDER_NAMES;
       }
-      if (key === "workspace.autoCreate" || key === "gateway.autoStart") {
+      if (key === "workspace.autoCreate" || key === "gateway.autoStart" || key === "terminal.allowShell") {
         return BOOLEAN_VALUES;
       }
       return [];

@@ -119,6 +119,7 @@ export async function handleConfigCommand(
   workspace.autoCreate
   gateway.port
   gateway.autoStart
+  terminal.allowShell
   ui.theme
 
 <span class="system-info">Examples:</span>
@@ -126,6 +127,7 @@ export async function handleConfigCommand(
   /config set gateway.autoStart true
   /config set ai.defaultProvider google
   /config set ai.providers.google.model gemini-2.5-flash
+  /config set terminal.allowShell true
   /config apply
   /config set workspace.path "./workspace"
         `.trim(),

@@ -36,6 +36,11 @@ type TerminalCommandRuntimeHooks = {
   listHistory?: () => string[];
 };
 
+type PendingTerminalConfirmation = {
+  commandPreview: string;
+  riskSummary: string;
+  execute: () => Promise<void>;
+};
 
 // Terminal state
 let gatewayClient: TerminalGatewayClient | null = null;
@@ -43,9 +48,144 @@ let currentSessionKey = "default";
 const knownSessionKeys = new Set<string>([currentSessionKey]);
 let currentAgent = "main";
 let runtimeHooks: TerminalCommandRuntimeHooks = {};
+let pendingConfirmation: PendingTerminalConfirmation | null = null;
 
 export function registerTerminalCommandRuntimeHooks(hooks: TerminalCommandRuntimeHooks): void {
   runtimeHooks = hooks;
+}
+
+function buildSlashCommandPreview(command: string, args: string[]): string {
+  return [command, ...args].join(" ").trim();
+}
+
+function writeConfirmationPrompt(terminal: HTMLElement, pending: PendingTerminalConfirmation): void {
+  writeHtml(
+    terminal,
+    `<span class="system-warn">[confirm] Confirmation required: ${escapeHtml(pending.commandPreview)}</span>`,
+  );
+  writeHtml(terminal, `<span class="system-warn">${escapeHtml(pending.riskSummary)}</span>`);
+  writeHtml(
+    terminal,
+    `<span class="system-info">Run /confirm to continue or /cancel to abort.</span>`,
+  );
+}
+
+function queuePendingConfirmation(
+  terminal: HTMLElement,
+  pending: PendingTerminalConfirmation,
+): boolean {
+  if (pendingConfirmation) {
+    writeHtml(
+      terminal,
+      `<span class="system-warn">[warn] Pending confirmation: ${escapeHtml(pendingConfirmation.commandPreview)}</span>`,
+    );
+    writeHtml(
+      terminal,
+      `<span class="system-info">Run /confirm or /cancel before queuing another high-risk action.</span>`,
+    );
+    return true;
+  }
+
+  pendingConfirmation = pending;
+  writeConfirmationPrompt(terminal, pending);
+  return true;
+}
+
+async function confirmPendingAction(terminal: HTMLElement): Promise<void> {
+  if (!pendingConfirmation) {
+    writeHtml(terminal, `<span class="system-info">No pending high-risk action.</span>`);
+    return;
+  }
+
+  const pending = pendingConfirmation;
+  pendingConfirmation = null;
+  writeHtml(
+    terminal,
+    `<span class="system-ok">[ok] Confirmed: ${escapeHtml(pending.commandPreview)}</span>`,
+  );
+  await pending.execute();
+}
+
+function cancelPendingAction(terminal: HTMLElement): void {
+  if (!pendingConfirmation) {
+    writeHtml(terminal, `<span class="system-info">No pending high-risk action.</span>`);
+    return;
+  }
+
+  writeHtml(
+    terminal,
+    `<span class="system-warn">[cancelled] ${escapeHtml(pendingConfirmation.commandPreview)}</span>`,
+  );
+  pendingConfirmation = null;
+}
+
+function describeHighRiskSlashCommand(
+  command: string,
+  args: string[],
+): { commandPreview: string; riskSummary: string } | null {
+  if (command === "/spawn") {
+    return {
+      commandPreview: buildSlashCommandPreview(command, args),
+      riskSummary: "This creates a git worktree and starts an agent process.",
+    };
+  }
+
+  if (command === "/pr" && args[0]?.toLowerCase() === "create") {
+    return {
+      commandPreview: buildSlashCommandPreview(command, args),
+      riskSummary: "This publishes a pull request to the remote repository.",
+    };
+  }
+
+  if (command === "/agents" && args[0]?.toLowerCase() === "kill") {
+    return {
+      commandPreview: buildSlashCommandPreview(command, args),
+      riskSummary: "This terminates one or more running agent processes.",
+    };
+  }
+
+  if (
+    command === "/tasks" &&
+    (args[0]?.toLowerCase() === "purge-all" || args[0]?.toLowerCase() === "clear-all")
+  ) {
+    return {
+      commandPreview: buildSlashCommandPreview(command, args),
+      riskSummary: "This permanently removes all tracked tasks from local storage.",
+    };
+  }
+
+  if (command === "/workflow" && args[0]?.toLowerCase() === "delete") {
+    return {
+      commandPreview: buildSlashCommandPreview(command, args),
+      riskSummary: "This permanently deletes a saved workflow definition.",
+    };
+  }
+
+  if (command === "/config" && args[0]?.toLowerCase() === "reset") {
+    return {
+      commandPreview: buildSlashCommandPreview(command, args),
+      riskSummary: "This resets cydeck.json back to default values.",
+    };
+  }
+
+  if (command === "/config" && args[0]?.toLowerCase() === "set") {
+    const key = args[1]?.trim().toLowerCase();
+    const value = args.slice(2).join(" ").trim().toLowerCase();
+    if (key === "workspace.path") {
+      return {
+        commandPreview: buildSlashCommandPreview(command, args),
+        riskSummary: "This switches the shared workspace used by CyDeck and OpenClaw.",
+      };
+    }
+    if (key === "terminal.allowshell" && value === "true") {
+      return {
+        commandPreview: buildSlashCommandPreview(command, args),
+        riskSummary: "This enables raw local shell execution from the terminal UI.",
+      };
+    }
+  }
+
+  return null;
 }
 
 export function parseCommand(input: string): ParsedCommand {
@@ -189,6 +329,17 @@ export async function handleCommand(terminal: HTMLElement, input: string): Promi
 }
 
 async function handleShellCommand(terminal: HTMLElement, command: string): Promise<void> {
+  const commandPreview = `!${command}`;
+  queuePendingConfirmation(terminal, {
+    commandPreview,
+    riskSummary: "This executes a local shell command with your current user permissions.",
+    execute: async () => {
+      await executeShellCommand(terminal, command);
+    },
+  });
+}
+
+async function executeShellCommand(terminal: HTMLElement, command: string): Promise<void> {
   writeLine(terminal, `$ ${command}`);
 
   try {
@@ -399,6 +550,35 @@ function renderAssistantMarkdown(markdown: string): string {
 }
 
 async function handleSlashCommand(
+  terminal: HTMLElement,
+  command: string,
+  args: string[],
+): Promise<void> {
+  if (command === "/confirm") {
+    await confirmPendingAction(terminal);
+    return;
+  }
+
+  if (command === "/cancel") {
+    cancelPendingAction(terminal);
+    return;
+  }
+
+  const pending = describeHighRiskSlashCommand(command, args);
+  if (pending) {
+    queuePendingConfirmation(terminal, {
+      ...pending,
+      execute: async () => {
+        await executeSlashCommand(terminal, command, args);
+      },
+    });
+    return;
+  }
+
+  await executeSlashCommand(terminal, command, args);
+}
+
+async function executeSlashCommand(
   terminal: HTMLElement,
   command: string,
   args: string[],
@@ -722,6 +902,8 @@ function showHelp(terminal: HTMLElement): void {
 <span class="system-info"><strong>Gateway Commands:</strong></span>
   /connect        - Connect to gateway
   /disconnect     - Disconnect from gateway
+  /confirm        - Confirm a pending high-risk action
+  /cancel         - Cancel a pending high-risk action
 
 <span class="system-info"><strong>Shell Commands:</strong></span>
   !&lt;command&gt;      - Execute shell command (disabled by default)

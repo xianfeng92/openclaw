@@ -25,6 +25,14 @@ describe("terminal autocomplete", () => {
     expect(result.state).toBeNull();
   });
 
+  it("completes confirmation commands", () => {
+    const confirm = complete("/confir");
+    expect(confirm.value).toBe("/confirm ");
+
+    const cancel = complete("/canc");
+    expect(cancel.value).toBe("/cancel ");
+  });
+
   it("cycles slash command completions on repeated tab", () => {
     const first = complete("/co");
     expect(first.value).toBe("/config");
@@ -35,7 +43,10 @@ describe("terminal autocomplete", () => {
     expect(second.state).not.toBeNull();
 
     const third = complete(second.value, second.state);
-    expect(third.value).toBe("/context");
+    expect(third.value).toBe("/confirm");
+
+    const fourth = complete(third.value, third.state);
+    expect(fourth.value).toBe("/context");
   });
 
   it("completes /landing subcommands and cycles options", () => {
@@ -74,6 +85,12 @@ describe("terminal autocomplete", () => {
 
     const providerResult = complete("/config set ai.defaultProvider g");
     expect(providerResult.value).toBe("/config set ai.defaultProvider google ");
+
+    const shellKeyResult = complete("/config set terminal.allowS");
+    expect(shellKeyResult.value).toBe("/config set terminal.allowShell ");
+
+    const shellValueResult = complete("/config set terminal.allowShell t");
+    expect(shellValueResult.value).toBe("/config set terminal.allowShell true ");
   });
 
   it("completes shell commands", () => {

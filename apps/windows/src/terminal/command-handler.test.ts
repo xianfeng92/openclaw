@@ -14,8 +14,11 @@ vi.mock("./orchestral-commands.js", () => ({
 
 type TerminalApiMock = {
   orchestralTasks: ReturnType<typeof vi.fn>;
+  orchestralSpawn: ReturnType<typeof vi.fn>;
   patternRate: ReturnType<typeof vi.fn>;
   patternSave: ReturnType<typeof vi.fn>;
+  configSet: ReturnType<typeof vi.fn>;
+  prCreate: ReturnType<typeof vi.fn>;
   landingInit: ReturnType<typeof vi.fn>;
   landingSet: ReturnType<typeof vi.fn>;
   landingAdd: ReturnType<typeof vi.fn>;
@@ -104,8 +107,33 @@ function createTerminalApiMock(
 ): TerminalApiMock {
   return {
     orchestralTasks: overrides.orchestralTasks ?? vi.fn(async () => ({ success: true, tasks: [] })),
+    orchestralSpawn:
+      overrides.orchestralSpawn ??
+      vi.fn(async () => ({
+        success: true,
+        task: {
+          id: "task-1",
+          message: "Task created",
+          startedAt: Date.now(),
+          status: "running",
+        },
+      })),
     patternRate: overrides.patternRate ?? vi.fn(async () => ({ success: true })),
     patternSave: overrides.patternSave ?? vi.fn(async () => ({ success: true, id: "pattern-1" })),
+    configSet:
+      overrides.configSet ??
+      vi.fn(async (key: string, value: string) => ({
+        success: true,
+        key,
+        value,
+      })),
+    prCreate:
+      overrides.prCreate ??
+      vi.fn(async () => ({
+        success: true,
+        prNumber: 123,
+        prUrl: "https://example.test/pr/123",
+      })),
     landingInit:
       overrides.landingInit ??
       vi.fn(async () => ({
@@ -279,6 +307,109 @@ describe("command-handler task/session/history command flows", () => {
     await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/task list");
 
     expect(handleTasksCommandMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires confirmation before running /spawn", async () => {
+    const api = createTerminalApiMock();
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/spawn phasea smoke");
+
+    expect(handleSpawnCommandMock).not.toHaveBeenCalled();
+    let lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Confirmation required: /spawn phasea smoke"))).toBe(
+      true,
+    );
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+
+    expect(handleSpawnCommandMock).toHaveBeenCalledTimes(1);
+    lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Confirmed: /spawn phasea smoke"))).toBe(true);
+  });
+
+  it("requires confirmation before enabling terminal.allowShell", async () => {
+    const configSet = vi.fn(async (key: string, value: string) => ({
+      success: true,
+      key,
+      value,
+    }));
+    const api = createTerminalApiMock({ configSet });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(
+      terminal as unknown as HTMLElement,
+      "/config set terminal.allowShell true",
+    );
+
+    expect(configSet).not.toHaveBeenCalled();
+    let lines = collectOutputLines(terminal);
+    expect(
+      lines.some((line) => line.includes("Confirmation required: /config set terminal.allowShell true")),
+    ).toBe(true);
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+
+    expect(configSet).toHaveBeenCalledWith("terminal.allowShell", "true");
+    lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Updated terminal.allowShell = true"))).toBe(true);
+  });
+
+  it("requires confirmation before creating a PR", async () => {
+    const prCreate = vi.fn(async () => ({
+      success: true,
+      prNumber: 9,
+      prUrl: "https://example.test/pr/9",
+    }));
+    const api = createTerminalApiMock({ prCreate });
+    installDomGlobals(api);
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(
+      terminal as unknown as HTMLElement,
+      '/pr create "Tighten gateway permissions"',
+    );
+
+    expect(prCreate).not.toHaveBeenCalled();
+    let lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("Confirmation required: /pr create"))).toBe(true);
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+
+    expect(prCreate).toHaveBeenCalledTimes(1);
+    lines = collectOutputLines(terminal);
+    expect(lines.some((line) => line.includes("PR created successfully"))).toBe(true);
+  });
+
+  it("requires confirmation before running shell commands and supports cancellation", async () => {
+    const api = createTerminalApiMock();
+    installDomGlobals(api);
+    const execShell = vi.fn(async () => ({ runId: "run-1" }));
+    const onShellOutput = vi.fn(() => () => {});
+    const windowMock = globalThis.window as unknown as { terminalAPI: Record<string, unknown> };
+    windowMock.terminalAPI = {
+      ...windowMock.terminalAPI,
+      execShell,
+      onShellOutput,
+    };
+    const commandHandler = await loadCommandHandlerModule();
+    const terminal = createTerminalRoot();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "!dir");
+    expect(execShell).not.toHaveBeenCalled();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/cancel");
+    expect(execShell).not.toHaveBeenCalled();
+
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "!dir");
+    await commandHandler.handleCommand(terminal as unknown as HTMLElement, "/confirm");
+
+    expect(execShell).toHaveBeenCalledWith("dir");
   });
 
   it("renders /task status details from orchestral tasks payload", async () => {

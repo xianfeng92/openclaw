@@ -34,79 +34,120 @@ const WRITE_SCOPE = "operator.write";
 const APPROVALS_SCOPE = "operator.approvals";
 const PAIRING_SCOPE = "operator.pairing";
 
-const APPROVAL_METHODS = new Set(["exec.approval.request", "exec.approval.resolve"]);
-const NODE_ROLE_METHODS = new Set(["node.invoke.result", "node.event", "skills.bins"]);
-const PAIRING_METHODS = new Set([
-  "node.pair.request",
-  "node.pair.list",
-  "node.pair.approve",
-  "node.pair.reject",
-  "node.pair.verify",
-  "device.pair.list",
-  "device.pair.approve",
-  "device.pair.reject",
-  "device.token.rotate",
-  "device.token.revoke",
-  "node.rename",
-]);
-const ADMIN_METHOD_PREFIXES = ["exec.approvals."];
-const READ_METHODS = new Set([
-  "health",
-  "logs.tail",
-  "channels.status",
-  "status",
-  "usage.status",
-  "usage.cost",
-  "tts.status",
-  "tts.providers",
-  "models.list",
-  "agents.list",
-  "agent.identity.get",
-  "skills.status",
-  "voicewake.get",
-  "sessions.list",
-  "sessions.preview",
-  "cron.list",
-  "cron.status",
-  "cron.runs",
-  "system-presence",
-  "last-heartbeat",
-  "node.list",
-  "node.describe",
-  "chat.history",
-  "tools.memory.search",
-  "tools.memory.get",
-  "neuro.context.snapshot",
-  "neuro.suggestion.list",
-  "neuro.behavior.export",
-  "neuro.predict.preview",
-  "neuro.flags.get",
-  "neuro.metrics.get",
-]);
-const WRITE_METHODS = new Set([
-  "send",
-  "agent",
-  "agent.wait",
-  "wake",
-  "talk.mode",
-  "tts.enable",
-  "tts.disable",
-  "tts.convert",
-  "tts.setProvider",
-  "voicewake.set",
-  "node.invoke",
-  "chat.send",
-  "chat.abort",
-  "session.rotate",
-  "browser.request",
-  "neuro.context.ingest",
-  "neuro.suggestion.upsert",
-  "neuro.suggestion.action",
-  "neuro.behavior.delete",
-  "neuro.behavior.retention.run",
-  "neuro.flags.set",
-  "neuro.metrics.observe",
-]);
+export type GatewayMethodAccess =
+  | "node-role"
+  | "approvals"
+  | "pairing"
+  | "read"
+  | "write"
+  | "admin";
+
+const EXACT_METHOD_ACCESS = {
+  "exec.approval.request": "approvals",
+  "exec.approval.resolve": "approvals",
+  "node.invoke.result": "node-role",
+  "node.event": "node-role",
+  "skills.bins": "node-role",
+  "node.pair.request": "pairing",
+  "node.pair.list": "pairing",
+  "node.pair.approve": "pairing",
+  "node.pair.reject": "pairing",
+  "node.pair.verify": "pairing",
+  "device.pair.list": "pairing",
+  "device.pair.approve": "pairing",
+  "device.pair.reject": "pairing",
+  "device.token.rotate": "pairing",
+  "device.token.revoke": "pairing",
+  "node.rename": "pairing",
+  health: "read",
+  "logs.tail": "read",
+  "channels.status": "read",
+  status: "read",
+  "usage.status": "read",
+  "usage.cost": "read",
+  "tts.status": "read",
+  "tts.providers": "read",
+  "models.list": "read",
+  "agents.list": "read",
+  "agent.identity.get": "read",
+  "skills.status": "read",
+  "voicewake.get": "read",
+  "sessions.list": "read",
+  "sessions.preview": "read",
+  "cron.list": "read",
+  "cron.status": "read",
+  "cron.runs": "read",
+  "system-presence": "read",
+  "last-heartbeat": "read",
+  "node.list": "read",
+  "node.describe": "read",
+  "chat.history": "read",
+  "tools.memory.search": "read",
+  "tools.memory.get": "read",
+  "neuro.context.snapshot": "read",
+  "neuro.suggestion.list": "read",
+  "neuro.behavior.export": "read",
+  "neuro.predict.preview": "read",
+  "neuro.flags.get": "read",
+  "neuro.metrics.get": "read",
+  send: "write",
+  agent: "write",
+  "agent.wait": "write",
+  wake: "write",
+  "talk.mode": "write",
+  "tts.enable": "write",
+  "tts.disable": "write",
+  "tts.convert": "write",
+  "tts.setProvider": "write",
+  "voicewake.set": "write",
+  "node.invoke": "write",
+  "chat.send": "write",
+  "chat.abort": "write",
+  "session.rotate": "write",
+  "browser.request": "write",
+  "neuro.context.ingest": "write",
+  "neuro.suggestion.upsert": "write",
+  "neuro.suggestion.action": "write",
+  "neuro.behavior.delete": "write",
+  "neuro.behavior.retention.run": "write",
+  "neuro.flags.set": "write",
+  "neuro.metrics.observe": "write",
+  "channels.logout": "admin",
+  "skills.install": "admin",
+  "skills.update": "admin",
+  "cron.add": "admin",
+  "cron.update": "admin",
+  "cron.remove": "admin",
+  "cron.run": "admin",
+  "sessions.patch": "admin",
+  "sessions.reset": "admin",
+  "sessions.delete": "admin",
+  "sessions.compact": "admin",
+} as const satisfies Record<string, GatewayMethodAccess>;
+
+const PREFIX_METHOD_ACCESS: ReadonlyArray<{
+  prefix: string;
+  access: GatewayMethodAccess;
+}> = [
+  { prefix: "exec.approvals.", access: "admin" },
+  { prefix: "config.", access: "admin" },
+  { prefix: "wizard.", access: "admin" },
+  { prefix: "update.", access: "admin" },
+];
+
+export function resolveGatewayMethodAccess(method: string): GatewayMethodAccess {
+  const exact = EXACT_METHOD_ACCESS[method as keyof typeof EXACT_METHOD_ACCESS];
+  if (exact) {
+    return exact;
+  }
+
+  const prefixMatch = PREFIX_METHOD_ACCESS.find((entry) => method.startsWith(entry.prefix));
+  if (prefixMatch) {
+    return prefixMatch.access;
+  }
+
+  return "admin";
+}
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
   if (!client?.connect) {
@@ -114,7 +155,8 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
   }
   const role = client.connect.role ?? "operator";
   const scopes = client.connect.scopes ?? [];
-  if (NODE_ROLE_METHODS.has(method)) {
+  const access = resolveGatewayMethodAccess(method);
+  if (access === "node-role") {
     if (role === "node") {
       return null;
     }
@@ -129,50 +171,29 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
   if (scopes.includes(ADMIN_SCOPE)) {
     return null;
   }
-  if (APPROVAL_METHODS.has(method) && !scopes.includes(APPROVALS_SCOPE)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.approvals");
-  }
-  if (PAIRING_METHODS.has(method) && !scopes.includes(PAIRING_SCOPE)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.pairing");
-  }
-  if (READ_METHODS.has(method) && !(scopes.includes(READ_SCOPE) || scopes.includes(WRITE_SCOPE))) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.read");
-  }
-  if (WRITE_METHODS.has(method) && !scopes.includes(WRITE_SCOPE)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.write");
-  }
-  if (APPROVAL_METHODS.has(method)) {
+  if (access === "approvals") {
+    if (!scopes.includes(APPROVALS_SCOPE)) {
+      return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.approvals");
+    }
     return null;
   }
-  if (PAIRING_METHODS.has(method)) {
+  if (access === "pairing") {
+    if (!scopes.includes(PAIRING_SCOPE)) {
+      return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.pairing");
+    }
     return null;
   }
-  if (READ_METHODS.has(method)) {
+  if (access === "read") {
+    if (!(scopes.includes(READ_SCOPE) || scopes.includes(WRITE_SCOPE))) {
+      return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.read");
+    }
     return null;
   }
-  if (WRITE_METHODS.has(method)) {
+  if (access === "write") {
+    if (!scopes.includes(WRITE_SCOPE)) {
+      return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.write");
+    }
     return null;
-  }
-  if (ADMIN_METHOD_PREFIXES.some((prefix) => method.startsWith(prefix))) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
-  }
-  if (
-    method.startsWith("config.") ||
-    method.startsWith("wizard.") ||
-    method.startsWith("update.") ||
-    method === "channels.logout" ||
-    method === "skills.install" ||
-    method === "skills.update" ||
-    method === "cron.add" ||
-    method === "cron.update" ||
-    method === "cron.remove" ||
-    method === "cron.run" ||
-    method === "sessions.patch" ||
-    method === "sessions.reset" ||
-    method === "sessions.delete" ||
-    method === "sessions.compact"
-  ) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
   }
   return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
 }

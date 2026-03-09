@@ -23,7 +23,7 @@ describe("resolveCyDeckRealtimeQuery news handling", () => {
     vi.unstubAllGlobals();
   });
 
-  it("rewrites AI-circle hotspot requests into an AI-specific news query", async () => {
+  it("prefers curated AI feeds for AI-circle hotspot requests", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         makeRss([
@@ -44,13 +44,15 @@ describe("resolveCyDeckRealtimeQuery news handling", () => {
     expect(result?.assistantText).toContain("OpenAI ships a new agent runtime");
 
     const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
-    expect(firstUrl).toContain("bing.com/news/search");
-    expect(decodeURIComponent(firstUrl)).toContain("AI 最新新闻");
-    expect(decodeURIComponent(firstUrl)).not.toContain("帮我看看今天 ai 圈有什么热点");
+    expect(firstUrl).toContain("techcrunch.com/category/artificial-intelligence/feed/");
   });
 
-  it("falls back to Google News RSS when Bing returns no usable items", async () => {
+  it("falls back to Google News RSS when curated AI feeds and Bing return no usable items", async () => {
     fetchMock
+      .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<feed></feed>", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
       .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
@@ -67,13 +69,18 @@ describe("resolveCyDeckRealtimeQuery news handling", () => {
 
     const result = await resolveCyDeckRealtimeQuery("今天 ai 圈热点");
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("news.google.com/rss/search");
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(String(fetchMock.mock.calls[4]?.[0] ?? "")).toContain("bing.com/news/search");
+    expect(String(fetchMock.mock.calls[5]?.[0] ?? "")).toContain("news.google.com/rss/search");
     expect(result?.assistantText).toContain("Anthropic expands enterprise agent controls");
   });
 
   it("returns an AI-specific empty-state message when all news sources are empty", async () => {
     fetchMock
+      .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<feed></feed>", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
       .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }))
       .mockResolvedValueOnce(new Response("<rss><channel></channel></rss>", { status: 200 }));
 

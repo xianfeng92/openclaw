@@ -14,6 +14,7 @@ type NewsItem = {
   title: string;
   link: string;
   pubDate: string;
+  summary?: string;
 };
 
 type NewsQueryPlan = {
@@ -21,6 +22,8 @@ type NewsQueryPlan = {
   searchQuery: string;
   unavailableText: string;
   emptyText: string;
+  kind: "ai" | "general";
+  topic: string;
 };
 
 type WeatherSnapshot = {
@@ -57,6 +60,13 @@ const STRIP_WEATHER_TERMS_RE =
 const STRIP_NEWS_TERMS_RE =
   /(帮我看看|帮我|帮忙|看看|看下|看一看|查下|查一查|告诉我|给我|来点|一下|今天|今日|实时|当前|现在|最新|最近|有什么|有啥|什么|哪些|相关|圈内|圈里|圈|热点|新闻|头条|快讯|动态|进展|消息|想看|想知道|please|show me|tell me)/giu;
 const GENERIC_AI_TOPIC_RE = /^(ai|人工智能|大模型|机器学习|智能体|llm|agent)$/iu;
+const NEWS_TOPIC_STOPWORDS = new Set(["的", "了", "呢", "吗", "呀", "啊"]);
+const AI_CURATED_NEWS_FEEDS = [
+  "https://techcrunch.com/category/artificial-intelligence/feed/",
+  "https://www.artificialintelligence-news.com/feed/",
+  "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+  "https://www.marktechpost.com/feed/",
+];
 
 const KNOWN_WEATHER_LOCATIONS: KnownWeatherLocation[] = [
   { aliases: ["上海", "上海市", "shanghai"], latitude: 31.2304, longitude: 121.4737, timezone: "Asia/Shanghai", label: "Shanghai, China" },
@@ -293,6 +303,10 @@ function normalizeNewsTopic(query: string): string {
     .replace(STRIP_NEWS_TERMS_RE, " ")
     .replace(/[？?！!。,.，:：]/gu, " ")
     .replace(/\s+/gu, " ")
+    .trim()
+    .split(/\s+/u)
+    .filter((token) => token && !NEWS_TOPIC_STOPWORDS.has(token.toLowerCase()))
+    .join(" ")
     .trim();
 }
 
@@ -304,6 +318,8 @@ function resolveNewsQueryPlan(query: string): NewsQueryPlan {
       searchQuery: "latest news",
       unavailableText: "我刚才尝试获取热点新闻，但新闻源暂时不可用。请稍后重试。",
       emptyText: "我刚才尝试获取热点新闻，但暂时没有抓到可用结果。请稍后重试。",
+      kind: "general",
+      topic: "",
     };
   }
 
@@ -316,6 +332,8 @@ function resolveNewsQueryPlan(query: string): NewsQueryPlan {
       searchQuery: topic === "AI" ? "AI 最新新闻" : `${topic} 最新新闻`,
       unavailableText: "我刚才尝试获取 AI 圈热点，但新闻源暂时不可用。请稍后重试。",
       emptyText: "我刚才尝试获取 AI 圈热点，但暂时没有抓到可用结果。请稍后重试。",
+      kind: "ai",
+      topic,
     };
   }
 
@@ -324,16 +342,34 @@ function resolveNewsQueryPlan(query: string): NewsQueryPlan {
     searchQuery: cleanedTopic || normalized,
     unavailableText: "我刚才尝试获取热点新闻，但新闻源暂时不可用。请稍后重试。",
     emptyText: "我刚才尝试获取热点新闻，但暂时没有抓到可用结果。请稍后重试。",
+    kind: "general",
+    topic: cleanedTopic || normalized,
   };
 }
 
-function parseNewsItemsFromRss(xml: string): NewsItem[] {
-  return Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/giu))
-    .slice(0, 5)
+function extractAtomLink(block: string): string {
+  const hrefMatch = block.match(/<link\b[^>]*href="([^"]+)"[^>]*\/?>/iu);
+  return hrefMatch?.[1] ? decodeXmlText(hrefMatch[1]) : "";
+}
+
+function parseNewsItemsFromXml(xml: string): NewsItem[] {
+  const rssItems = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/giu))
     .map((match) => ({
       title: extractXmlTag(match[1], "title"),
       link: extractXmlTag(match[1], "link"),
       pubDate: extractXmlTag(match[1], "pubDate"),
+      summary: extractXmlTag(match[1], "description"),
+    }))
+    .filter((item) => item.title);
+  if (rssItems.length > 0) {
+    return rssItems;
+  }
+  return Array.from(xml.matchAll(/<entry>([\s\S]*?)<\/entry>/giu))
+    .map((match) => ({
+      title: extractXmlTag(match[1], "title"),
+      link: extractAtomLink(match[1]),
+      pubDate: extractXmlTag(match[1], "updated") || extractXmlTag(match[1], "published"),
+      summary: extractXmlTag(match[1], "summary") || extractXmlTag(match[1], "content"),
     }))
     .filter((item) => item.title);
 }
@@ -343,6 +379,47 @@ function buildNewsSourceUrls(searchQuery: string): string[] {
     `https://www.bing.com/news/search?q=${encodeURIComponent(searchQuery)}&format=rss&mkt=zh-CN`,
     `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
   ];
+}
+
+function normalizeNewsText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/gu, " ");
+}
+
+function buildTopicMatcher(topic: string): ((item: NewsItem) => boolean) | null {
+  const normalizedTopic = normalizeNewsText(topic);
+  if (!normalizedTopic || GENERIC_AI_TOPIC_RE.test(normalizedTopic)) {
+    return null;
+  }
+  return (item: NewsItem) => {
+    const haystack = normalizeNewsText(
+      [item.title, item.summary ?? "", item.link].filter(Boolean).join(" "),
+    );
+    return haystack.includes(normalizedTopic);
+  };
+}
+
+function dedupeNewsItems(items: NewsItem[]): NewsItem[] {
+  const seen = new Set<string>();
+  const deduped: NewsItem[] = [];
+  for (const item of items) {
+    const key = normalizeNewsText(item.title);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
+function sortNewsItems(items: NewsItem[]): NewsItem[] {
+  return [...items].sort((left, right) => {
+    const leftTs = Date.parse(left.pubDate || "");
+    const rightTs = Date.parse(right.pubDate || "");
+    const safeLeft = Number.isFinite(leftTs) ? leftTs : 0;
+    const safeRight = Number.isFinite(rightTs) ? rightTs : 0;
+    return safeRight - safeLeft;
+  });
 }
 
 async function fetchNewsItems(
@@ -363,7 +440,7 @@ async function fetchNewsItems(
       }
       reachedSource = true;
       const xml = await response.text();
-      const items = parseNewsItemsFromRss(xml);
+      const items = parseNewsItemsFromXml(xml);
       if (items.length > 0) {
         return { items, reachedSource: true };
       }
@@ -374,9 +451,55 @@ async function fetchNewsItems(
   return { items: [], reachedSource };
 }
 
+async function fetchCuratedAiNewsItems(
+  topic: string,
+  signal?: AbortSignal,
+): Promise<{ items: NewsItem[]; reachedSource: boolean }> {
+  const topicMatcher = buildTopicMatcher(topic);
+  let reachedSource = false;
+  const collected: NewsItem[] = [];
+  for (const url of AI_CURATED_NEWS_FEEDS) {
+    try {
+      const response = await fetch(url, {
+        signal,
+        headers: {
+          accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
+          "user-agent": "Mozilla/5.0",
+        },
+      });
+      if (!response.ok) {
+        continue;
+      }
+      reachedSource = true;
+      const xml = await response.text();
+      const items = parseNewsItemsFromXml(xml);
+      for (const item of items) {
+        if (!topicMatcher || topicMatcher(item)) {
+          collected.push(item);
+        }
+      }
+    } catch {
+      // Try the next feed.
+    }
+  }
+  return {
+    items: sortNewsItems(dedupeNewsItems(collected)).slice(0, 5),
+    reachedSource,
+  };
+}
+
 async function resolveNews(query: string, signal?: AbortSignal): Promise<RealtimeResolution | null> {
   const plan = resolveNewsQueryPlan(query);
-  const { items, reachedSource } = await fetchNewsItems(plan.searchQuery, signal);
+  const primary =
+    plan.kind === "ai"
+      ? await fetchCuratedAiNewsItems(plan.topic, signal)
+      : { items: [] as NewsItem[], reachedSource: false };
+  const fallback =
+    primary.items.length > 0
+      ? primary
+      : await fetchNewsItems(plan.searchQuery, signal);
+  const items = primary.items.length > 0 ? primary.items : fallback.items;
+  const reachedSource = primary.reachedSource || fallback.reachedSource;
   if (!reachedSource) {
     return {
       intent: "news",

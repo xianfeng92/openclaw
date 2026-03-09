@@ -10,6 +10,19 @@ type RealtimeResolution = {
   assistantText: string;
 };
 
+type NewsItem = {
+  title: string;
+  link: string;
+  pubDate: string;
+};
+
+type NewsQueryPlan = {
+  heading: string;
+  searchQuery: string;
+  unavailableText: string;
+  emptyText: string;
+};
+
 type WeatherSnapshot = {
   query: string;
   fetchedAt: string;
@@ -36,8 +49,14 @@ type KnownWeatherLocation = {
 const NEWS_TOPICS_RE = /(热点|新闻|头条|快讯|news|headline|headlines|breaking)/iu;
 const WEATHER_RE = /(天气|气温|温度|预报|降雨|weather|forecast|temperature)/iu;
 const CURRENT_INFO_RE = /(今天|今日|实时|当前|现在|最新|最近|today|current|latest|recent)/iu;
+const AI_NEWS_RE =
+  /(?:^|[\s(（])ai(?:$|[\s)）])|ai圈|ai 圈|人工智能|大模型|机器学习|智能体|llm|agent|openai|anthropic|claude|gemini|gpt|deepseek/iu;
+const GENERIC_NEWS_QUERY_RE = /^(今天的?)?(热点|新闻|头条|快讯)$/iu;
 const STRIP_WEATHER_TERMS_RE =
   /(天气|气温|温度|预报|weather|forecast|temperature|today|current|latest|现在|今天|今日|请问|查询|一下)/giu;
+const STRIP_NEWS_TERMS_RE =
+  /(帮我看看|帮我|帮忙|看看|看下|看一看|查下|查一查|告诉我|给我|来点|一下|今天|今日|实时|当前|现在|最新|最近|有什么|有啥|什么|哪些|相关|圈内|圈里|圈|热点|新闻|头条|快讯|动态|进展|消息|想看|想知道|please|show me|tell me)/giu;
+const GENERIC_AI_TOPIC_RE = /^(ai|人工智能|大模型|机器学习|智能体|llm|agent)$/iu;
 
 const KNOWN_WEATHER_LOCATIONS: KnownWeatherLocation[] = [
   { aliases: ["上海", "上海市", "shanghai"], latitude: 31.2304, longitude: 121.4737, timezone: "Asia/Shanghai", label: "Shanghai, China" },
@@ -269,22 +288,47 @@ function extractXmlTag(block: string, tag: string): string {
   return match?.[1] ? decodeXmlText(match[1]) : "";
 }
 
-async function resolveNews(query: string, signal?: AbortSignal): Promise<RealtimeResolution | null> {
+function normalizeNewsTopic(query: string): string {
+  return query
+    .replace(STRIP_NEWS_TERMS_RE, " ")
+    .replace(/[？?！!。,.，:：]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function resolveNewsQueryPlan(query: string): NewsQueryPlan {
   const normalized = query.trim();
-  const newsQuery =
-    !normalized || /^(今天的?)?(热点|新闻|头条|快讯)$/iu.test(normalized)
-      ? "latest news"
-      : normalized;
-  const url = `https://www.bing.com/news/search?q=${encodeURIComponent(newsQuery)}&format=rss&mkt=zh-CN`;
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
+  if (!normalized || GENERIC_NEWS_QUERY_RE.test(normalized)) {
     return {
-      intent: "news",
-      assistantText: "我刚才尝试获取热点新闻，但新闻源暂时不可用。请稍后重试。",
+      heading: "今天的热点新闻：",
+      searchQuery: "latest news",
+      unavailableText: "我刚才尝试获取热点新闻，但新闻源暂时不可用。请稍后重试。",
+      emptyText: "我刚才尝试获取热点新闻，但暂时没有抓到可用结果。请稍后重试。",
     };
   }
-  const xml = await response.text();
-  const items = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/giu))
+
+  const cleanedTopic = normalizeNewsTopic(normalized);
+  if (AI_NEWS_RE.test(normalized) || /\bai\b/iu.test(cleanedTopic)) {
+    const topic =
+      cleanedTopic && !GENERIC_AI_TOPIC_RE.test(cleanedTopic) ? cleanedTopic : "AI";
+    return {
+      heading: "今天 AI 圈热点：",
+      searchQuery: topic === "AI" ? "AI 最新新闻" : `${topic} 最新新闻`,
+      unavailableText: "我刚才尝试获取 AI 圈热点，但新闻源暂时不可用。请稍后重试。",
+      emptyText: "我刚才尝试获取 AI 圈热点，但暂时没有抓到可用结果。请稍后重试。",
+    };
+  }
+
+  return {
+    heading: "今天的热点新闻：",
+    searchQuery: cleanedTopic || normalized,
+    unavailableText: "我刚才尝试获取热点新闻，但新闻源暂时不可用。请稍后重试。",
+    emptyText: "我刚才尝试获取热点新闻，但暂时没有抓到可用结果。请稍后重试。",
+  };
+}
+
+function parseNewsItemsFromRss(xml: string): NewsItem[] {
+  return Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/giu))
     .slice(0, 5)
     .map((match) => ({
       title: extractXmlTag(match[1], "title"),
@@ -292,15 +336,61 @@ async function resolveNews(query: string, signal?: AbortSignal): Promise<Realtim
       pubDate: extractXmlTag(match[1], "pubDate"),
     }))
     .filter((item) => item.title);
+}
 
+function buildNewsSourceUrls(searchQuery: string): string[] {
+  return [
+    `https://www.bing.com/news/search?q=${encodeURIComponent(searchQuery)}&format=rss&mkt=zh-CN`,
+    `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
+  ];
+}
+
+async function fetchNewsItems(
+  searchQuery: string,
+  signal?: AbortSignal,
+): Promise<{ items: NewsItem[]; reachedSource: boolean }> {
+  let reachedSource = false;
+  for (const url of buildNewsSourceUrls(searchQuery)) {
+    try {
+      const response = await fetch(url, {
+        signal,
+        headers: {
+          accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
+        },
+      });
+      if (!response.ok) {
+        continue;
+      }
+      reachedSource = true;
+      const xml = await response.text();
+      const items = parseNewsItemsFromRss(xml);
+      if (items.length > 0) {
+        return { items, reachedSource: true };
+      }
+    } catch {
+      // Try the next source.
+    }
+  }
+  return { items: [], reachedSource };
+}
+
+async function resolveNews(query: string, signal?: AbortSignal): Promise<RealtimeResolution | null> {
+  const plan = resolveNewsQueryPlan(query);
+  const { items, reachedSource } = await fetchNewsItems(plan.searchQuery, signal);
+  if (!reachedSource) {
+    return {
+      intent: "news",
+      assistantText: plan.unavailableText,
+    };
+  }
   if (items.length === 0) {
     return {
       intent: "news",
-      assistantText: "我刚才尝试获取热点新闻，但暂时没有抓到可用结果。请稍后重试。",
+      assistantText: plan.emptyText,
     };
   }
 
-  const lines = ["今天的热点新闻：", ""];
+  const lines = [plan.heading, ""];
   for (const item of items) {
     lines.push(`- ${item.title}`);
     if (item.pubDate) {

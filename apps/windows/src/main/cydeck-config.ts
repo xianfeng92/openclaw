@@ -573,7 +573,7 @@ export function loadCyDeckConfig(env: NodeJS.ProcessEnv = process.env): CyDeckCo
       fs.writeFileSync(
         configPath,
         `${JSON.stringify(DEFAULT_CYDECK_CONFIG, null, 2)}\n`,
-        "utf-8",
+        { encoding: "utf-8", mode: 0o600 },
       );
       parsed = DEFAULT_CYDECK_CONFIG;
     } catch (err) {
@@ -619,7 +619,7 @@ export function saveCyDeckConfig(
 
   try {
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(configPath, `${JSON.stringify(normalized, null, 2)}\n`, "utf-8");
+    fs.writeFileSync(configPath, `${JSON.stringify(normalized, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
     return {
       success: true,
       configPath,

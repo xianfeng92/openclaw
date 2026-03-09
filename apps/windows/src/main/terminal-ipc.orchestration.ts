@@ -80,18 +80,16 @@ function trimOutputTail(output: string, maxChars = 4000): string {
   return trimmed.slice(trimmed.length - maxChars);
 }
 
-async function execShell(command: string, cwd: string): Promise<ShellResult> {
+async function execShell(command: string, args: string[], cwd: string): Promise<ShellResult> {
   try {
-    const isWindows = process.platform === "win32";
+    const execFileAsync = promisify(require("child_process").execFile);
     const options = {
       cwd,
-      env: process.env,
       windowsHide: true,
       timeout: 30000,
-      ...(isWindows ? { shell: "cmd.exe" } : {}),
     };
 
-    return await execAsync(command, options) as ShellResult;
+    return await execFileAsync(command, args, options) as ShellResult;
   } catch (err: unknown) {
     const error = err as { stdout?: string; stderr?: string };
     return {
@@ -103,7 +101,7 @@ async function execShell(command: string, cwd: string): Promise<ShellResult> {
 
 async function getGitRepo(cwd: string): Promise<string | null> {
   try {
-    const result = await execShell("git rev-parse --show-toplevel", cwd);
+    const result = await execShell("git", ["rev-parse", "--show-toplevel"], cwd);
     if (result.stdout.trim()) {
       return result.stdout.trim();
     }
@@ -125,12 +123,18 @@ async function executeWorkflowCommandStep(
   error?: string;
 }> {
   const isWindows = process.platform === "win32";
+  // Filter sensitive env vars from workflow child processes
+  const filteredEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) =>
+      !/(API_KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|SESSION_KEY|COOKIE)/i.test(key),
+    ),
+  );
   return await new Promise((resolve) => {
     exec(
       command,
       {
         cwd,
-        env: process.env,
+        env: filteredEnv,
         windowsHide: true,
         timeout: timeoutMs,
         ...(isWindows ? { shell: "cmd.exe" } : {}),
@@ -212,7 +216,8 @@ export function registerTerminalOrchestrationIpcHandlers(options: {
           });
 
           const worktreeResult = await execShell(
-            `git -C "${repoPath}" worktree add -b ${branchName} "${worktreePath}" 2>&1`,
+            "git",
+            ["-C", repoPath, "worktree", "add", "-b", branchName, worktreePath],
             projectPath,
           );
 

@@ -398,7 +398,10 @@ export class WindowsAgentProcessManager {
       if (process.shellProcess) {
         if (os.platform() === "win32") {
           // On Windows, use taskkill to force kill the process tree
-          await execAsync(`taskkill /F /T /PID ${process.pid}`);
+          const { execFile: execFileCb } = require("child_process");
+          await new Promise<void>((resolve) => {
+            execFileCb("taskkill", ["/F", "/T", "/PID", String(process.pid)], { windowsHide: true }, () => resolve());
+          });
         } else {
           process.shellProcess.kill("SIGTERM");
         }
@@ -413,8 +416,9 @@ export class WindowsAgentProcessManager {
       if (process.worktree && fs.existsSync(process.worktree)) {
         try {
           // Remove worktree using git
-          await execAsync(`git -C "${this.projectPath}" worktree remove --force "${process.worktree}"`, {
-            timeout: 5000,
+          const { execFile: execFileCb2 } = require("child_process");
+          await new Promise<void>((resolve, reject) => {
+            execFileCb2("git", ["-C", this.projectPath, "worktree", "remove", "--force", process.worktree!], { timeout: 5000 }, (err: Error | null) => err ? reject(err) : resolve());
           });
         } catch {
           // Ignore worktree cleanup errors
@@ -924,8 +928,8 @@ export class WindowsAgentProcessManager {
       if (process.worktree && fs.existsSync(process.worktree)) {
         try {
           // Try to remove git worktree first
-          const { execSync } = require("child_process");
-          execSync(`git -C "${repoPath}" worktree remove --force "${process.worktree}"`, {
+          const { execFileSync } = require("child_process");
+          execFileSync("git", ["-C", repoPath, "worktree", "remove", "--force", process.worktree!], {
             stdio: "ignore",
             timeout: 5000,
           });

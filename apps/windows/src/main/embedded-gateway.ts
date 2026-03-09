@@ -237,6 +237,7 @@ export class EmbeddedGateway extends EventEmitter implements GatewayLike {
       const server = new WebSocketServer({
         host: "127.0.0.1",
         port,
+        maxPayload: 1 * 1024 * 1024, // 1 MB — prevent memory exhaustion via oversized frames
       });
 
       const onError = (err: Error) => {

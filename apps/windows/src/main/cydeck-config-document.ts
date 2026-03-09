@@ -87,7 +87,7 @@ export function writeCyDeckConfigDocument(
   try {
     fs.mkdirSync(stateDir, { recursive: true });
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(configPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+    fs.writeFileSync(configPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
     return { success: true };
   } catch (err) {
     return {

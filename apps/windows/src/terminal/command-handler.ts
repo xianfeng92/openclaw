@@ -1151,7 +1151,7 @@ async function handleContextLoad(
     if (result.success) {
       writeHtml(
         terminal,
-        `<span class='system-ok'>[ok] Context loaded: ${result.summary || "Unknown"}</span>`,
+        `<span class='system-ok'>[ok] Context loaded: ${escapeHtml(result.summary || "Unknown")}</span>`,
       );
     } else {
       writeHtml(

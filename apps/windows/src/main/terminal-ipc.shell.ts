@@ -31,10 +31,17 @@ export function registerTerminalShellIpcHandlers(): void {
       const runId = uuidv4();
       const shellCommand = getShellCommand();
       const isWindows = process.platform === "win32";
+      // Filter sensitive env vars from child process environment
+      const filteredEnv = Object.fromEntries(
+        Object.entries(process.env).filter(([key]) =>
+          !/(API_KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|SESSION_KEY|COOKIE)/i.test(key),
+        ),
+      );
+
       const proc = spawn(isWindows ? shellCommand : "/bin/sh", isWindows ? ["/c", command] : ["-lc", command], {
         shell: false,
         cwd: process.cwd(),
-        env: process.env,
+        env: filteredEnv,
         windowsHide: true,
       });
 
@@ -45,7 +52,7 @@ export function registerTerminalShellIpcHandlers(): void {
       };
       activeShells.set(runId, pending);
 
-      proc.stdin?.write(`${command}\n`);
+      // Close stdin immediately — the command is already passed via -lc / /c args.
       proc.stdin?.end();
 
       proc.stdout?.on("data", (data) => {

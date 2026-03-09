@@ -317,8 +317,8 @@ export class OpenClawGatewayManager extends EventEmitter implements GatewayLike 
         String(this.port),
         "--bind",
         "loopback",
-        "--token",
-        this.authToken,
+        // Auth token is passed via OPENCLAW_GATEWAY_TOKEN env var (not CLI args,
+        // which are visible in process listings to other local users).
         "--allow-unconfigured",
       ],
       cwd: command.cwd,
@@ -331,12 +331,9 @@ export class OpenClawGatewayManager extends EventEmitter implements GatewayLike 
       config: this.effectiveConfig,
       authToken: this.authToken,
     });
-    applyCyDeckOpenClawEnv({
-      targetEnv: process.env,
-      config: this.effectiveConfig,
-      authToken: this.authToken,
-      paths: this.bridgePaths,
-    });
+    // Secrets are passed to the gateway child process via its spawn env (buildLaunch).
+    // Do NOT inject API keys / tokens into the parent process.env — that would
+    // leak them to every child process spawned by the Electron app.
   }
 
   private setState(status: GatewayStatus, error?: string): void {

@@ -55,7 +55,7 @@ function writeStoredAuth(filePath: string, token: string): void {
   }
 
   const tmpPath = `${filePath}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf8");
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
 }
 

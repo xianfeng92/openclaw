@@ -114,8 +114,8 @@ export function writeCyDeckOpenClawBridge(params: {
     updatedAt: new Date().toISOString(),
   };
 
-  fs.writeFileSync(paths.configPath, `${JSON.stringify(openclawConfig, null, 2)}\n`, "utf-8");
-  fs.writeFileSync(paths.runtimePath, `${JSON.stringify(runtimeDescriptor, null, 2)}\n`, "utf-8");
+  fs.writeFileSync(paths.configPath, `${JSON.stringify(openclawConfig, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
+  fs.writeFileSync(paths.runtimePath, `${JSON.stringify(runtimeDescriptor, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
 
   return paths;
 }
